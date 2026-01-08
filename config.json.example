@@ -1,0 +1,75 @@
+{
+  "webhook": {
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",
+    "source": "credit-monitor",
+    "type": "feishu"
+  },
+  "subscriptions": [
+    {
+      "name": "emqx - mqtt - 授权",
+      "renewal_day": 9,
+      "alert_days_before": 3,
+      "amount": 0,
+      "currency": "USD",
+      "enabled": true
+    },
+    {
+      "name": "融云 - im - 授权",
+      "renewal_day": 17,
+      "alert_days_before": 3,
+      "amount": 3500.0,
+      "currency": "CNY",
+      "enabled": true
+    }
+  ],
+  "projects": [
+    {
+      "name": "OpenRouter",
+      "provider": "openrouter",
+      "api_key": "sk-or-v1-xxx",
+      "threshold": 10000.0,
+      "type": "credits",
+      "enabled": true
+    },
+    {
+      "name": "WxRank-微信公众号",
+      "provider": "wxrank",
+      "api_key": "xxx",
+      "threshold": 500,
+      "type": "credits",
+      "enabled": true
+    },
+    {
+      "name": "Volc-火山引擎-自然选择",
+      "provider": "volc",
+      "api_key": "AKxxx:SKxxx",
+      "threshold": 7000,
+      "type": "balance",
+      "enabled": true
+    },
+    {
+      "name": "Volc-火山引擎-陌玉",
+      "provider": "volc",
+      "api_key": "AKxxx:SKxxx",
+      "threshold": 1000.0,
+      "type": "balance",
+      "enabled": true
+    },
+    {
+      "name": "Aliyun-阿里云-1",
+      "provider": "aliyun",
+      "api_key": "AKxxx:SKxxx",
+      "threshold": 10000.0,
+      "type": "balance",
+      "enabled": true
+    },
+    {
+      "name": "Aliyun-阿里云-2",
+      "provider": "aliyun",
+      "api_key": "AKxxx:SKxxx",
+      "threshold": 100000.0,
+      "type": "balance",
+      "enabled": true
+    }
+  ]
+}
