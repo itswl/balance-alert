@@ -1,0 +1,8 @@
+# 每天早上 9 点运行余额检查
+0 9 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 monitor.py >> /app/logs/cron.log 2>&1
+
+# 每天下午 3 点再运行一次
+0 15 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 monitor.py >> /app/logs/cron.log 2>&1
+
+# 保持容器运行（添加一个每分钟的心跳任务，输出到空设备）
+* * * * * echo "alive" > /dev/null 2>&1 

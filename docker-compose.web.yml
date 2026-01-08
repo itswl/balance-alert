@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # Web 前端服务
+  credit-monitor-web:
+    build: .
+    image: credit-monitor:latest
+    container_name: credit-monitor-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    command: python web_server.py
+    networks:
+      - monitor-network
+
+  # 定时任务服务
+  credit-monitor-cron:
+    build: .
+    image: credit-monitor:latest
+    container_name: credit-monitor-cron
+    restart: unless-stopped
+    volumes:
+      - ./config.json:/app/config.json
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    command: /app/start.sh
+    networks:
+      - monitor-network
+
+networks:
+  monitor-network:
+    driver: bridge
