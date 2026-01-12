@@ -7,6 +7,7 @@ from .openrouter import OpenRouterProvider
 from .wxrank import WxRankProvider
 from .volc import VolcProvider
 from .aliyun import AliyunProvider
+from .uniapi import UniAPIProvider
 
 # 可用的服务商适配器映射
 PROVIDERS = {
@@ -14,6 +15,7 @@ PROVIDERS = {
     'wxrank': WxRankProvider,
     'volc': VolcProvider,
     'aliyun': AliyunProvider,
+    'uniapi': UniAPIProvider,
     # 后续添加其他服务商:
     # 'openai': OpenAIProvider,
     # 'anthropic': AnthropicProvider,
