@@ -19,7 +19,7 @@
 | 🌋 火山云 (Volc) | 余额 | 支持火山引擎账户余额监控 |
 | ☁️ 阿里云 (Aliyun) | 余额 | 支持阿里云账户余额监控 |
 | 🤖 OpenRouter | 积分 | 支持 OpenRouter API 积分监控 |
-| 🔷 UniAPI | 余额 | 支持 UniAPI 账户余额监控 |
+| 🔷 UniAPI | 积分 | 支持 UniAPI 账户积分监控 |
 | 📱 微信排名 (WxRank) | 积分 | 支持微信公众号积分监控 |
 
 ## 🚀 快速开始

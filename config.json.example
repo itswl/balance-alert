@@ -36,7 +36,7 @@
       "provider": "uniapi",
       "api_key": "sk-xxx",
       "threshold": 5000.0,
-      "type": "balance",
+      "type": "credits",
       "enabled": true
     },
     {
