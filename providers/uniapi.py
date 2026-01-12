@@ -1,5 +1,5 @@
 """
-UniAPI 余额查询适配器
+UniAPI 积分查询适配器
 """
 import requests
 
@@ -20,14 +20,14 @@ class UniAPIProvider:
     
     def get_credits(self):
         """
-        获取当前余额
+        获取当前积分
         
-        UniAPI 余额计算方式: balance (可用余额)
+        UniAPI 积分计算方式: balance (可用积分)
         
         Returns:
             dict: 包含以下字段的字典
                 - success (bool): 是否成功获取
-                - credits (float): 余额数值，失败时为 None
+                - credits (float): 积分数值，失败时为 None
                 - error (str): 错误信息，成功时为 None
                 - raw_data (dict): 原始 API 响应数据
         """
@@ -70,7 +70,7 @@ class UniAPIProvider:
                     'raw_data': data
                 }
             
-            # 获取余额数据
+            # 获取积分数据
             balance_data = data.get('data', {})
             balance = balance_data.get('balance')
             
@@ -83,7 +83,7 @@ class UniAPIProvider:
                     'raw_data': data
                 }
             
-            # 返回可用余额
+            # 返回可用积分
             return {
                 'success': True,
                 'credits': float(balance),
