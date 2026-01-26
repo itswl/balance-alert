@@ -8,6 +8,7 @@ from .wxrank import WxRankProvider
 from .volc import VolcProvider
 from .aliyun import AliyunProvider
 from .uniapi import UniAPIProvider
+from .tikhub import TikHubProvider
 
 # 可用的服务商适配器映射
 PROVIDERS = {
@@ -16,6 +17,7 @@ PROVIDERS = {
     'volc': VolcProvider,
     'aliyun': AliyunProvider,
     'uniapi': UniAPIProvider,
+    'tikhub': TikHubProvider,
     # 后续添加其他服务商:
     # 'openai': OpenAIProvider,
     # 'anthropic': AnthropicProvider,
