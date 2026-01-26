@@ -78,6 +78,14 @@
       "threshold": 100000.0,
       "type": "balance",
       "enabled": true
+    },
+    {
+      "name": "TikHub",
+      "provider": "tikhub",
+      "api_key": "mKMARFp0w...",
+      "threshold": 10.0,
+      "type": "balance",
+      "enabled": true
     }
   ]
 }
