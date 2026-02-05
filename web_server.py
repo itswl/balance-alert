@@ -181,15 +181,54 @@ def update_subscription():
         subscription_found = False
         for sub in config.get('subscriptions', []):
             if sub.get('name') == subscription_name:
+                # 更新周期类型
+                if 'cycle_type' in data:
+                    cycle_type = data['cycle_type']
+                    if cycle_type not in ['weekly', 'monthly', 'yearly']:
+                        return jsonify({
+                            'status': 'error',
+                            'message': '周期类型必须是 weekly、monthly 或 yearly'
+                        }), 400
+                    sub['cycle_type'] = cycle_type
+                
                 # 更新字段
                 if 'renewal_day' in data:
                     renewal_day = int(data['renewal_day'])
-                    if renewal_day < 1 or renewal_day > 31:
+                    cycle_type = sub.get('cycle_type', 'monthly')
+                    
+                    # 根据周期类型验证
+                    if cycle_type == 'weekly' and (renewal_day < 1 or renewal_day > 7):
+                        return jsonify({
+                            'status': 'error',
+                            'message': '周周期的续费日期必须在 1-7 之间'
+                        }), 400
+                    elif (cycle_type == 'monthly' or cycle_type == 'yearly') and (renewal_day < 1 or renewal_day > 31):
                         return jsonify({
                             'status': 'error',
                             'message': '续费日期必须在 1-31 之间'
                         }), 400
+                    
                     sub['renewal_day'] = renewal_day
+                
+                # 如果是年周期且提供了月份，更新 last_renewed_date
+                if 'renewal_month' in data and sub.get('cycle_type') == 'yearly':
+                    from datetime import datetime
+                    renewal_month = int(data['renewal_month'])
+                    renewal_day = sub.get('renewal_day', 1)
+                    current_year = datetime.now().year
+                    
+                    try:
+                        # 设置一个基准日期（使用当前年份或去年）
+                        base_date = datetime(current_year, renewal_month, renewal_day)
+                        # 如果这个日期还没到，使用去年
+                        if base_date > datetime.now():
+                            base_date = datetime(current_year - 1, renewal_month, renewal_day)
+                        sub['last_renewed_date'] = base_date.strftime('%Y-%m-%d')
+                    except ValueError:
+                        return jsonify({
+                            'status': 'error',
+                            'message': f'{renewal_month}月{renewal_day}日不是有效日期'
+                        }), 400
                 
                 if 'alert_days_before' in data:
                     alert_days = int(data['alert_days_before'])
@@ -245,6 +284,352 @@ def update_subscription():
         return jsonify({
             'status': 'success',
             'message': f'订阅 [{subscription_name}] 配置已更新'
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/subscription/add', methods=['POST'])
+def add_subscription():
+    """添加新订阅"""
+    try:
+        data = request.get_json()
+        
+        # 验证必填字段
+        required_fields = ['name', 'renewal_day', 'alert_days_before', 'amount', 'currency']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'缺少必填字段: {field}'
+                }), 400
+        
+        # 验证数据有效性
+        name = data['name'].strip()
+        if not name:
+            return jsonify({
+                'status': 'error',
+                'message': '订阅名称不能为空'
+            }), 400
+        
+        cycle_type = data.get('cycle_type', 'monthly')
+        if cycle_type not in ['weekly', 'monthly', 'yearly']:
+            return jsonify({
+                'status': 'error',
+                'message': '周期类型必须是 weekly、monthly 或 yearly'
+            }), 400
+        
+        renewal_day = int(data['renewal_day'])
+        # 根据周期类型验证续费日
+        if cycle_type == 'weekly' and (renewal_day < 1 or renewal_day > 7):
+            return jsonify({
+                'status': 'error',
+                'message': '周周期的续费日期必须在 1-7 之间'
+            }), 400
+        elif cycle_type == 'monthly' and (renewal_day < 1 or renewal_day > 31):
+            return jsonify({
+                'status': 'error',
+                'message': '月周期的续费日期必须在 1-31 之间'
+            }), 400
+        
+        alert_days = int(data['alert_days_before'])
+        if alert_days < 0:
+            return jsonify({
+                'status': 'error',
+                'message': '提醒天数不能为负数'
+            }), 400
+        
+        amount = float(data['amount'])
+        if amount < 0:
+            return jsonify({
+                'status': 'error',
+                'message': '金额不能为负数'
+            }), 400
+        
+        # 读取配置文件
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # 检查订阅名称是否已存在
+        subscriptions = config.get('subscriptions', [])
+        for sub in subscriptions:
+            if sub.get('name') == name:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'订阅名称 [{name}] 已存在'
+                }), 400
+        
+        # 创建新订阅
+        new_subscription = {
+            'name': name,
+            'cycle_type': cycle_type,
+            'renewal_day': renewal_day,
+            'alert_days_before': alert_days,
+            'amount': amount,
+            'currency': data['currency'],
+            'enabled': data.get('enabled', True)
+        }
+        
+        # 如果是年周期且提供了月份，设置 last_renewed_date
+        if cycle_type == 'yearly' and 'renewal_month' in data:
+            from datetime import datetime
+            renewal_month = int(data['renewal_month'])
+            current_year = datetime.now().year
+            
+            try:
+                # 设置基准日期
+                base_date = datetime(current_year, renewal_month, renewal_day)
+                # 如果这个日期还没到，使用去年
+                if base_date > datetime.now():
+                    base_date = datetime(current_year - 1, renewal_month, renewal_day)
+                new_subscription['last_renewed_date'] = base_date.strftime('%Y-%m-%d')
+            except ValueError:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'{renewal_month}月{renewal_day}日不是有效日期'
+                }), 400
+        
+        # 添加到配置
+        subscriptions.append(new_subscription)
+        config['subscriptions'] = subscriptions
+        
+        # 保存配置文件
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        
+        # 立即重新检查一次，更新缓存
+        try:
+            subscription_checker = SubscriptionChecker('config.json')
+            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
+            
+            global latest_subscriptions
+            latest_subscriptions = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'subscriptions': subscription_checker.results,
+                'summary': {
+                    'total': len(subscription_checker.results),
+                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                }
+            }
+        except Exception as e:
+            print(f'更新订阅缓存失败: {e}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'订阅 [{name}] 已成功添加'
+        })
+        
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'数据格式错误: {str(e)}'
+        }), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/subscription/delete', methods=['POST'])
+def delete_subscription():
+    """删除订阅"""
+    try:
+        data = request.get_json()
+        subscription_name = data.get('name')
+        
+        if not subscription_name:
+            return jsonify({
+                'status': 'error',
+                'message': '缺少订阅名称'
+            }), 400
+        
+        # 读取配置文件
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # 查找并删除订阅
+        subscriptions = config.get('subscriptions', [])
+        subscription_found = False
+        new_subscriptions = []
+        
+        for sub in subscriptions:
+            if sub.get('name') == subscription_name:
+                subscription_found = True
+                # 跳过该订阅，不添加到新列表中
+                continue
+            new_subscriptions.append(sub)
+        
+        if not subscription_found:
+            return jsonify({
+                'status': 'error',
+                'message': f'未找到订阅: {subscription_name}'
+            }), 404
+        
+        # 更新配置
+        config['subscriptions'] = new_subscriptions
+        
+        # 保存配置文件
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        
+        # 立即重新检查一次，更新缓存
+        try:
+            subscription_checker = SubscriptionChecker('config.json')
+            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
+            
+            global latest_subscriptions
+            latest_subscriptions = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'subscriptions': subscription_checker.results,
+                'summary': {
+                    'total': len(subscription_checker.results),
+                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                }
+            }
+        except Exception as e:
+            print(f'更新订阅缓存失败: {e}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'订阅 [{subscription_name}] 已成功删除'
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/subscription/mark_renewed', methods=['POST'])
+def mark_subscription_renewed():
+    """标记订阅已续费"""
+    try:
+        data = request.get_json()
+        subscription_name = data.get('name')
+        renewed_date = data.get('renewed_date')  # 可选，默认使用今天
+        
+        if not subscription_name:
+            return jsonify({
+                'status': 'error',
+                'message': '缺少订阅名称'
+            }), 400
+        
+        # 如果没有提供续费日期，使用今天
+        if not renewed_date:
+            from datetime import datetime
+            renewed_date = datetime.now().strftime('%Y-%m-%d')
+        else:
+            # 验证日期格式
+            try:
+                datetime.strptime(renewed_date, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({
+                    'status': 'error',
+                    'message': '日期格式错误，应为 YYYY-MM-DD'
+                }), 400
+        
+        # 读取配置文件
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # 查找订阅并更新续费日期
+        subscription_found = False
+        for sub in config.get('subscriptions', []):
+            if sub.get('name') == subscription_name:
+                sub['last_renewed_date'] = renewed_date
+                subscription_found = True
+                break
+        
+        if not subscription_found:
+            return jsonify({
+                'status': 'error',
+                'message': f'未找到订阅: {subscription_name}'
+            }), 404
+        
+        # 保存配置文件
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        
+        # 立即重新检查一次，更新缓存
+        try:
+            subscription_checker = SubscriptionChecker('config.json')
+            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
+            
+            global latest_subscriptions
+            latest_subscriptions = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'subscriptions': subscription_checker.results,
+                'summary': {
+                    'total': len(subscription_checker.results),
+                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                }
+            }
+        except Exception as e:
+            print(f'更新订阅缓存失败: {e}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'订阅 [{subscription_name}] 已标记为已续费',
+            'data': {
+                'subscription_name': subscription_name,
+                'renewed_date': renewed_date
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/subscription/clear_renewed', methods=['POST'])
+def clear_subscription_renewed():
+    """清除订阅续费标记"""
+    try:
+        data = request.get_json()
+        subscription_name = data.get('name')
+        
+        if not subscription_name:
+            return jsonify({
+                'status': 'error',
+                'message': '缺少订阅名称'
+            }), 400
+        
+        # 读取配置文件
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # 查找订阅并删除续费日期
+        subscription_found = False
+        for sub in config.get('subscriptions', []):
+            if sub.get('name') == subscription_name:
+                # 删除 last_renewed_date 字段
+                if 'last_renewed_date' in sub:
+                    del sub['last_renewed_date']
+                subscription_found = True
+                break
+        
+        if not subscription_found:
+            return jsonify({
+                'status': 'error',
+                'message': f'未找到订阅: {subscription_name}'
+            }), 404
+        
+        # 保存配置文件
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        
+        # 立即重新检查一次，更新缓存
+        try:
+            subscription_checker = SubscriptionChecker('config.json')
+            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
+            
+            global latest_subscriptions
+            latest_subscriptions = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'subscriptions': subscription_checker.results,
+                'summary': {
+                    'total': len(subscription_checker.results),
+                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                }
+            }
+        except Exception as e:
+            print(f'更新订阅缓存失败: {e}')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'已取消订阅 [{subscription_name}] 的续费标记'
         })
         
     except Exception as e:

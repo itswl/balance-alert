@@ -348,3 +348,132 @@ class WebhookAdapter:
             print(traceback.format_exc())
             print(f"{'='*60}\n")
             return False
+    
+    def send_custom_alert(self, title, content):
+        """
+        发送自定义告警
+        
+        Args:
+            title: 告警标题
+            content: 告警内容
+            
+        Returns:
+            bool: 是否发送成功
+        """
+        try:
+            if self.webhook_type == 'feishu':
+                return self._send_feishu_custom(title, content)
+            elif self.webhook_type == 'dingtalk':
+                return self._send_dingtalk_custom(title, content)
+            elif self.webhook_type == 'wecom':
+                return self._send_wecom_custom(title, content)
+            else:
+                return self._send_custom_webhook_custom(title, content)
+        except Exception as e:
+            print(f"❌ 发送自定义告警失败: {e}")
+            return False
+    
+    def _send_feishu_custom(self, title, content):
+        """发送飞书自定义告警"""
+        data = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {
+                        "tag": "plain_text",
+                        "content": title
+                    },
+                    "template": "orange"
+                },
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": content
+                    }
+                ]
+            }
+        }
+        
+        response = requests.post(
+            self.webhook_url,
+            json=data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ 飞书告警发送成功")
+            return True
+        else:
+            print(f"❌ 飞书告警发送失败: {response.text}")
+            return False
+    
+    def _send_dingtalk_custom(self, title, content):
+        """发送钉钉自定义告警"""
+        data = {
+            "msgtype": "markdown",
+            "markdown": {
+                "title": title,
+                "text": f"### {title}\n\n{content}"
+            }
+        }
+        
+        response = requests.post(
+            self.webhook_url,
+            json=data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ 钉钉告警发送成功")
+            return True
+        else:
+            print(f"❌ 钉钉告警发送失败: {response.text}")
+            return False
+    
+    def _send_wecom_custom(self, title, content):
+        """发送企业微信自定义告警"""
+        data = {
+            "msgtype": "markdown",
+            "markdown": {
+                "content": f"### {title}\n\n{content}"
+            }
+        }
+        
+        response = requests.post(
+            self.webhook_url,
+            json=data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ 企业微信告警发送成功")
+            return True
+        else:
+            print(f"❌ 企业微信告警发送失败: {response.text}")
+            return False
+    
+    def _send_custom_webhook_custom(self, title, content):
+        """发送自定义 Webhook 告警"""
+        data = {
+            "title": title,
+            "content": content,
+            "source": self.source,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        response = requests.post(
+            self.webhook_url,
+            json=data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ 自定义告警发送成功")
+            return True
+        else:
+            print(f"❌ 自定义告警发送失败: {response.text}")
+            return False
