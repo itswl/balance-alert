@@ -7,8 +7,9 @@
 - 🌐 **实时 Web 界面** - 可视化展示所有项目的余额/积分状态
 - ⏰ **定时自动检查** - 每天定时运行，自动监控
 - 🔔 **智能告警** - 余额/积分不足时自动发送 webhook 通知
-- 📅 **订阅续费提醒** - 按月订阅服务续费提前通知
-- 🔌 **多平台支持** - 支持火山云、阿里云、OpenRouter、微信排名等
+- 📅 **订阅续费提醒** - 支持周/月/年三种续费周期，可手动标记已续费
+- 📧 **邮箱扫描告警** - 自动扫描多个邮箱，识别欠费/续费等告警邮件
+- 🔌 **多平台支持** - 支持火山云、阿里云、OpenRouter、TikHub、微信排名等
 - 📊 **灵活配置** - 每个项目独立配置阈值和告警规则
 - 🐳 **Docker 部署** - 一键启动，开箱即用
 
@@ -21,6 +22,7 @@
 | 🤖 OpenRouter | 积分 | 支持 OpenRouter API 积分监控 |
 | 🔷 UniAPI | 积分 | 支持 UniAPI 账户积分监控 |
 | 📱 微信排名 (WxRank) | 积分 | 支持微信公众号积分监控 |
+| 🎬 TikHub | 余额 | 支持 TikHub API 余额监控 |
 
 ## 🚀 快速开始
 
@@ -164,15 +166,28 @@ python3 monitor.py
 {
   "webhook": {
     "url": "http://your-webhook-url",
-    "source": "credit-monitor"
+    "source": "credit-monitor",
+    "type": "feishu"
   },
+  "email": [
+    {
+      "name": "飞书邮箱",
+      "host": "imap.feishu.cn",
+      "port": 993,
+      "username": "your-email@example.com",
+      "password": "your-password",
+      "use_ssl": true,
+      "enabled": true
+    }
+  ],
   "subscriptions": [
     {
       "name": "订阅名称",
-      "renewal_day": 续费日（每月几号）,
-      "alert_days_before": 提前几天提醒,
-      "amount": 续费金额,
-      "currency": "货币单位",
+      "cycle_type": "monthly",
+      "renewal_day": 15,
+      "alert_days_before": 3,
+      "amount": 100.0,
+      "currency": "CNY",
       "enabled": true
     }
   ],
@@ -207,11 +222,33 @@ python3 monitor.py
 | 字段 | 必填 | 说明 | 示例 |
 |------|------|------|------|
 | `name` | ✅ | 订阅名称 | "OpenAI Plus" |
-| `renewal_day` | ✅ | 每月续费日期 | 6 (每月 6 号) |
+| `cycle_type` | ⭕ | 续费周期类型 | weekly / monthly / yearly，默认 monthly |
+| `renewal_day` | ✅ | 续费日期 | 周周期: 1-7(周一到周日)<br>月周期: 1-31(每月几号)<br>年周期: 1-31(配合 renewal_month) |
+| `renewal_month` | ⭕ | 续费月份（仅年周期） | 1-12 (仅当 cycle_type=yearly 时使用) |
 | `alert_days_before` | ✅ | 提前多少天提醒 | 3 (提前 3 天) |
 | `amount` | ✅ | 续费金额 | 20 |
 | `currency` | ⭕ | 货币单位 | "USD" / "CNY"，默认 CNY |
+| `last_renewed_date` | ⭕ | 上次续费日期 | "2024-01-15" (手动标记时自动设置) |
 | `enabled` | ⭕ | 是否启用 | true / false，默认 true |
+
+#### 邮箱配置 (email)
+
+| 字段 | 必填 | 说明 | 示例 |
+|------|------|------|------|
+| `name` | ⭕ | 邮箱名称（标识用） | "飞书邮箱" |
+| `host` | ✅ | IMAP 服务器地址 | "imap.feishu.cn" |
+| `port` | ⭕ | IMAP 端口 | 993（默认） |
+| `username` | ✅ | 邮箱账号 | "user@example.com" |
+| `password` | ✅ | 邮箱密码或授权码 | "password" |
+| `use_ssl` | ⭕ | 是否使用 SSL | true（默认） |
+| `enabled` | ⭕ | 是否启用 | true / false，默认 true |
+
+**支持的邮箱服务器**：
+- 飞书: `imap.feishu.cn:993`
+- QQ邮箱: `imap.qq.com:993` (需开启IMAP并使用授权码)
+- 163邮箱: `imap.163.com:993` (需开启IMAP并使用授权码)
+- Gmail: `imap.gmail.com:993`
+- Outlook: `outlook.office365.com:993`
 
 ### API 密钥格式
 
@@ -250,17 +287,41 @@ python3 monitor.py
 "api_key": "a7136e65***"
 ```
 
+#### TikHub
+格式：Bearer Token
+```json
+"api_key": "mKMARFp0w***"
+```
+
+获取 API Key：
+1. 登录 [TikHub 控制台](https://api.tikhub.io)
+2. 进入 API Keys 管理页面
+3. 复制 Bearer Token
+
 ### 配置示例
 
 ```json
 {
   "webhook": {
-    "url": "https://your-webhook.com/notify",
-    "source": "credit-monitor"
+    "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",
+    "source": "credit-monitor",
+    "type": "feishu"
   },
+  "email": [
+    {
+      "name": "飞书邮箱",
+      "host": "imap.feishu.cn",
+      "port": 993,
+      "username": "dev@example.com",
+      "password": "your-password",
+      "use_ssl": true,
+      "enabled": true
+    }
+  ],
   "subscriptions": [
     {
       "name": "OpenAI Plus",
+      "cycle_type": "monthly",
       "renewal_day": 6,
       "alert_days_before": 3,
       "amount": 20,
@@ -269,10 +330,21 @@ python3 monitor.py
     },
     {
       "name": "GitHub Copilot",
+      "cycle_type": "yearly",
       "renewal_day": 15,
-      "alert_days_before": 5,
-      "amount": 10,
+      "renewal_month": 3,
+      "alert_days_before": 7,
+      "amount": 100,
       "currency": "USD",
+      "enabled": true
+    },
+    {
+      "name": "每周备份服务",
+      "cycle_type": "weekly",
+      "renewal_day": 1,
+      "alert_days_before": 1,
+      "amount": 50,
+      "currency": "CNY",
       "enabled": true
     }
   ],
@@ -291,6 +363,14 @@ python3 monitor.py
       "api_key": "sk-or-v1-xxx",
       "threshold": 10000,
       "type": "credits",
+      "enabled": true
+    },
+    {
+      "name": "TikHub",
+      "provider": "tikhub",
+      "api_key": "mKMARFp0w***",
+      "threshold": 10.0,
+      "type": "balance",
       "enabled": true
     }
   ]
@@ -337,16 +417,25 @@ python3 monitor.py
 
 ```bash
 # 启动 Web 服务器
-python3 web_server.py
+python web_server.py
 
 # 执行一次检查（发送告警）
-python3 monitor.py
+python monitor.py
 
 # 测试模式（不发送告警）
-python3 monitor.py --dry-run
+python monitor.py --dry-run
 
 # 检查指定项目
-python3 monitor.py --project "项目名称"
+python monitor.py --project "项目名称"
+
+# 扫描邮箱（检查最近1天的邮件）
+python email_scanner.py --days 1
+
+# 扫描邮箱（测试模式）
+python email_scanner.py --days 3 --dry-run
+
+# 集成检查（余额+订阅+邮箱）
+python monitor.py --check-email --email-days 1
 ```
 
 ## 🌐 Web 界面
@@ -356,10 +445,13 @@ python3 monitor.py --project "项目名称"
 ### 功能特性
 
 - 📊 实时显示所有项目的余额/积分状态
+- 📅 订阅管理：添加、编辑、删除订阅
 - 🔄 支持手动刷新数据
+- ✅ 手动标记订阅已续费/取消标记
 - 📈 可视化进度条显示余额比例
 - ⚠️ 自动标识余额不足的项目
 - 🎨 美观的卡片式布局
+- 📧 订阅续费状态一目了然
 
 ### 自动刷新
 
@@ -444,16 +536,21 @@ environment:
 ## 📂 项目结构
 
 ```
-check_credits/
+balance-alert/
 ├── config.json              # 配置文件
 ├── monitor.py               # 监控主程序
 ├── web_server.py           # Web 服务器
+├── email_scanner.py        # 邮箱扫描器
+├── subscription_checker.py # 订阅续费检查器
+├── webhook_adapter.py      # Webhook 告警适配器
 ├── providers/              # 服务商适配器
 │   ├── __init__.py
 │   ├── volc.py            # 火山云
 │   ├── aliyun.py          # 阿里云
 │   ├── openrouter.py      # OpenRouter
-│   └── wxrank.py          # 微信排名
+│   ├── uniapi.py          # UniAPI
+│   ├── wxrank.py          # 微信排名
+│   └── tikhub.py          # TikHub
 ├── templates/              # Web 模板
 │   └── index.html
 ├── Dockerfile              # Docker 镜像
@@ -544,6 +641,150 @@ lsof -i :8080
 - 火山云/阿里云：用冒号分隔 AK 和 SK
 - OpenRouter：完整的 sk-or-v1-xxx
 - 微信排名：直接使用 key
+
+---
+
+## 🆕 新功能详解
+
+### 📧 邮箱扫描功能
+
+自动扫描邮箱，智能识别欠费、续费等告警邮件。
+
+#### 支持特性
+- ✅ **多邮箱支持**：可配置多个邮箱账号同时扫描
+- ✅ **智能关键词识别**：支持 40+ 中英文关键词（欠费/余额不足/overdue/low balance等）
+- ✅ **不区分大小写**：英文关键词匹配时自动忽略大小写
+- ✅ **服务名称提取**：自动从邮件主题中提取服务名称
+- ✅ **金额信息识别**：支持多种货币格式（¥/CNY/$/$USD等）
+- ✅ **多格式支持**：支持纯文本和 HTML 邮件格式
+
+#### 关键词列表（40个）
+
+**中文关键词（13个）**：
+- 欠费、余额不足、余额预警、余额告警
+- 即将到期、已到期、续费提醒、续费通知
+- 账单逾期、缴费通知、请及时续费、停机
+- 暂停服务、服务即将暂停、充值提醒
+
+**英文关键词（27个）**：
+- overdue, past due, payment due, payment overdue
+- low balance, insufficient balance, balance alert
+- expiring soon, expired, expiration notice
+- renewal reminder, renewal notice, renew now
+- payment reminder, payment required, bill overdue
+- service suspension, service suspended, suspended
+- recharge reminder, top up, account suspended
+- unpaid invoice, outstanding balance, payment failed
+
+#### 使用方法
+
+```bash
+# 扫描最近 1 天的邮件
+python email_scanner.py --days 1
+
+# 扫描最近 7 天的邮件（测试模式）
+python email_scanner.py --days 7 --dry-run
+
+# 配合主程序一起使用
+python monitor.py --check-email --email-days 1
+```
+
+#### 配置示例
+
+```json
+{
+  "email": [
+    {
+      "name": "飞书邮箱",
+      "host": "imap.feishu.cn",
+      "port": 993,
+      "username": "dev@example.com",
+      "password": "your-password",
+      "use_ssl": true,
+      "enabled": true
+    },
+    {
+      "name": "QQ邮箱",
+      "host": "imap.qq.com",
+      "port": 993,
+      "username": "example@qq.com",
+      "password": "授权码",
+      "use_ssl": true,
+      "enabled": false
+    }
+  ]
+}
+```
+
+### 📅 订阅续费多周期支持
+
+支持按周、按月、按年三种续费周期。
+
+#### 支持的周期类型
+
+1. **周周期 (weekly)**
+   - 续费日：1-7（1=周一, 7=周日）
+   - 示例：每周一续费
+
+2. **月周期 (monthly)**
+   - 续费日：1-31（每月几号）
+   - 示例：每月 15 号续费
+
+3. **年周期 (yearly)**
+   - 续费月份：1-12
+   - 续费日期：1-31
+   - 示例：每年 3 月 15 日续费
+
+#### 配置示例
+
+```json
+{
+  "subscriptions": [
+    {
+      "name": "每周备份服务",
+      "cycle_type": "weekly",
+      "renewal_day": 1,
+      "alert_days_before": 1,
+      "amount": 50.0,
+      "currency": "CNY",
+      "enabled": true
+    },
+    {
+      "name": "OpenAI Plus",
+      "cycle_type": "monthly",
+      "renewal_day": 15,
+      "alert_days_before": 3,
+      "amount": 20.0,
+      "currency": "USD",
+      "enabled": true
+    },
+    {
+      "name": "GitHub Copilot",
+      "cycle_type": "yearly",
+      "renewal_day": 15,
+      "renewal_month": 3,
+      "alert_days_before": 7,
+      "amount": 100.0,
+      "currency": "USD",
+      "enabled": true
+    }
+  ]
+}
+```
+
+#### Web 界面功能
+
+- ✅ 添加订阅：选择周期类型，动态表单
+- ✅ 编辑订阅：修改周期类型和续费日期
+- ✅ 删除订阅：一键删除订阅
+- ✅ 标记已续费：手动标记订阅已续费
+- ✅ 取消标记：取消已续费标记
+- ✅ 状态显示：
+  - 周周期：每周 周一
+  - 月周期：每月 15 号
+  - 年周期：每年 3月15日
+
+---
 
 ## 📄 许可证
 
