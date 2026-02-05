@@ -356,6 +356,50 @@
             background: #d1d5db;
         }
 
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .action-buttons {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 768px) {
             .projects {
                 grid-template-columns: 1fr;
@@ -393,8 +437,13 @@
         <div style="margin-top: 40px;">
             <div class="header">
                 <h2 style="font-size: 24px; color: #333; margin-bottom: 10px;">📅 订阅续费提醒</h2>
-                <div class="last-update">
-                    最后检查: <span id="subscriptionLastUpdate">加载中...</span>
+                <div class="header-info">
+                    <div class="last-update">
+                        最后检查: <span id="subscriptionLastUpdate">加载中...</span>
+                    </div>
+                    <button class="refresh-btn" onclick="openAddSubscriptionModal()">
+                        ➕ 添加订阅
+                    </button>
                 </div>
             </div>
             <div class="projects" id="subscriptions">
@@ -438,8 +487,36 @@
                     <input type="text" class="form-input" id="modalSubName" readonly>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">续费日期（每月几号）</label>
+                    <label class="form-label">续费周期</label>
+                    <select class="form-input" id="modalCycleType" onchange="updateEditRenewalDayLabel()">
+                        <option value="weekly">每周</option>
+                        <option value="monthly">每月</option>
+                        <option value="yearly">每年</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" id="modalRenewalDayLabel">续费日期（每月几号）</label>
                     <input type="number" class="form-input" id="modalRenewalDay" min="1" max="31" placeholder="1-31">
+                    <small style="color: #999; font-size: 12px; display: block; margin-top: 5px;" id="modalRenewalDayHint">
+                        月周期：1-31 表示每月几号
+                    </small>
+                </div>
+                <div class="form-group" id="modalYearMonthGroup" style="display: none;">
+                    <label class="form-label">续费月份（年周期）</label>
+                    <select class="form-input" id="modalRenewalMonth">
+                        <option value="1">1月</option>
+                        <option value="2">2月</option>
+                        <option value="3">3月</option>
+                        <option value="4">4月</option>
+                        <option value="5">5月</option>
+                        <option value="6">6月</option>
+                        <option value="7">7月</option>
+                        <option value="8">8月</option>
+                        <option value="9">9月</option>
+                        <option value="10">10月</option>
+                        <option value="11">11月</option>
+                        <option value="12">12月</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">提前提醒（天数）</label>
@@ -463,6 +540,73 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeSubscriptionModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveSubscription()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 添加订阅模态框 -->
+    <div class="modal" id="addSubscriptionModal">
+        <div class="modal-content">
+            <div class="modal-header">添加新订阅</div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">订阅名称 *</label>
+                    <input type="text" class="form-input" id="addSubName" placeholder="例如：阿里云服务器">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">续费周期 *</label>
+                    <select class="form-input" id="addCycleType" onchange="updateRenewalDayLabel()">
+                        <option value="weekly">每周</option>
+                        <option value="monthly" selected>每月</option>
+                        <option value="yearly">每年</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" id="addRenewalDayLabel">续费日期（每月几号）*</label>
+                    <input type="number" class="form-input" id="addRenewalDay" min="1" max="31" placeholder="1-31">
+                    <small style="color: #999; font-size: 12px; display: block; margin-top: 5px;" id="addRenewalDayHint">
+                        月周期：1-31 表示每月几号
+                    </small>
+                </div>
+                <div class="form-group" id="addYearMonthGroup" style="display: none;">
+                    <label class="form-label">续费月份（年周期）*</label>
+                    <select class="form-input" id="addRenewalMonth">
+                        <option value="1">1月</option>
+                        <option value="2">2月</option>
+                        <option value="3">3月</option>
+                        <option value="4">4月</option>
+                        <option value="5">5月</option>
+                        <option value="6">6月</option>
+                        <option value="7">7月</option>
+                        <option value="8">8月</option>
+                        <option value="9">9月</option>
+                        <option value="10">10月</option>
+                        <option value="11">11月</option>
+                        <option value="12">12月</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">提前提醒（天数）*</label>
+                    <input type="number" class="form-input" id="addAlertDays" min="0" value="3" placeholder="提前多少天提醒">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">续费金额 *</label>
+                    <input type="number" class="form-input" id="addAmount" step="0.01" min="0" placeholder="续费金额">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">货币单位 *</label>
+                    <select class="form-input" id="addCurrency">
+                        <option value="CNY">CNY (人民币)</option>
+                        <option value="USD">USD (美元)</option>
+                        <option value="EUR">EUR (欧元)</option>
+                        <option value="GBP">GBP (英镑)</option>
+                        <option value="JPY">JPY (日元)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddSubscriptionModal()">取消</button>
+                <button class="btn btn-primary" onclick="addNewSubscription()">添加</button>
             </div>
         </div>
     </div>
@@ -769,11 +913,47 @@
             
             subscriptionsEl.innerHTML = subscriptions.map(sub => {
                 const needAlert = sub.need_alert;
+                const alreadyRenewed = sub.already_renewed || false;
                 const statusClass = needAlert ? 'warning' : 'success';
-                const statusText = needAlert ? '⚠️ 需要提醒' : '✅ 正常';
+                const statusText = alreadyRenewed ? '✅ 已续费' : (needAlert ? '⚠️ 需要提醒' : '✅ 正常');
                 const currency = sub.currency || 'CNY';
                 const days = sub.days_until_renewal;
                 const daysText = days === 0 ? '今天' : days === 1 ? '明天' : `${days} 天后`;
+                const lastRenewedText = sub.last_renewed_date ? `<br><small style="color: #999;">(上次续费: ${sub.last_renewed_date})</small>` : '';
+                const nextRenewalText = sub.next_renewal_date ? `<br><small style="color: #666;">(下次: ${sub.next_renewal_date})</small>` : '';
+                
+                // 获取周期描述
+                const cycleType = sub.cycle_type || 'monthly';
+                let cycleText = '每月';
+                if (cycleType === 'weekly') {
+                    cycleText = '每周';
+                } else if (cycleType === 'yearly') {
+                    cycleText = '每年';
+                }
+                
+                // 获取续费日描述
+                let renewalDayText = '';
+                if (cycleType === 'weekly') {
+                    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                    renewalDayText = weekdays[sub.renewal_day - 1] || `第${sub.renewal_day}天`;
+                } else if (cycleType === 'yearly') {
+                    // 从 last_renewed_date 或 next_renewal_date 解析出月份和日期
+                    if (sub.last_renewed_date || sub.next_renewal_date) {
+                        try {
+                            const dateStr = sub.last_renewed_date || sub.next_renewal_date;
+                            const date = new Date(dateStr);
+                            const month = date.getMonth() + 1;
+                            const day = date.getDate();
+                            renewalDayText = `${month}月${day}日`;
+                        } catch (e) {
+                            renewalDayText = '固定日期';
+                        }
+                    } else {
+                        renewalDayText = '固定日期';
+                    }
+                } else {
+                    renewalDayText = `${sub.renewal_day} 号`;
+                }
                 
                 return `
                     <div class="project-card ${statusClass}">
@@ -784,13 +964,13 @@
                         
                         <div class="project-info">
                             <div class="info-row">
-                                <span class="info-label">续费日期</span>
-                                <span class="info-value">每月 ${sub.renewal_day} 号</span>
+                                <span class="info-label">续费周期</span>
+                                <span class="info-value">${cycleText} ${renewalDayText}</span>
                             </div>
                             <div class="info-row">
                                 <span class="info-label">距离续费</span>
                                 <span class="info-value" style="color: ${needAlert ? '#f59e0b' : '#10b981'}; font-size: 18px;">
-                                    ${daysText}
+                                    ${daysText}${lastRenewedText}${nextRenewalText}
                                 </span>
                             </div>
                             <div class="info-row">
@@ -804,8 +984,20 @@
                                     <button class="edit-threshold-btn" onclick='editSubscription(${JSON.stringify(sub).replace(/'/g, "&#39;")})'>
                                         ✏️ 修改
                                     </button>
+                                    <button class="edit-threshold-btn" style="background: #ef4444; margin-left: 5px;" onclick="deleteSubscription('${sub.name}')" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                                        🗑️ 删除
+                                    </button>
                                 </span>
                             </div>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button class="action-btn btn-success" onclick="markSubscriptionRenewed('${sub.name}')" ${alreadyRenewed ? 'disabled' : ''}>
+                                ✅ ${alreadyRenewed ? '已处理' : '标记已续费'}
+                            </button>
+                            <button class="action-btn btn-warning" onclick="clearSubscriptionRenewed('${sub.name}')" ${!alreadyRenewed ? 'disabled' : ''}>
+                                🔄 取消标记
+                            </button>
                         </div>
                     </div>
                 `;
@@ -815,18 +1007,75 @@
         // 编辑订阅配置
         let currentEditingSubscription = null;
         
+        function updateEditRenewalDayLabel() {
+            const cycleType = document.getElementById('modalCycleType').value;
+            const label = document.getElementById('modalRenewalDayLabel');
+            const input = document.getElementById('modalRenewalDay');
+            const hint = document.getElementById('modalRenewalDayHint');
+            const yearMonthGroup = document.getElementById('modalYearMonthGroup');
+            
+            if (cycleType === 'weekly') {
+                label.textContent = '续费星期';
+                input.placeholder = '1-7（周一到周日）';
+                input.min = '1';
+                input.max = '7';
+                hint.innerHTML = '1=周一, 2=周二, 3=周三, 4=周四, 5=周五, 6=周六, 7=周日';
+                yearMonthGroup.style.display = 'none';
+            } else if (cycleType === 'yearly') {
+                label.textContent = '续费日期（几号）';
+                input.placeholder = '1-31';
+                input.min = '1';
+                input.max = '31';
+                hint.innerHTML = '配合月份选择，例如：选择3月15日';
+                yearMonthGroup.style.display = 'block';
+            } else {
+                label.textContent = '续费日期（每月几号）';
+                input.placeholder = '1-31';
+                input.min = '1';
+                input.max = '31';
+                hint.innerHTML = '每月的续费日期，例如：15 表示每月15号';
+                yearMonthGroup.style.display = 'none';
+            }
+        }
+        
         function editSubscription(subscription) {
             currentEditingSubscription = subscription.name;
+            
+            // 设置基本信息
             document.getElementById('modalSubName').value = subscription.name;
-            document.getElementById('modalRenewalDay').value = subscription.renewal_day;
+            
+            // 设置周期类型
+            const cycleType = subscription.cycle_type || 'monthly';
+            document.getElementById('modalCycleType').value = cycleType;
+            
+            // 如果是年周期且有上次续费日期，解析出月份和日期
+            if (cycleType === 'yearly' && subscription.last_renewed_date) {
+                try {
+                    const date = new Date(subscription.last_renewed_date);
+                    document.getElementById('modalRenewalMonth').value = (date.getMonth() + 1).toString();
+                    document.getElementById('modalRenewalDay').value = date.getDate();
+                } catch (e) {
+                    document.getElementById('modalRenewalMonth').value = '1';
+                    document.getElementById('modalRenewalDay').value = subscription.renewal_day;
+                }
+            } else {
+                document.getElementById('modalRenewalDay').value = subscription.renewal_day;
+                document.getElementById('modalRenewalMonth').value = '1';
+            }
+            
+            // 其他字段
             document.getElementById('modalAlertDays').value = subscription.alert_days_before || 3;
             document.getElementById('modalAmount').value = subscription.amount;
             document.getElementById('modalCurrency').value = subscription.currency || 'CNY';
+            
+            // 更新界面
+            updateEditRenewalDayLabel();
+            
             document.getElementById('subscriptionModal').classList.add('active');
             
             // 聚焦到第一个输入框
             setTimeout(() => {
-                document.getElementById('modalRenewalDay').focus();
+                document.getElementById('modalCycleType').focus();
             }, 100);
         }
         
@@ -835,7 +1084,9 @@
         }
         
         async function saveSubscription() {
+            const cycleType = document.getElementById('modalCycleType').value;
             const renewalDay = document.getElementById('modalRenewalDay').value;
+            const renewalMonth = document.getElementById('modalRenewalMonth').value;
             const alertDays = document.getElementById('modalAlertDays').value;
             const amount = document.getElementById('modalAmount').value;
             const currency = document.getElementById('modalCurrency').value;
@@ -845,24 +1096,37 @@
                 return;
             }
             
-            if (renewalDay < 1 || renewalDay > 31) {
+            // 根据周期类型验证
+            const renewalDayNum = parseInt(renewalDay);
+            if (cycleType === 'weekly' && (renewalDayNum < 1 || renewalDayNum > 7)) {
+                alert('周周期的续费日期必须在 1-7 之间');
+                return;
+            } else if ((cycleType === 'monthly' || cycleType === 'yearly') && (renewalDayNum < 1 || renewalDayNum > 31)) {
                 alert('续费日期必须在 1-31 之间');
                 return;
             }
 
             try {
+                const requestBody = {
+                    name: currentEditingSubscription,
+                    cycle_type: cycleType,
+                    renewal_day: renewalDayNum,
+                    alert_days_before: parseInt(alertDays),
+                    amount: parseFloat(amount),
+                    currency: currency
+                };
+                
+                // 如果是年周期，添加月份信息（通过 renewal_month 字段）
+                if (cycleType === 'yearly') {
+                    requestBody.renewal_month = parseInt(renewalMonth);
+                }
+                
                 const response = await fetch('/api/config/subscription', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        name: currentEditingSubscription,
-                        renewal_day: parseInt(renewalDay),
-                        alert_days_before: parseInt(alertDays),
-                        amount: parseFloat(amount),
-                        currency: currency
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const result = await response.json();
@@ -887,6 +1151,258 @@
                 closeSubscriptionModal();
             }
         });
+        
+        // 添加订阅相关函数
+        function openAddSubscriptionModal() {
+            // 清空表单
+            document.getElementById('addSubName').value = '';
+            document.getElementById('addCycleType').value = 'monthly';
+            document.getElementById('addRenewalDay').value = '';
+            document.getElementById('addAlertDays').value = '3';
+            document.getElementById('addAmount').value = '';
+            document.getElementById('addCurrency').value = 'CNY';
+            
+            // 更新标签
+            updateRenewalDayLabel();
+            
+            document.getElementById('addSubscriptionModal').classList.add('active');
+            
+            // 聚焦到第一个输入框
+            setTimeout(() => {
+                document.getElementById('addSubName').focus();
+            }, 100);
+        }
+        
+        function updateRenewalDayLabel() {
+            const cycleType = document.getElementById('addCycleType').value;
+            const label = document.getElementById('addRenewalDayLabel');
+            const input = document.getElementById('addRenewalDay');
+            const hint = document.getElementById('addRenewalDayHint');
+            const yearMonthGroup = document.getElementById('addYearMonthGroup');
+            
+            if (cycleType === 'weekly') {
+                label.textContent = '续费星期 *';
+                input.placeholder = '1-7（周一到周日）';
+                input.min = '1';
+                input.max = '7';
+                input.readOnly = false;
+                hint.innerHTML = '1=周一, 2=周二, 3=周三, 4=周四, 5=周五, 6=周六, 7=周日';
+                yearMonthGroup.style.display = 'none';
+            } else if (cycleType === 'yearly') {
+                label.textContent = '续费日期（几号）*';
+                input.placeholder = '1-31';
+                input.min = '1';
+                input.max = '31';
+                input.readOnly = false;
+                hint.innerHTML = '配合月份选择，例如：选择3月15日';
+                yearMonthGroup.style.display = 'block';
+            } else {
+                label.textContent = '续费日期（每月几号）*';
+                input.placeholder = '1-31';
+                input.min = '1';
+                input.max = '31';
+                input.readOnly = false;
+                hint.innerHTML = '每月的续费日期，例如：15 表示每月15号';
+                yearMonthGroup.style.display = 'none';
+            }
+        }
+        
+        function closeAddSubscriptionModal() {
+            document.getElementById('addSubscriptionModal').classList.remove('active');
+        }
+        
+        async function addNewSubscription() {
+            const name = document.getElementById('addSubName').value.trim();
+            const cycleType = document.getElementById('addCycleType').value;
+            const renewalDay = document.getElementById('addRenewalDay').value;
+            const renewalMonth = document.getElementById('addRenewalMonth').value;
+            const alertDays = document.getElementById('addAlertDays').value;
+            const amount = document.getElementById('addAmount').value;
+            const currency = document.getElementById('addCurrency').value;
+            
+            // 验证必填字段
+            if (!name) {
+                alert('请输入订阅名称');
+                document.getElementById('addSubName').focus();
+                return;
+            }
+            
+            // 根据周期类型验证续费日
+            if (!renewalDay) {
+                alert('请输入续费日期');
+                document.getElementById('addRenewalDay').focus();
+                return;
+            }
+            
+            const renewalDayNum = parseInt(renewalDay);
+            if (cycleType === 'weekly' && (renewalDayNum < 1 || renewalDayNum > 7)) {
+                alert('周周期的续费日期必须在 1-7 之间（周一到周日）');
+                document.getElementById('addRenewalDay').focus();
+                return;
+            } else if ((cycleType === 'monthly' || cycleType === 'yearly') && (renewalDayNum < 1 || renewalDayNum > 31)) {
+                alert('续费日期必须在 1-31 之间');
+                document.getElementById('addRenewalDay').focus();
+                return;
+            }
+            
+            if (!alertDays || alertDays < 0) {
+                alert('提前提醒天数不能为负数');
+                document.getElementById('addAlertDays').focus();
+                return;
+            }
+            
+            if (!amount || amount < 0) {
+                alert('续费金额不能为负数');
+                document.getElementById('addAmount').focus();
+                return;
+            }
+            
+            try {
+                const requestBody = {
+                    name: name,
+                    cycle_type: cycleType,
+                    renewal_day: renewalDayNum,
+                    alert_days_before: parseInt(alertDays),
+                    amount: parseFloat(amount),
+                    currency: currency,
+                    enabled: true
+                };
+                
+                // 如果是年周期，添加月份信息
+                if (cycleType === 'yearly') {
+                    requestBody.renewal_month = parseInt(renewalMonth);
+                }
+                
+                const response = await fetch('/api/subscription/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('✅ ' + result.message);
+                    closeAddSubscriptionModal();
+                    // 立即刷新数据
+                    await refreshData();
+                } else {
+                    alert('❌ 添加失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('添加订阅失败:', error);
+                alert('❌ 添加失败，请稍后重试');
+            }
+        }
+        
+        // 点击模态框背景关闭
+        document.getElementById('addSubscriptionModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeAddSubscriptionModal();
+            }
+        });
+        
+        // 删除订阅
+        async function deleteSubscription(subscriptionName) {
+            if (!confirm(`确定要删除订阅 [${subscriptionName}] 吗？\n此操作不可恢复！`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/subscription/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: subscriptionName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('✅ ' + result.message);
+                    // 立即刷新数据
+                    await refreshData();
+                } else {
+                    alert('❌ 删除失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('删除订阅失败:', error);
+                alert('❌ 删除失败，请稍后重试');
+            }
+        }
+        
+        // 标记订阅已续费
+        async function markSubscriptionRenewed(subscriptionName) {
+            if (!confirm(`确定要标记订阅 [${subscriptionName}] 为已续费吗？`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/subscription/mark_renewed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: subscriptionName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('✅ ' + result.message);
+                    // 立即刷新订阅数据
+                    const subResponse = await fetch('/api/subscriptions');
+                    const subData = await subResponse.json();
+                    renderSubscriptions(subData);
+                } else {
+                    alert('❌ 操作失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('标记已续费失败:', error);
+                alert('❌ 操作失败，请稍后重试');
+            }
+        }
+        
+        // 清除订阅续费标记
+        async function clearSubscriptionRenewed(subscriptionName) {
+            if (!confirm(`确定要取消订阅 [${subscriptionName}] 的续费标记吗？\n取消后将恢复续费提醒。`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/subscription/clear_renewed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: subscriptionName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('✅ ' + result.message);
+                    // 立即刷新订阅数据
+                    const subResponse = await fetch('/api/subscriptions');
+                    const subData = await subResponse.json();
+                    renderSubscriptions(subData);
+                } else {
+                    alert('❌ 操作失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('取消标记失败:', error);
+                alert('❌ 操作失败，请稍后重试');
+            }
+        }
     </script>
 </body>
 </html>

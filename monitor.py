@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 from providers import get_provider
 from subscription_checker import SubscriptionChecker
+from email_scanner import EmailScanner
 from webhook_adapter import WebhookAdapter
 
 
@@ -238,6 +239,8 @@ def main():
   %(prog)s --dry-run                # 测试模式，不发送告警
   %(prog)s --config custom.json     # 使用自定义配置文件
   %(prog)s --check-subscriptions    # 检查订阅续费提醒
+  %(prog)s --check-email            # 扫描邮箱告警邮件
+  %(prog)s --check-email --email-days 3  # 扫描最近3天的邮件
         """
     )
     
@@ -264,6 +267,19 @@ def main():
         help='检查订阅续费提醒'
     )
     
+    parser.add_argument(
+        '--check-email',
+        action='store_true',
+        help='扫描邮箱告警邮件'
+    )
+    
+    parser.add_argument(
+        '--email-days',
+        type=int,
+        default=1,
+        help='扫描最近几天的邮件 (默认: 1天)'
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -276,6 +292,12 @@ def main():
             print("\n" + "="*60)
             subscription_checker = SubscriptionChecker(args.config)
             subscription_checker.check_subscriptions(dry_run=args.dry_run)
+        
+        # 扫描邮箱（如果指定）
+        if args.check_email:
+            print("\n" + "="*60)
+            email_scanner = EmailScanner(args.config)
+            email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
             
     except Exception as e:
         print(f"❌ 错误: {e}", file=sys.stderr)
