@@ -790,249 +790,32 @@ python monitor.py --check-email --email-days 1
 
 系统已集成 Prometheus Exporter，可将余额/订阅监控数据推送到 Prometheus，并通过 Grafana 进行可视化展示。
 
-### 📈 暴露的指标
-
-#### 余额/积分指标
-
-- `balance_alert_balance` - 当前余额/积分
-  - 标签：`project`（项目名）, `provider`（平台）, `type`（balance/credits）
-- `balance_alert_threshold` - 告警阈值
-- `balance_alert_ratio` - 余额比例（余额/阈值）
-- `balance_alert_status` - 余额状态（1=正常, 0=告警）
-
-#### 订阅续费指标
-
-- `balance_alert_subscription_days` - 距离续费天数
-  - 标签：`name`（订阅名）, `cycle_type`（周期类型）
-- `balance_alert_subscription_amount` - 续费金额
-  - 标签：`name`, `cycle_type`, `currency`
-- `balance_alert_subscription_status` - 订阅状态（1=正常, 0=需续费, -1=已续费）
-
-#### 系统指标
-
-- `balance_alert_last_check_timestamp` - 最后检查时间戳
-- `balance_alert_check_success` - 检查成功状态
-- `balance_alert_email_scan_total` - 扫描邮件总数
-- `balance_alert_email_alerts` - 告警邮件数
-
-### 🚀 快速启动
-
-#### 方式一：Docker Compose 一键启动（推荐）
+### 快速启动
 
 ```bash
-# 启动所有服务（Web + Prometheus + Grafana）
+# 一键启动监控栈（Web + Prometheus + Grafana）
 docker-compose -f docker-compose.monitoring.yml up -d
 
-# 查看日志
-docker-compose -f docker-compose.monitoring.yml logs -f
-
-# 停止服务
-docker-compose -f docker-compose.monitoring.yml down
+# 访问
+# - Grafana: http://localhost:3000 （admin/admin123）
+# - Prometheus: http://localhost:9090
+# - Metrics: http://localhost:8080/metrics
 ```
 
-启动后访问：
-- **Grafana**: http://localhost:3000 （默认账号：admin/admin123）
-- **Prometheus**: http://localhost:9090
-- **监控服务**: http://localhost:8080
-- **Metrics端点**: http://localhost:8080/metrics
+### 更多配置
 
-#### 方式二：导入 Dashboard
+详细的监控配置、指标说明、Dashboard 使用和外部 Prometheus 集成，请查看：
 
-如果您已有 Prometheus 和 Grafana 环境：
+📚 **[监控系统完整文档](PROMETHEUS_GRAFANA.md)**
 
-```bash
-# 1. 自动导入 Dashboard
-./import_dashboard.sh
-
-# 2. 或手动导入
-# - 登录 Grafana (http://localhost:3000)
-# - 点击左侧菜单 "+" → "Import"
-# - 上传 grafana/dashboards/balance-alert-dashboard.json
-# - 选择 Prometheus 数据源
-# - 点击 "Import"
-```
-
-### 🔄 数据刷新机制
-
-#### 刷新时间配置
-
-| 环节 | 刷新间隔 | 配置位置 | 说明 |
-|------|---------|---------|------|
-| 余额数据采集 | **60 分钟** | `web_server.py#L89` | 后台线程定时调用各平台 API |
-| Prometheus 采集 | **60 秒** | `prometheus.yml#L3` | Prometheus 从 metrics 端点抽取数据 |
-| Grafana 刷新 | **60 秒** | Dashboard 配置 | Dashboard 自动查询 Prometheus |
-| **总延迟** | **~61 分钟** | - | 从余额变化到 Grafana 显示 |
-
-#### 数据流转链路
-
-```mermaid
-graph LR
-    A[余额API] -->|60分钟| B[Web Server]
-    B -->|更新| C[Prometheus Metrics]
-    C -->|60秒| D[Prometheus]
-    D -->|60秒| E[Grafana Dashboard]
-```
-
-#### 获得更实时的数据
-
-**方法 1：缩短余额刷新间隔（推荐）**
-
-编辑 [`web_server.py`](file:///Users/imwl/balance-alert/web_server.py#L89)：
-
-```python
-# 当前：每 60 分钟更新一次
-time.sleep(60 * 60)
-
-# 改为：每 5 分钟更新一次
-time.sleep(5 * 60)
-
-# 或：每 10 分钟更新一次
-time.sleep(10 * 60)
-```
-
-⚠️ **注意**：频繁调用 API 可能：
-- 触发平台 API 限流
-- 增加网络请求负担
-- 建议根据实际需求设置（5-15 分钟合理）
-
-**方法 2：手动刷新**
-
-随时调用接口立即刷新：
-
-```bash
-curl http://localhost:8080/api/refresh
-```
-
-这会立即：
-- ✅ 查询所有平台 API
-- ✅ 更新 Prometheus Metrics
-- ✅ Prometheus 会在下一个采集周期（60秒内）获取新数据
-
-**方法 3：缩短 Prometheus 采集间隔**
-
-编辑 [`prometheus.yml`](file:///Users/imwl/balance-alert/prometheus.yml#L3)：
-
-```yaml
-global:
-  scrape_interval: 15s  # 改为每15秒采集一次
-```
-
-### 📋 Grafana Dashboard
-
-预配置的 Dashboard 包含 5 个面板：
-
-1. **余额/积分总览** - Stat 面板，显示所有项目当前余额
-2. **余额比例** - Gauge 仪表盘，显示余额/阈值比例
-   - 颜色指示：🔴红色(<30%) → 🟡黄色(30-50%) → 🟢绿色(>50%)
-3. **余额趋势** - 时间序列图，显示余额变化趋势
-4. **订阅续费倒计时** - Stat 面板，显示距离续费的天数
-   - 颜色指示：🔴红色(<3天) → 🟡黄色(3-7天) → 🟢绿色(>7天)
-5. **订阅状态** - 表格，显示订阅详细状态
-   - 状态映射：🟢正常 / 🔴需续费 / 🔵已续费
-
-### 🔍 Prometheus 查询示例
-
-在 Prometheus UI (http://localhost:9090/graph) 中尝试以下查询：
-
-```promql
-# 查看所有项目余额
-balance_alert_balance
-
-# 查看余额不足的项目
-balance_alert_status == 0
-
-# 查看余额比例小于0.5的项目
-balance_alert_ratio < 0.5
-
-# 查看7天内需要续费的订阅
-balance_alert_subscription_days <= 7
-
-# 查看邮箱告警邮件增长率
-rate(balance_alert_email_alerts[5m])
-
-# 查看具体项目的余额趋势
-balance_alert_balance{project="TikHub"}
-```
-
-### ⚠️ Prometheus 告警规则示例
-
-可以在 Prometheus 中配置告警规则，创建 `alert_rules.yml`：
-
-```yaml
-groups:
-  - name: balance_alerts
-    interval: 60s
-    rules:
-      - alert: BalanceLow
-        expr: balance_alert_ratio < 0.2
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "余额不足告警"
-          description: "{{ $labels.project }} 余额比例低于20%"
-
-      - alert: SubscriptionExpiring
-        expr: balance_alert_subscription_days <= 3
-        for: 1h
-        labels:
-          severity: warning
-        annotations:
-          summary: "订阅即将到期"
-          description: "{{ $labels.name }} 将在 {{ $value }} 天后到期"
-```
-
-然后在 `prometheus.yml` 中引用：
-
-```yaml
-rule_files:
-  - "alert_rules.yml"
-```
-
-### 🔧 故障排查
-
-#### Metrics 端点无法访问
-
-```bash
-# 检查服务是否运行
-curl http://localhost:8080/metrics
-
-# 检查 prometheus-client 是否安装
-pip list | grep prometheus-client
-```
-
-#### Prometheus 无法抓取数据
-
-1. 检查 Prometheus targets: http://localhost:9090/targets
-2. 确认服务地址配置正确
-3. 检查网络连接（Docker 网络或防火墙）
-
-#### Grafana 无法显示数据
-
-1. 验证数据源连接：Configuration > Data Sources > Test
-2. 检查 Prometheus 是否有数据：http://localhost:9090/graph
-3. 确认查询语句正确
-4. 检查数据源 UID 是否匹配
-
-### 📊 性能优化
-
-1. **调整采集间隔**
-   - 编辑 `prometheus.yml` 中的 `scrape_interval`
-   - 推荐 60s-300s
-
-2. **数据保留时间**
-   - 默认保留 30 天
-   - 修改 Prometheus 启动参数：`--storage.tsdb.retention.time=30d`
-
-3. **Grafana 刷新频率**
-   - Dashboard 右上角设置自动刷新间隔
-   - 推荐 1m-5m
-
-### 🔗 相关链接
-
-- [Prometheus 文档](https://prometheus.io/docs/)
-- [Grafana 文档](https://grafana.com/docs/)
-- [PromQL 查询语法](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+包含内容：
+- ✅ 12个监控指标详细说明
+- ✅ 内置和外部 Prometheus 配置方法
+- ✅ Grafana Dashboard 导入指南
+- ✅ 数据刷新机制详解
+- ✅ PromQL 查询示例
+- ✅ 告警规则配置
+- ✅ 故障排查指南
 
 ---
 
