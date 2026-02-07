@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
+from prometheus_exporter import metrics_endpoint, metrics_collector
 import threading
 import time
 
@@ -68,8 +69,21 @@ def update_credits():
                 }
             }
             
+            # 更新 Prometheus 指标
+            metrics_collector.update_balance_metrics(monitor.results)
+            metrics_collector.update_subscription_metrics(subscription_checker.results)
+            
+            # 保存缓存以便 Prometheus Exporter 使用
+            cache_data = {
+                'projects': monitor.results,
+                'subscriptions': subscription_checker.results
+            }
+            with open('/tmp/balance_cache.json', 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, ensure_ascii=False)
+            
         except Exception as e:
             print(f"更新数据失败: {e}")
+            metrics_collector.set_check_failed('balance')
         
         # 每 60 分钟更新一次
         time.sleep(60 * 60)
@@ -78,6 +92,13 @@ def update_credits():
 def index():
     """主页"""
     return render_template('index.html')
+
+@app.route('/metrics')
+def metrics():
+    """
+Prometheus metrics 端点
+    """
+    return metrics_endpoint()
 
 @app.route('/api/credits')
 def get_credits():
@@ -116,6 +137,10 @@ def refresh_credits():
                 'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
             }
         }
+        
+        # 更新 Prometheus 指标
+        metrics_collector.update_balance_metrics(monitor.results)
+        metrics_collector.update_subscription_metrics(subscription_checker.results)
         
         return jsonify({'status': 'success', 'data': latest_results})
     except Exception as e:
