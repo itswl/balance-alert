@@ -799,7 +799,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 # 访问
 # - Grafana: http://localhost:3000 （admin/admin123）
 # - Prometheus: http://localhost:9090
-# - Metrics: http://localhost:8080/metrics
+# - Metrics: http://localhost:9100/metrics
 ```
 
 ### 更多配置

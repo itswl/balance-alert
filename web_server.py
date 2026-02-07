@@ -93,13 +93,6 @@ def index():
     """主页"""
     return render_template('index.html')
 
-@app.route('/metrics')
-def metrics():
-    """
-Prometheus metrics 端点
-    """
-    return metrics_endpoint()
-
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
@@ -745,8 +738,14 @@ if __name__ == '__main__':
     update_thread = threading.Thread(target=update_credits, daemon=True)
     update_thread.start()
     
+    # 启动独立的 Prometheus Metrics 服务器（9100 端口）
+    from prometheus_client import start_http_server
+    print("📊 启动 Prometheus Metrics 服务器...")
+    print("🔗 Metrics 端点: http://localhost:9100/metrics")
+    start_http_server(9100)
+    
     # 启动 Flask 服务器
-    print("🚀 余额监控 Web 服务器启动中...")
+    print("\n🚀 余额监控 Web 服务器启动中...")
     print("📊 访问地址: http://localhost:8080")
     if ENABLE_WEB_ALARM:
         print("⚠️  告警模式: 已启用（Web 会发送真实告警）")

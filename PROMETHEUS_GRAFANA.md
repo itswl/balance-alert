@@ -42,7 +42,7 @@ docker-compose -f docker-compose.monitoring.yml down
 - **Grafana**: http://localhost:3000 （默认账号：admin/admin123）
 - **Prometheus**: http://localhost:9090
 - **监控服务**: http://localhost:8080
-- **Metrics端点**: http://localhost:8080/metrics
+- **Metrics端点**: http://localhost:9100/metrics
 
 ### 方式二：独立部署
 
@@ -126,7 +126,7 @@ docker-compose up -d
 python3 web_server.py
 ```
 
-Metrics 端点: `http://localhost:8080/metrics`
+Metrics 端点: `http://localhost:9100/metrics`
 
 #### 2. 配置外部 Prometheus
 
@@ -140,7 +140,7 @@ scrape_configs:
   - job_name: 'balance-alert'
     scrape_interval: 60s  # 采集间隔
     static_configs:
-      - targets: ['<YOUR_HOST>:8080']  # 替换为实际地址
+      - targets: ['<YOUR_HOST>:9100']  # 替换为实际地址，使用 9100 端口
         labels:
           service: 'balance-alert'
           environment: 'production'  # 可自定义
@@ -150,21 +150,21 @@ scrape_configs:
 
 **场景 1: Prometheus 和 Web 服务在同一台机器**
 ```yaml
-- targets: ['localhost:8080']
+- targets: ['localhost:9100']
 ```
 
 **场景 2: Web 服务在其他服务器**
 ```yaml
-- targets: ['192.168.1.100:8080']  # 替换为实际 IP
+- targets: ['192.168.1.100:9100']  # 替换为实际 IP
 ```
 
 **场景 3: Web 服务在 Docker 容器中（Prometheus 在宿主机）**
 ```yaml
 # Docker Desktop (Mac/Windows)
-- targets: ['host.docker.internal:8080']
+- targets: ['host.docker.internal:9100']
 
 # Linux Docker
-- targets: ['172.17.0.1:8080']  # Docker 默认网关
+- targets: ['172.17.0.1:9100']  # Docker 默认网关
 ```
 
 **场景 4: Kubernetes 环境**
@@ -190,7 +190,7 @@ scrape_configs:
 
 **检查 Metrics 端点**
 ```bash
-curl http://localhost:8080/metrics | grep balance_alert
+curl http://localhost:9100/metrics | grep balance_alert
 ```
 
 **检查 Prometheus Targets**
@@ -268,13 +268,13 @@ cat /tmp/dashboard.json | jq '{dashboard: ., overwrite: true}' | \
 
 ```bash
 # 从 Prometheus 容器内测试
-docker exec -it <prometheus-container> wget -O- http://web:8080/metrics
+docker exec -it <prometheus-container> wget -O- http://web:9100/metrics
 
 # 从 Prometheus 宿主机测试
-curl http://localhost:8080/metrics
+curl http://localhost:9100/metrics
 
 # 测试端口连通性
-telnet <web-host> 8080
+telnet <web-host> 9100
 ```
 
 #### 7. 安全配置（可选）
@@ -284,7 +284,7 @@ telnet <web-host> 8080
 ```nginx
 # /etc/nginx/sites-available/balance-alert-metrics
 location /metrics {
-    proxy_pass http://localhost:8080/metrics;
+    proxy_pass http://localhost:9100/metrics;
     
     # 添加基础认证
     auth_basic "Restricted";
@@ -305,7 +305,7 @@ scrape_configs:
       username: 'prometheus'
       password: 'your-password'
     static_configs:
-      - targets: ['localhost:8080']
+      - targets: ['localhost:9100']
 ```
 
 ## 📈 Grafana Dashboard 说明
@@ -402,7 +402,7 @@ rule_files:
 
 ```bash
 # 检查服务是否运行
-curl http://localhost:8080/metrics
+curl http://localhost:9100/metrics
 
 # 检查 prometheus-client 是否安装
 pip list | grep prometheus-client
