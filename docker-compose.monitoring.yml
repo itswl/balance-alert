@@ -6,7 +6,8 @@ services:
     build: .
     container_name: balance-alert-web
     ports:
-      - "8080:8080"
+      - "8080:8080"  # Web 界面
+      - "9100:9100"  # Prometheus Metrics
     volumes:
       - ./config.json:/app/config.json
       - ./logs:/app/logs

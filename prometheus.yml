@@ -8,10 +8,10 @@ scrape_configs:
   # 余额监控服务
   - job_name: 'balance-alert'
     static_configs:
-      - targets: ['web:8080']  # Docker 网络中的服务名
+      - targets: ['web:9100']  # Docker 网络中的服务名，9100 端口
         labels:
           service: 'balance-alert'
           environment: 'production'
     
     # 如果使用本地部署，使用以下配置
-    # - targets: ['localhost:8080']
+    # - targets: ['localhost:9100']
