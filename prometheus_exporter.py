@@ -196,16 +196,25 @@ class MetricsCollector:
         更新邮箱扫描指标
         
         Args:
-            results: 邮箱扫描结果
+            results: 邮箱扫描结果列表
         """
-        # 假设 results 是一个字典，包含每个邮箱的统计
-        for mailbox_name, stats in results.items():
-            total_emails = stats.get('total_emails', 0)
-            alert_emails = stats.get('alert_emails', 0)
-            
-            # 注意：Counter 只能增加，所以这里使用 inc 方法
-            # 如果需要设置绝对值，可能需要使用 Gauge
-            pass
+        # 按邮箱统计
+        mailbox_stats = {}
+        for result in results:
+            mailbox = result.get('mailbox', 'unknown')
+            if mailbox not in mailbox_stats:
+                mailbox_stats[mailbox] = {
+                    'total_scanned': 0,
+                    'alerts': 0
+                }
+            mailbox_stats[mailbox]['total_scanned'] += 1
+            if result.get('alert_sent', False):
+                mailbox_stats[mailbox]['alerts'] += 1
+        
+        # 更新指标
+        for mailbox, stats in mailbox_stats.items():
+            self.email_scan_total_counter.labels(mailbox=mailbox).inc(stats['total_scanned'])
+            self.email_alert_counter.labels(mailbox=mailbox).inc(stats['alerts'])
         
         # 更新检查时间
         self.last_check_timestamp.labels(check_type='email').set(time.time())

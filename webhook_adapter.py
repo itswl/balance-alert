@@ -11,6 +11,24 @@ from datetime import datetime
 # 从环境变量读取超时时间，默认 10 秒
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
 
+# 创建全局 Session 连接池
+_session = None
+
+def get_session():
+    """获取或创建全局 Session"""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        # 配置连接池
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=100,
+            max_retries=3
+        )
+        _session.mount('http://', adapter)
+        _session.mount('https://', adapter)
+    return _session
+
 
 class WebhookAdapter:
     """Webhook 发送适配器"""
@@ -298,7 +316,8 @@ class WebhookAdapter:
             import time
             start_time = time.time()
             
-            response = requests.post(
+            session = get_session()
+            response = session.post(
                 self.webhook_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
@@ -400,7 +419,8 @@ class WebhookAdapter:
             }
         }
         
-        response = requests.post(
+        session = get_session()
+        response = session.post(
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
@@ -424,7 +444,8 @@ class WebhookAdapter:
             }
         }
         
-        response = requests.post(
+        session = get_session()
+        response = session.post(
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
@@ -447,7 +468,8 @@ class WebhookAdapter:
             }
         }
         
-        response = requests.post(
+        session = get_session()
+        response = session.post(
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
@@ -470,7 +492,8 @@ class WebhookAdapter:
             "timestamp": datetime.now().isoformat()
         }
         
-        response = requests.post(
+        session = get_session()
+        response = session.post(
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
