@@ -35,6 +35,17 @@ latest_subscriptions = {
     'summary': {}
 }
 
+def get_refresh_interval():
+    """从配置文件读取刷新间隔，默认60分钟"""
+    try:
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        interval = config.get('settings', {}).get('balance_refresh_interval_minutes', 60)
+        return max(1, interval) * 60  # 转换为秒，最小1分钟
+    except Exception as e:
+        print(f"读取刷新间隔配置失败，使用默认值60分钟: {e}")
+        return 60 * 60
+
 def update_credits():
     """后台定时更新余额数据"""
     global latest_results, latest_subscriptions
@@ -85,8 +96,11 @@ def update_credits():
             print(f"更新数据失败: {e}")
             metrics_collector.set_check_failed('balance')
         
-        # 每 60 分钟更新一次
-        time.sleep(60 * 60)
+        # 根据配置间隔等待
+        sleep_seconds = get_refresh_interval()
+        sleep_minutes = sleep_seconds // 60
+        print(f"下次更新将在 {sleep_minutes} 分钟后")
+        time.sleep(sleep_seconds)
 
 @app.route('/')
 def index():
