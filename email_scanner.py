@@ -92,7 +92,8 @@ class EmailScanner:
                 else:
                     result.append(str(content))
             return ''.join(result)
-        except:
+        except (UnicodeDecodeError, LookupError) as e:
+            # 解码失败，返回原始字符串
             return str(s)
     
     def _extract_text_from_email(self, msg):
@@ -115,7 +116,8 @@ class EmailScanner:
                         if payload:
                             charset = part.get_content_charset() or 'utf-8'
                             text_content.append(payload.decode(charset, errors='ignore'))
-                    except:
+                    except (UnicodeDecodeError, LookupError, AttributeError) as e:
+                        # 解码失败，跳过此部分
                         pass
                 elif content_type == "text/html":
                     try:
@@ -126,7 +128,8 @@ class EmailScanner:
                             # 简单去除 HTML 标签
                             clean_text = re.sub(r'<[^>]+>', ' ', html_text)
                             text_content.append(clean_text)
-                    except:
+                    except (UnicodeDecodeError, LookupError, AttributeError) as e:
+                        # 解码失败，跳过此部分
                         pass
         else:
             try:
@@ -134,7 +137,8 @@ class EmailScanner:
                 if payload:
                     charset = msg.get_content_charset() or 'utf-8'
                     text_content.append(payload.decode(charset, errors='ignore'))
-            except:
+            except (UnicodeDecodeError, LookupError, AttributeError) as e:
+                # 解码失败，跳过
                 pass
         
         return '\n'.join(text_content)
@@ -187,7 +191,8 @@ class EmailScanner:
                     amount_str = matches.group(1).replace(',', '')
                     amount = float(amount_str)
                     break
-                except:
+                except (ValueError, IndexError) as e:
+                    # 金额解析失败，继续尝试其他模式
                     pass
         
         return service_name, amount

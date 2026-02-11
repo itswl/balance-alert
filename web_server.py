@@ -114,6 +114,23 @@ def index():
     """主页"""
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    """健康检查端点"""
+    with results_lock:
+        has_data = latest_results.get('last_update') is not None
+    
+    status = {
+        'status': 'ok' if has_data else 'initializing',
+        'timestamp': time.time(),
+        'has_data': has_data,
+        'web_alarm_enabled': ENABLE_WEB_ALARM
+    }
+    
+    # 如果有数据，返回 200；否则返回 503（服务暂不可用）
+    code = 200 if has_data else 503
+    return jsonify(status), code
+
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
@@ -697,8 +714,8 @@ def update_threshold():
         try:
             new_threshold = float(new_threshold)
             if new_threshold < 0:
-                raise ValueError()
-        except:
+                raise ValueError("阈值不能为负数")
+        except (ValueError, TypeError) as e:
             return jsonify({
                 'status': 'error',
                 'message': '阈值必须为非负数'
@@ -760,23 +777,27 @@ def update_threshold():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
+    # 从环境变量读取端口配置
+    web_port = int(os.environ.get('WEB_PORT', '8080'))
+    metrics_port = int(os.environ.get('METRICS_PORT', '9100'))
+    
     # 启动后台更新线程
     update_thread = threading.Thread(target=update_credits, daemon=True)
     update_thread.start()
     
-    # 启动独立的 Prometheus Metrics 服务器（9100 端口）
+    # 启动独立的 Prometheus Metrics 服务器
     from prometheus_client import start_http_server
-    print("📊 启动 Prometheus Metrics 服务器...")
-    print("🔗 Metrics 端点: http://localhost:9100/metrics")
-    start_http_server(9100)
+    print(f"📊 启动 Prometheus Metrics 服务器...")
+    print(f"🔗 Metrics 端点: http://localhost:{metrics_port}/metrics")
+    start_http_server(metrics_port)
     
     # 启动 Flask 服务器
-    print("\n🚀 余额监控 Web 服务器启动中...")
-    print("📊 访问地址: http://localhost:8080")
+    print(f"\n🚀 余额监控 Web 服务器启动中...")
+    print(f"📊 访问地址: http://localhost:{web_port}")
     if ENABLE_WEB_ALARM:
         print("⚠️  告警模式: 已启用（Web 会发送真实告警）")
     else:
         print("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
     print("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
     print()
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    app.run(host='0.0.0.0', port=web_port, debug=False)
