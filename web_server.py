@@ -36,15 +36,15 @@ latest_subscriptions = {
 }
 
 def get_refresh_interval():
-    """从配置文件读取刷新间隔，默认60分钟"""
+    """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
     try:
         with open('config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
-        interval = config.get('settings', {}).get('balance_refresh_interval_minutes', 60)
-        return max(1, interval) * 60  # 转换为秒，最小1分钟
+        interval = config.get('settings', {}).get('balance_refresh_interval_seconds', 3600)
+        return max(60, interval)  # 最小60秒（1分钟）
     except Exception as e:
-        print(f"读取刷新间隔配置失败，使用默认值60分钟: {e}")
-        return 60 * 60
+        print(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
+        return 3600
 
 def update_credits():
     """后台定时更新余额数据"""
@@ -98,8 +98,7 @@ def update_credits():
         
         # 根据配置间隔等待
         sleep_seconds = get_refresh_interval()
-        sleep_minutes = sleep_seconds // 60
-        print(f"下次更新将在 {sleep_minutes} 分钟后")
+        print(f"下次更新将在 {sleep_seconds} 秒后")
         time.sleep(sleep_seconds)
 
 @app.route('/')
