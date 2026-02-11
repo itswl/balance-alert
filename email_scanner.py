@@ -10,6 +10,10 @@ from datetime import datetime, timedelta
 import json
 from webhook_adapter import WebhookAdapter
 from prometheus_exporter import metrics_collector
+from logger import get_logger
+
+# 创建 logger
+logger = get_logger('email_scanner')
 
 
 class EmailScanner:
@@ -369,12 +373,10 @@ class EmailScanner:
             return total_emails, alert_count
             
         except imaplib.IMAP4.error as e:
-            print(f"❌ 邮箱连接错误: {e}")
+            logger.error(f"❌ 邮箱连接错误: {e}")
             return 0, 0
         except Exception as e:
-            print(f"❌ 扫描失败: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ 扫描失败: {e}", exc_info=True)
             return 0, 0
         finally:
             # 确保连接关闭
