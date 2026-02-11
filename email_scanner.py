@@ -9,6 +9,7 @@ import re
 from datetime import datetime, timedelta
 import json
 from webhook_adapter import WebhookAdapter
+from prometheus_exporter import metrics_collector
 
 
 class EmailScanner:
@@ -256,6 +257,7 @@ class EmailScanner:
         print(f"   服务器: {host}:{port}")
         print(f"   用户名: {username}")
         
+        mail = None
         try:
             # 连接邮箱
             if use_ssl:
@@ -277,7 +279,6 @@ class EmailScanner:
             
             if status != 'OK':
                 print("❌ 搜索邮件失败")
-                mail.logout()
                 return 0, 0
             
             email_ids = messages[0].split()
@@ -287,12 +288,14 @@ class EmailScanner:
             
             if total_emails == 0:
                 print("ℹ️  没有需要检查的邮件")
-                mail.logout()
                 return 0, 0
             
-            # 处理每封邮件
+            # 分批处理邮件，每批最多100封
+            batch_size = 100
             alert_count = 0
-            for email_id in email_ids:
+            processed_count = 0
+            
+            for i, email_id in enumerate(email_ids):
                 status, msg_data = mail.fetch(email_id, '(RFC822)')
                 
                 if status != 'OK':
@@ -350,12 +353,18 @@ class EmailScanner:
                         print("🔍 [测试模式] 跳过发送告警")
                     
                     self.results.append(result)
-            
-            # 关闭连接
-            mail.logout()
+                
+                processed_count += 1
+                
+                # 每处理100封邮件，打印进度
+                if processed_count % batch_size == 0:
+                    print(f"   进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
             
             # 打印单个邮箱汇总
             self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
+            
+            # 更新 Prometheus 指标
+            metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
             
             return total_emails, alert_count
             
@@ -367,6 +376,14 @@ class EmailScanner:
             import traceback
             traceback.print_exc()
             return 0, 0
+        finally:
+            # 确保连接关闭
+            if mail:
+                try:
+                    mail.logout()
+                    print(f"   已断开邮箱连接")
+                except Exception:
+                    pass
     
     def _send_alert(self, email_info):
         """发送告警通知"""
