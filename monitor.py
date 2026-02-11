@@ -12,6 +12,10 @@ from providers import get_provider
 from subscription_checker import SubscriptionChecker
 from email_scanner import EmailScanner
 from webhook_adapter import WebhookAdapter
+from logger import get_logger
+
+# 创建 logger
+logger = get_logger('monitor')
 
 
 class CreditMonitor:
@@ -199,7 +203,7 @@ class CreditMonitor:
                     result = future.result()
                     self.results.append(result)
                 except Exception as e:
-                    print(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}")
+                    logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
                     self.results.append({
                         'project': project.get('name', 'Unknown'),
                         'success': False,

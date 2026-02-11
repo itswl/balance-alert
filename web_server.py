@@ -11,8 +11,12 @@ from pathlib import Path
 from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
+from logger import get_logger
 import threading
 import time
+
+# 创建 logger
+logger = get_logger('web_server')
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -120,12 +124,12 @@ def update_credits():
             save_cache_file(monitor.results, subscription_checker.results)
             
         except Exception as e:
-            print(f"更新数据失败: {e}")
+            logger.error(f"更新数据失败: {e}", exc_info=True)
             metrics_collector.set_check_failed('balance')
         
         # 根据配置间隔等待
         sleep_seconds = get_refresh_interval()
-        print(f"下次更新将在 {sleep_seconds} 秒后")
+        logger.info(f"下次更新将在 {sleep_seconds} 秒后")
         time.sleep(sleep_seconds)
 
 @app.route('/')
@@ -792,17 +796,17 @@ if __name__ == '__main__':
     
     # 启动独立的 Prometheus Metrics 服务器
     from prometheus_client import start_http_server
-    print(f"📊 启动 Prometheus Metrics 服务器...")
-    print(f"🔗 Metrics 端点: http://localhost:{metrics_port}/metrics")
+    logger.info(f"📊 启动 Prometheus Metrics 服务器...")
+    logger.info(f"🔗 Metrics 端点: http://localhost:{metrics_port}/metrics")
     start_http_server(metrics_port)
     
     # 启动 Flask 服务器
-    print(f"\n🚀 余额监控 Web 服务器启动中...")
-    print(f"📊 访问地址: http://localhost:{web_port}")
+    logger.info(f"\n🚀 余额监控 Web 服务器启动中...")
+    logger.info(f"📊 访问地址: http://localhost:{web_port}")
     if ENABLE_WEB_ALARM:
-        print("⚠️  告警模式: 已启用（Web 会发送真实告警）")
+        logger.warning("⚠️  告警模式: 已启用（Web 会发送真实告警）")
     else:
-        print("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
-    print("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
-    print()
+        logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
+    logger.info("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
+    logger.info("")
     app.run(host='0.0.0.0', port=web_port, debug=False)
