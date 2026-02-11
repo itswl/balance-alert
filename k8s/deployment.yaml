@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance-alert
+  namespace: balance-alert
+  labels:
+    app: balance-alert
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: balance-alert
+  template:
+    metadata:
+      labels:
+        app: balance-alert
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: balance-alert
+          image: balance-alert:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: web
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+            - name: ENABLE_WEB_ALARM
+              value: "false"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        # 方式1: 使用 ConfigMap
+        - name: config
+          configMap:
+            name: balance-alert-config
+        # 方式2: 使用本地配置文件（开发测试）
+        # - name: config
+        #   hostPath:
+        #     path: /path/to/config.json
+        #     type: File
+        - name: logs
+          emptyDir: {}

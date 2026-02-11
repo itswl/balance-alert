@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: balance-alert-config
+  namespace: balance-alert
+data:
+  # 方式1: 直接在这里写入配置
+  # 方式2: 使用 kubectl create configmap 从文件创建
+  # kubectl create configmap balance-alert-config \
+  #   --from-file=config.json=config.json \
+  #   -n balance-alert --dry-run=client -o yaml
+  config.json: |
+    {
+      "settings": {
+        "balance_refresh_interval_seconds": 3600
+      },
+      "webhook": {
+        "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",
+        "source": "credit-monitor",
+        "type": "feishu"
+      },
+      "email": [],
+      "subscriptions": [],
+      "projects": []
+    }
