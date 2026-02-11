@@ -1,6 +1,6 @@
 {
   "settings": {
-    "balance_refresh_interval_minutes": 60
+    "balance_refresh_interval_seconds": 3600
   },
   "webhook": {
     "url": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx",

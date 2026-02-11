@@ -424,27 +424,27 @@ pip list | grep prometheus-client
 
 ### 1. 余额采集频率
 
-**默认配置**: 每 **60 分钟**自动更新一次
+**默认配置**: 每 **3600 秒**（60 分钟）自动更新一次
 
 在 `config.json` 中配置：
 ```json
 {
   "settings": {
-    "balance_refresh_interval_minutes": 60
+    "balance_refresh_interval_seconds": 3600
   }
 }
 ```
 
 **配置说明**：
-- 单位：分钟
-- 最小值：1 分钟（程序会自动限制）
-- 默认值：60 分钟
+- 单位：秒
+- 最小值：60 秒（1 分钟）
+- 默认值：3600 秒（60 分钟）
 - 修改配置后需重启服务生效
 
-**加速方案**：
-- 生产环境建议：5-10 分钟
-- 开发环境建议：1-5 分钟
-- 例如设置为 5 分钟：`"balance_refresh_interval_minutes": 5`
+**常用配置**：
+- 5 分钟：`"balance_refresh_interval_seconds": 300`
+- 10 分钟：`"balance_refresh_interval_seconds": 600`
+- 1 小时：`"balance_refresh_interval_seconds": 3600`
 
 ### 2. Prometheus 采集间隔
 
