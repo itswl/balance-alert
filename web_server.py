@@ -49,56 +49,75 @@ def get_refresh_interval():
         print(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
         return 3600
 
+
+def update_balance_cache(results):
+    """更新余额缓存（线程安全）"""
+    global latest_results
+    with results_lock:
+        latest_results = {
+            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'projects': results,
+            'summary': {
+                'total': len(results),
+                'success': sum(1 for r in results if r['success']),
+                'failed': sum(1 for r in results if not r['success']),
+                'need_alarm': sum(1 for r in results if r.get('need_alarm', False)),
+            }
+        }
+
+
+def update_subscription_cache(results):
+    """更新订阅缓存（线程安全）"""
+    global latest_subscriptions
+    with results_lock:
+        latest_subscriptions = {
+            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'subscriptions': results,
+            'summary': {
+                'total': len(results),
+                'need_alert': sum(1 for r in results if r.get('need_alert', False)),
+            }
+        }
+
+
+def save_cache_file(balance_results, subscription_results):
+    """保存缓存到文件"""
+    cache_data = {
+        'projects': balance_results,
+        'subscriptions': subscription_results
+    }
+    cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
+    try:
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存缓存文件失败: {e}")
+
+
 def update_credits():
     """后台定时更新余额数据"""
-    global latest_results, latest_subscriptions
-    
     while True:
         try:
             # 更新余额/积分数据
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not ENABLE_WEB_ALARM)
             
-            # 使用线程锁保护共享状态
-            with results_lock:
-                latest_results = {
-                    'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'projects': monitor.results,
-                    'summary': {
-                        'total': len(monitor.results),
-                        'success': sum(1 for r in monitor.results if r['success']),
-                        'failed': sum(1 for r in monitor.results if not r['success']),
-                        'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
-                    }
-                }
+            # 更新缓存
+            update_balance_cache(monitor.results)
             
             # 更新订阅数据
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            # 使用线程锁保护共享状态
-            with results_lock:
-                latest_subscriptions = {
-                    'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'subscriptions': subscription_checker.results,
-                    'summary': {
-                        'total': len(subscription_checker.results),
-                        'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                    }
-                }
+            # 更新缓存
+            update_subscription_cache(subscription_checker.results)
             
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
             metrics_collector.update_subscription_metrics(subscription_checker.results)
             
-            # 保存缓存以便 Prometheus Exporter 使用
-            cache_data = {
-                'projects': monitor.results,
-                'subscriptions': subscription_checker.results
-            }
-            cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(cache_data, f, ensure_ascii=False)
+            # 保存缓存到文件
+            save_cache_file(monitor.results, subscription_checker.results)
             
         except Exception as e:
             print(f"更新数据失败: {e}")
@@ -145,36 +164,22 @@ def refresh_credits():
         monitor = CreditMonitor('config.json')
         monitor.run(dry_run=not ENABLE_WEB_ALARM)
         
-        global latest_results, latest_subscriptions
-        with results_lock:
-            latest_results = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'projects': monitor.results,
-                'summary': {
-                    'total': len(monitor.results),
-                    'success': sum(1 for r in monitor.results if r['success']),
-                    'failed': sum(1 for r in monitor.results if not r['success']),
-                    'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
-                }
-            }
+        # 使用公共方法更新缓存
+        update_balance_cache(monitor.results)
         
         # 刷新订阅
         subscription_checker = SubscriptionChecker('config.json')
         subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
         
-        with results_lock:
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+        # 使用公共方法更新缓存
+        update_subscription_cache(subscription_checker.results)
         
         # 更新 Prometheus 指标
         metrics_collector.update_balance_metrics(monitor.results)
         metrics_collector.update_subscription_metrics(subscription_checker.results)
+        
+        # 保存缓存到文件
+        save_cache_file(monitor.results, subscription_checker.results)
         
         with results_lock:
             return jsonify({'status': 'success', 'data': latest_results})
