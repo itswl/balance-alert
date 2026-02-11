@@ -1,0 +1,23 @@
+# ServiceMonitor 配置（可选）
+# 需要集群已安装 prometheus-operator 才有效
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: balance-alert
+  namespace: balance-alert
+  labels:
+    app: balance-alert
+    # 根据你的 Prometheus 配置修改选择器标签
+    # release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: balance-alert
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - balance-alert

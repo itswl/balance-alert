@@ -1,0 +1,41 @@
+# Prometheus 配置文件 ConfigMap（可选）
+# 如使用外部 Prometheus，可参考此配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: balance-alert
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 60s
+      evaluation_interval: 60s
+      scrape_timeout: 10s
+
+    scrape_configs:
+      # 方式一：Kubernetes 服务发现
+      - job_name: 'balance-alert-k8s'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - balance-alert
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: balance-alert
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+
+      # 方式二：静态配置
+      - job_name: 'balance-alert-static'
+        static_configs:
+          - targets: ['balance-alert.balance-alert.svc.cluster.local:9100']
+            labels:
+              service: 'balance-alert'
