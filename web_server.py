@@ -35,6 +35,9 @@ latest_subscriptions = {
     'summary': {}
 }
 
+# 线程锁保护共享状态
+results_lock = threading.Lock()
+
 def get_refresh_interval():
     """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
     try:
@@ -56,29 +59,33 @@ def update_credits():
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not ENABLE_WEB_ALARM)
             
-            latest_results = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'projects': monitor.results,
-                'summary': {
-                    'total': len(monitor.results),
-                    'success': sum(1 for r in monitor.results if r['success']),
-                    'failed': sum(1 for r in monitor.results if not r['success']),
-                    'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
+            # 使用线程锁保护共享状态
+            with results_lock:
+                latest_results = {
+                    'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'projects': monitor.results,
+                    'summary': {
+                        'total': len(monitor.results),
+                        'success': sum(1 for r in monitor.results if r['success']),
+                        'failed': sum(1 for r in monitor.results if not r['success']),
+                        'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
+                    }
                 }
-            }
             
             # 更新订阅数据
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+            # 使用线程锁保护共享状态
+            with results_lock:
+                latest_subscriptions = {
+                    'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'subscriptions': subscription_checker.results,
+                    'summary': {
+                        'total': len(subscription_checker.results),
+                        'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                    }
                 }
-            }
             
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
@@ -89,7 +96,8 @@ def update_credits():
                 'projects': monitor.results,
                 'subscriptions': subscription_checker.results
             }
-            with open('/tmp/balance_cache.json', 'w', encoding='utf-8') as f:
+            cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
+            with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, ensure_ascii=False)
             
         except Exception as e:
@@ -109,7 +117,8 @@ def index():
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
-    return jsonify(latest_results)
+    with results_lock:
+        return jsonify(latest_results)
 
 @app.route('/api/refresh')
 def refresh_credits():
@@ -120,35 +129,38 @@ def refresh_credits():
         monitor.run(dry_run=not ENABLE_WEB_ALARM)
         
         global latest_results, latest_subscriptions
-        latest_results = {
-            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'projects': monitor.results,
-            'summary': {
-                'total': len(monitor.results),
-                'success': sum(1 for r in monitor.results if r['success']),
-                'failed': sum(1 for r in monitor.results if not r['success']),
-                'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
+        with results_lock:
+            latest_results = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'projects': monitor.results,
+                'summary': {
+                    'total': len(monitor.results),
+                    'success': sum(1 for r in monitor.results if r['success']),
+                    'failed': sum(1 for r in monitor.results if not r['success']),
+                    'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
+                }
             }
-        }
         
         # 刷新订阅
         subscription_checker = SubscriptionChecker('config.json')
         subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
         
-        latest_subscriptions = {
-            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'subscriptions': subscription_checker.results,
-            'summary': {
-                'total': len(subscription_checker.results),
-                'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+        with results_lock:
+            latest_subscriptions = {
+                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'subscriptions': subscription_checker.results,
+                'summary': {
+                    'total': len(subscription_checker.results),
+                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
+                }
             }
-        }
         
         # 更新 Prometheus 指标
         metrics_collector.update_balance_metrics(monitor.results)
         metrics_collector.update_subscription_metrics(subscription_checker.results)
         
-        return jsonify({'status': 'success', 'data': latest_results})
+        with results_lock:
+            return jsonify({'status': 'success', 'data': latest_results})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -177,7 +189,8 @@ def get_projects_config():
 @app.route('/api/subscriptions')
 def get_subscriptions():
     """获取订阅数据"""
-    return jsonify(latest_subscriptions)
+    with results_lock:
+        return jsonify(latest_subscriptions)
 
 @app.route('/api/config/subscriptions', methods=['GET'])
 def get_subscriptions_config():
