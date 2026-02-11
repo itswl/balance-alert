@@ -4,7 +4,12 @@ Webhook 适配器
 支持多种 webhook 类型：飞书、自定义等
 """
 import json
+import os
 import requests
+from datetime import datetime
+
+# 从环境变量读取超时时间，默认 10 秒
+REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
 
 
 class WebhookAdapter:
@@ -297,7 +302,7 @@ class WebhookAdapter:
                 self.webhook_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=10
+                timeout=REQUEST_TIMEOUT
             )
             
             elapsed_time = time.time() - start_time
@@ -314,7 +319,8 @@ class WebhookAdapter:
             try:
                 response_json = response.json()
                 print(json.dumps(response_json, ensure_ascii=False, indent=2))
-            except:
+            except (ValueError, json.JSONDecodeError) as e:
+                # 响应不是 JSON 格式，显示文本内容
                 response_text = response.text[:500]  # 只显示前500字符
                 print(f"      {response_text}")
                 if len(response.text) > 500:
@@ -398,7 +404,7 @@ class WebhookAdapter:
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
-            timeout=10
+            timeout=REQUEST_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -422,7 +428,7 @@ class WebhookAdapter:
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
-            timeout=10
+            timeout=REQUEST_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -445,7 +451,7 @@ class WebhookAdapter:
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
-            timeout=10
+            timeout=REQUEST_TIMEOUT
         )
         
         if response.status_code == 200:
@@ -468,7 +474,7 @@ class WebhookAdapter:
             self.webhook_url,
             json=data,
             headers={'Content-Type': 'application/json'},
-            timeout=10
+            timeout=REQUEST_TIMEOUT
         )
         
         if response.status_code == 200:
