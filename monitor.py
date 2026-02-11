@@ -6,6 +6,7 @@
 import json
 import sys
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
 from subscription_checker import SubscriptionChecker
@@ -182,10 +183,29 @@ class CreditMonitor:
         if dry_run:
             print("🔍 [测试模式] 不会发送实际告警\n")
         
-        # 检查每个项目
-        for project in projects:
-            result = self.check_project(project, dry_run)
-            self.results.append(result)
+        # 使用线程池并发检查项目（最多5个并发）
+        max_workers = min(5, len(projects))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_project = {
+                executor.submit(self.check_project, project, dry_run): project 
+                for project in projects
+            }
+            
+            # 收集结果
+            for future in as_completed(future_to_project):
+                project = future_to_project[future]
+                try:
+                    result = future.result()
+                    self.results.append(result)
+                except Exception as e:
+                    print(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}")
+                    self.results.append({
+                        'project': project.get('name', 'Unknown'),
+                        'success': False,
+                        'error': str(e),
+                        'alarm_sent': False
+                    })
         
         # 输出汇总
         self._print_summary()
