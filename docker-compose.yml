@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"  # Web 服务端口
+      - "9100:9100"  # Prometheus Metrics 端口
     volumes:
       # 挂载配置文件（可以在宿主机修改配置）
       - ./config.json:/app/config.json
