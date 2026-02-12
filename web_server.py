@@ -143,8 +143,17 @@ def refresh_credits():
         # 保存缓存到文件
         save_cache_file(monitor.results, subscription_checker.results)
         
-        with results_lock:
-            return jsonify({'status': 'success', 'data': latest_results})
+        # 返回最新的状态数据
+        balance_state = state_manager.get_balance_state()
+        subscription_state = state_manager.get_subscription_state()
+        
+        return jsonify({
+            'status': 'success', 
+            'data': {
+                'balance': balance_state,
+                'subscription': subscription_state
+            }
+        })
     except (RuntimeError, ValueError, KeyError) as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
