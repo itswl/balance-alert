@@ -12,6 +12,7 @@ from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
+from config_loader import load_config_with_env_vars
 import threading
 import time
 
@@ -45,12 +46,11 @@ results_lock = threading.Lock()
 def get_refresh_interval():
     """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
     try:
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_with_env_vars('config.json')
         interval = config.get('settings', {}).get('balance_refresh_interval_seconds', 3600)
         return max(60, interval)  # 最小60秒（1分钟）
     except Exception as e:
-        print(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
+        logger.warning(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
         return 3600
 
 
@@ -95,7 +95,7 @@ def save_cache_file(balance_results, subscription_results):
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False)
     except Exception as e:
-        print(f"保存缓存文件失败: {e}")
+        logger.error(f"保存缓存文件失败: {e}")
 
 
 def update_credits():
