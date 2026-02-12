@@ -22,6 +22,7 @@ class BaseProvider(ABC):
             api_key: API 密钥
         """
         self.api_key = api_key
+        self.timeout = 15  # 默认超时时间（秒）
         self.session = self._create_session()
     
     def _create_session(self) -> requests.Session:

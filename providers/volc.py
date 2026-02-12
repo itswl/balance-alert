@@ -7,6 +7,9 @@ import hashlib
 import hmac
 from urllib.parse import quote
 import json
+from logger import get_logger
+
+logger = get_logger('volc_provider')
 
 
 class VolcProvider(BaseProvider):
@@ -201,13 +204,24 @@ class VolcProvider(BaseProvider):
     def _make_volc_request(self, request_params, headers):
         """发起 HTTP 请求"""
         url = f"https://{request_params['host']}{request_params['path']}?{self._norm_query(request_params['query'])}"
-        return self.session.request(
-            method=request_params['method'],
-            url=url,
-            headers=headers,
-            data=request_params['body'],
-            timeout=self.timeout
-        )
+        logger.debug(f"火山云请求 URL: {url}")
+        logger.debug(f"请求头: {headers}")
+        logger.debug(f"超时设置: {self.timeout}秒")
+        
+        try:
+            response = self.session.request(
+                method=request_params['method'],
+                url=url,
+                headers=headers,
+                data=request_params['body'],
+                timeout=self.timeout
+            )
+            logger.debug(f"火山云响应状态码: {response.status_code}")
+            logger.debug(f"火山云响应内容: {response.text[:200]}...")
+            return response
+        except Exception as e:
+            logger.error(f"火山云请求失败: {e}")
+            raise
     
     @staticmethod
     def _norm_query(params):
