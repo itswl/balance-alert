@@ -339,17 +339,10 @@ def update_subscription():
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_subscriptions
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_subscription_cache(subscription_checker.results)
         except Exception as e:
-            print(f'更新订阅缓存失败: {e}')
+            logger.error(f'更新订阅缓存失败: {e}')
         
         return jsonify({
             'status': 'success',
@@ -472,17 +465,10 @@ def add_subscription():
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_subscriptions
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_subscription_cache(subscription_checker.results)
         except Exception as e:
-            print(f'更新订阅缓存失败: {e}')
+            logger.error(f'更新订阅缓存失败: {e}')
         
         return jsonify({
             'status': 'success',
@@ -544,17 +530,10 @@ def delete_subscription():
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_subscriptions
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_subscription_cache(subscription_checker.results)
         except Exception as e:
-            print(f'更新订阅缓存失败: {e}')
+            logger.error(f'更新订阅缓存失败: {e}')
         
         return jsonify({
             'status': 'success',
@@ -619,17 +598,10 @@ def mark_subscription_renewed():
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_subscriptions
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_subscription_cache(subscription_checker.results)
         except Exception as e:
-            print(f'更新订阅缓存失败: {e}')
+            logger.error(f'更新订阅缓存失败: {e}')
         
         return jsonify({
             'status': 'success',
@@ -685,17 +657,10 @@ def clear_subscription_renewed():
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_subscriptions
-            latest_subscriptions = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'subscriptions': subscription_checker.results,
-                'summary': {
-                    'total': len(subscription_checker.results),
-                    'need_alert': sum(1 for r in subscription_checker.results if r.get('need_alert', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_subscription_cache(subscription_checker.results)
         except Exception as e:
-            print(f'更新订阅缓存失败: {e}')
+            logger.error(f'更新订阅缓存失败: {e}')
         
         return jsonify({
             'status': 'success',
