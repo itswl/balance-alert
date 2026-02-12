@@ -9,6 +9,7 @@ from email.header import decode_header
 import re
 from datetime import datetime, timedelta
 import json
+from contextlib import contextmanager
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from webhook_adapter import WebhookAdapter
 from prometheus_exporter import metrics_collector
@@ -16,6 +17,32 @@ from logger import get_logger
 
 # 创建 logger
 logger = get_logger('email_scanner')
+
+
+@contextmanager
+def imap_connection(host: str, port: int, username: str, password: str, use_ssl: bool = True):
+    """IMAP连接上下文管理器"""
+    mail = None
+    try:
+        if use_ssl:
+            mail = imaplib.IMAP4_SSL(host, port)
+        else:
+            mail = imaplib.IMAP4(host, port)
+        
+        mail.login(username, password)
+        mail.select('INBOX')
+        logger.info(f"✅ 成功连接到邮箱 {username}@{host}")
+        yield mail
+    except Exception as e:
+        logger.error(f"❌ 邮箱连接失败: {e}")
+        raise
+    finally:
+        if mail:
+            try:
+                mail.logout()
+                logger.info(f"   已断开邮箱连接 {username}@{host}")
+            except Exception as e:
+                logger.warning(f"   断开连接时出错: {e}")
 
 
 class EmailScanner:
@@ -282,29 +309,27 @@ class EmailScanner:
         print(f"   服务器: {host}:{port}")
         print(f"   用户名: {username}")
         
-        mail = None
         try:
-            # 连接邮箱（带重试机制）
-            mail = self._connect_imap(host, port, username, password, use_ssl)
-            
-            # 计算日期范围
-            since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
-            
-            # 搜索邮件
-            status, messages = mail.search(None, f'SINCE {since_date}')
-            
-            if status != 'OK':
-                print("❌ 搜索邮件失败")
-                return 0, 0
-            
-            email_ids = messages[0].split()
-            total_emails = len(email_ids)
-            
-            print(f"📬 找到 {total_emails} 封邮件\n")
-            
-            if total_emails == 0:
-                print("ℹ️  没有需要检查的邮件")
-                return 0, 0
+            # 使用上下文管理器连接邮箱
+            with imap_connection(host, port, username, password, use_ssl) as mail:
+                # 计算日期范围
+                since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+                
+                # 搜索邮件
+                status, messages = mail.search(None, f'SINCE {since_date}')
+                
+                if status != 'OK':
+                    logger.error("❌ 搜索邮件失败")
+                    return 0, 0
+                
+                email_ids = messages[0].split()
+                total_emails = len(email_ids)
+                
+                logger.info(f"📬 找到 {total_emails} 封邮件")
+                
+                if total_emails == 0:
+                    logger.info("ℹ️  没有需要检查的邮件")
+                    return 0, 0
             
             # 分批处理邮件，每批最多100封
             batch_size = 100
@@ -390,14 +415,6 @@ class EmailScanner:
         except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"❌ 扫描失败: {e}", exc_info=True)
             return 0, 0
-        finally:
-            # 确保连接关闭
-            if mail:
-                try:
-                    mail.logout()
-                    print(f"   已断开邮箱连接")
-                except Exception:
-                    pass
     
     def _send_alert(self, email_info):
         """发送告警通知"""
