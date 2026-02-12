@@ -8,6 +8,7 @@ from flask_cors import CORS
 import json
 import os
 from pathlib import Path
+from typing import Dict, Any, List, Tuple, Optional
 from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
@@ -43,7 +44,7 @@ latest_subscriptions = {
 # 线程锁保护共享状态
 results_lock = threading.Lock()
 
-def get_refresh_interval():
+def get_refresh_interval() -> int:
     """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
     try:
         config = get_config('config.json')
@@ -54,7 +55,7 @@ def get_refresh_interval():
         return 3600
 
 
-def update_balance_cache(results):
+def update_balance_cache(results: List[Dict[str, Any]]) -> None:
     """更新余额缓存（线程安全）"""
     global latest_results
     with results_lock:
@@ -70,7 +71,7 @@ def update_balance_cache(results):
         }
 
 
-def update_subscription_cache(results):
+def update_subscription_cache(results: List[Dict[str, Any]]) -> None:
     """更新订阅缓存（线程安全）"""
     global latest_subscriptions
     with results_lock:
@@ -84,7 +85,7 @@ def update_subscription_cache(results):
         }
 
 
-def save_cache_file(balance_results, subscription_results):
+def save_cache_file(balance_results: List[Dict[str, Any]], subscription_results: List[Dict[str, Any]]) -> None:
     """保存缓存到文件"""
     cache_data = {
         'projects': balance_results,
@@ -723,19 +724,10 @@ def update_threshold():
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not ENABLE_WEB_ALARM)
             
-            global latest_results
-            latest_results = {
-                'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'projects': monitor.results,
-                'summary': {
-                    'total': len(monitor.results),
-                    'success': sum(1 for r in monitor.results if r['success']),
-                    'failed': sum(1 for r in monitor.results if not r['success']),
-                    'need_alarm': sum(1 for r in monitor.results if r.get('need_alarm', False)),
-                }
-            }
+            # 使用公共方法更新缓存（线程安全）
+            update_balance_cache(monitor.results)
         except Exception as e:
-            print(f'更新缓存失败: {e}')
+            logger.error(f'更新缓存失败: {e}')
         
         return jsonify({
             'status': 'success',

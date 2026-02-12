@@ -7,7 +7,7 @@
 import os
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 from threading import Lock, Thread
 from watchdog.observers import Observer
@@ -18,7 +18,7 @@ from watchdog.events import FileSystemEventHandler
 _config_cache: Optional[Dict[str, Any]] = None
 _config_lock = Lock()
 _config_observer: Optional[Observer] = None
-_config_callback = None
+_config_callback: Optional[Callable] = None
 
 
 class ConfigFileHandler(FileSystemEventHandler):
@@ -49,7 +49,7 @@ class ConfigFileHandler(FileSystemEventHandler):
             self.callback()
 
 
-def start_config_watcher(config_file: str = 'config.json', callback=None):
+def start_config_watcher(config_file: str = 'config.json', callback: Optional[Callable] = None) -> None:
     """启动配置文件监听器"""
     global _config_observer, _config_callback
     
@@ -73,7 +73,7 @@ def start_config_watcher(config_file: str = 'config.json', callback=None):
     print(f"[Config] 开始监听配置文件: {config_path}")
 
 
-def stop_config_watcher():
+def stop_config_watcher() -> None:
     """停止配置文件监听器"""
     global _config_observer
     
@@ -84,7 +84,7 @@ def stop_config_watcher():
         print("[Config] 已停止配置文件监听")
 
 
-def clear_config_cache():
+def clear_config_cache() -> None:
     """清除配置缓存"""
     global _config_cache
     with _config_lock:
