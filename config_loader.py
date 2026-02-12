@@ -12,6 +12,57 @@ from pathlib import Path
 from threading import Lock, Thread
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from dotenv import load_dotenv
+
+
+def load_env_file(env_file: str = '.env') -> None:
+    """加载 .env 文件"""
+    if os.path.exists(env_file):
+        load_dotenv(env_file, override=True)
+        print(f"[Config] 已加载环境变量文件: {env_file}")
+
+
+def get_env(key: str, default=None) -> Optional[str]:
+    """获取环境变量"""
+    return os.environ.get(key, default)
+
+
+def get_webhook_from_env() -> Optional[Dict[str, Any]]:
+    """从环境变量获取 webhook 配置"""
+    webhook_url = get_env('WEBHOOK_URL')
+    if not webhook_url:
+        return None
+    
+    return {
+        'enabled': get_env('WEBHOOK_ENABLED', 'true').lower() == 'true',
+        'url': webhook_url,
+        'secret': get_env('WEBHOOK_SECRET', ''),
+        'platform': get_env('WEBHOOK_PLATFORM', 'feishu')
+    }
+
+
+def get_email_password_from_env(email_name: str) -> Optional[str]:
+    """从环境变量获取邮箱密码"""
+    # 尝试特定邮箱的环境变量
+    specific_key = f'EMAIL_{email_name.upper().replace(" ", "_").replace("-", "_")}_PASSWORD'
+    password = get_env(specific_key)
+    if password:
+        return password
+    
+    # 尝试通用环境变量
+    return get_env('EMAIL_PASSWORD')
+
+
+def get_api_key_from_env(project_name: str) -> Optional[str]:
+    """从环境变量获取 API Key"""
+    # 尝试特定项目的环境变量
+    specific_key = f'{project_name.upper().replace(" ", "_").replace("-", "_")}_API_KEY'
+    api_key = get_env(specific_key)
+    if api_key:
+        return api_key
+    
+    # 尝试通用环境变量
+    return get_env('API_KEY')
 
 
 # 全局配置缓存和锁

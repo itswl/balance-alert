@@ -71,7 +71,7 @@ class CreditMonitor:
             provider = provider_class(api_key)
         except ValueError as e:
             error_msg = str(e)
-            print(f"❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             return {
                 'project': project_name,
                 'success': False,
@@ -83,7 +83,7 @@ class CreditMonitor:
         result = provider.get_credits()
         
         if not result['success']:
-            print(f"❌ 获取余额失败: {result['error']}")
+            logger.error(f"❌ 获取余额失败: {result['error']}")
             return {
                 'project': project_name,
                 'success': False,
@@ -137,7 +137,7 @@ class CreditMonitor:
         webhook_source = webhook_config.get('source', 'credit-monitor')
         
         if not webhook_url:
-            print("❌ 未配置 webhook 地址")
+            logger.error("❌ 未配置 webhook 地址")
             return False
         
         # 创建 webhook 适配器

@@ -5,6 +5,7 @@
 """
 import imaplib
 import email
+import os
 from email.header import decode_header
 import re
 from datetime import datetime, timedelta
@@ -80,15 +81,8 @@ class EmailScanner:
     
     def _load_config(self):
         """加载配置文件"""
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            logger.error(f"❌ 配置文件不存在: {self.config_path}")
-            return {}
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ 配置文件格式错误: {e}")
-            return {}
+        from config_loader import load_config_with_env_vars
+        return load_config_with_env_vars(self.config_path)
     
     def _parse_email_configs(self):
         """解析邮箱配置，支持单个或多个邮箱"""
@@ -284,8 +278,9 @@ class EmailScanner:
         
         logger.info("✅ IMAP连接成功")
         return mail
-        """
-        扫描单个邮箱中的告警邮件
+
+    def _scan_single_mailbox(self, email_config, days=7, dry_run=False):
+        """扫描单个邮箱中的告警邮件
         
         Args:
             email_config: 邮箱配置字典
@@ -303,7 +298,7 @@ class EmailScanner:
         mailbox_name = email_config.get('name', username)
         
         if not all([host, username, password]):
-            print("❌ 邮箱配置不完整，跳过")
+            logger.warning("❌ 邮箱配置不完整，跳过")
             return 0, 0
         
         print(f"   服务器: {host}:{port}")
@@ -338,85 +333,85 @@ class EmailScanner:
                 if total_emails == 0:
                     logger.info("ℹ️  没有需要检查的邮件")
                     return 0, 0
-            
-            # 分批处理邮件，每批最多100封
-            batch_size = 100
-            alert_count = 0
-            processed_count = 0
-            
-            for i, email_id in enumerate(email_ids):
-                status, msg_data = mail.fetch(email_id, '(RFC822)')
                 
-                if status != 'OK':
-                    continue
+                # 分批处理邮件，每批最多100封
+                batch_size = 100
+                alert_count = 0
+                processed_count = 0
                 
-                # 解析邮件
-                msg = email.message_from_bytes(msg_data[0][1])
-                
-                # 获取邮件信息
-                subject = self._decode_str(msg.get('Subject', ''))
-                sender = self._decode_str(msg.get('From', ''))
-                date = self._decode_str(msg.get('Date', ''))
-                
-                # 提取邮件正文
-                body = self._extract_text_from_email(msg)
-                
-                # 检查是否包含告警关键词
-                matched_keywords = self._check_alert_keywords(subject, body)
-                
-                if matched_keywords:
-                    alert_count += 1
-                    print(f"{'='*60}")
-                    print(f"⚠️  发现告警邮件 #{alert_count}")
-                    print(f"   邮箱: {mailbox_name}")
-                    print(f"   发件人: {sender}")
-                    print(f"   主题: {subject}")
-                    print(f"   日期: {date}")
-                    print(f"   匹配关键词: {', '.join(matched_keywords)}")
+                for i, email_id in enumerate(email_ids):
+                    status, msg_data = mail.fetch(email_id, '(RFC822)')
                     
-                    # 尝试提取服务信息
-                    service_name, amount = self._extract_service_info(subject, body)
-                    print(f"   服务: {service_name}")
-                    if amount:
-                        print(f"   金额: ¥{amount}")
+                    if status != 'OK':
+                        continue
                     
-                    print(f"{'='*60}\n")
+                    # 解析邮件
+                    msg = email.message_from_bytes(msg_data[0][1])
                     
-                    # 记录结果
-                    result = {
-                        'mailbox': mailbox_name,
-                        'subject': subject,
-                        'sender': sender,
-                        'date': date,
-                        'keywords': matched_keywords,
-                        'service_name': service_name,
-                        'amount': amount,
-                        'alert_sent': False
-                    }
+                    # 获取邮件信息
+                    subject = self._decode_str(msg.get('Subject', ''))
+                    sender = self._decode_str(msg.get('From', ''))
+                    date = self._decode_str(msg.get('Date', ''))
                     
-                    # 发送告警
-                    if not dry_run:
-                        alert_sent = self._send_alert(result)
-                        result['alert_sent'] = alert_sent
-                    else:
-                        print("🔍 [测试模式] 跳过发送告警")
+                    # 提取邮件正文
+                    body = self._extract_text_from_email(msg)
                     
-                    self.results.append(result)
+                    # 检查是否包含告警关键词
+                    matched_keywords = self._check_alert_keywords(subject, body)
+                    
+                    if matched_keywords:
+                        alert_count += 1
+                        print(f"{'='*60}")
+                        print(f"⚠️  发现告警邮件 #{alert_count}")
+                        print(f"   邮箱: {mailbox_name}")
+                        print(f"   发件人: {sender}")
+                        print(f"   主题: {subject}")
+                        print(f"   日期: {date}")
+                        print(f"   匹配关键词: {', '.join(matched_keywords)}")
+                        
+                        # 尝试提取服务信息
+                        service_name, amount = self._extract_service_info(subject, body)
+                        print(f"   服务: {service_name}")
+                        if amount:
+                            print(f"   金额: ¥{amount}")
+                        
+                        print(f"{'='*60}\n")
+                        
+                        # 记录结果
+                        result = {
+                            'mailbox': mailbox_name,
+                            'subject': subject,
+                            'sender': sender,
+                            'date': date,
+                            'keywords': matched_keywords,
+                            'service_name': service_name,
+                            'amount': amount,
+                            'alert_sent': False
+                        }
+                        
+                        # 发送告警
+                        if not dry_run:
+                            alert_sent = self._send_alert(result)
+                            result['alert_sent'] = alert_sent
+                        else:
+                            print("🔍 [测试模式] 跳过发送告警")
+                        
+                        self.results.append(result)
+                    
+                    processed_count += 1
+                    
+                    # 每处理100封邮件，打印进度
+                    if processed_count % batch_size == 0:
+                        print(f"   进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
                 
-                processed_count += 1
+                # 打印单个邮箱汇总
+                self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
                 
-                # 每处理100封邮件，打印进度
-                if processed_count % batch_size == 0:
-                    print(f"   进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
-            
-            # 打印单个邮箱汇总
-            self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
-            
-            # 更新 Prometheus 指标
-            metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
-            
-            return total_emails, alert_count
-            
+                # 更新 Prometheus 指标
+                metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
+                
+                return total_emails, alert_count
+                
         except imaplib.IMAP4.error as e:
             logger.error(f"❌ 邮箱连接错误: {e}")
             return 0, 0
@@ -432,7 +427,7 @@ class EmailScanner:
         webhook_source = webhook_config.get('source', 'email-scanner')
         
         if not webhook_url:
-            print("❌ 未配置 webhook 地址")
+            logger.error("❌ 未配置 webhook 地址")
             return False
         
         adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)

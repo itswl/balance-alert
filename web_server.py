@@ -192,11 +192,20 @@ def refresh_credits():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/projects', methods=['GET'])
+def load_config_safe(config_path='config.json'):
+    """安全加载配置文件"""
+    try:
+        from config_loader import load_config_with_env_vars
+        return load_config_with_env_vars(config_path)
+    except Exception as e:
+        logger.error(f"配置加载失败: {e}")
+        return {}
+
+
 def get_projects_config():
     """获取所有项目配置"""
     try:
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 只返回项目配置，隐藏 api_key
         projects = []
@@ -223,9 +232,7 @@ def get_subscriptions():
 def get_subscriptions_config():
     """获取所有订阅配置"""
     try:
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        
+        config = load_config_safe()
         subscriptions = config.get('subscriptions', [])
         return jsonify({'status': 'success', 'subscriptions': subscriptions})
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
@@ -245,8 +252,7 @@ def update_subscription():
             }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 查找订阅
         subscription_found = False
@@ -411,8 +417,7 @@ def add_subscription():
             }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 检查订阅名称是否已存在
         subscriptions = config.get('subscriptions', [])
@@ -498,8 +503,7 @@ def delete_subscription():
             }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 查找并删除订阅
         subscriptions = config.get('subscriptions', [])
@@ -573,8 +577,7 @@ def mark_subscription_renewed():
                 }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 查找订阅并更新续费日期
         subscription_found = False
@@ -630,8 +633,7 @@ def clear_subscription_renewed():
             }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 查找订阅并删除续费日期
         subscription_found = False
@@ -697,8 +699,7 @@ def update_threshold():
             }), 400
         
         # 读取配置文件
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_config_safe()
         
         # 查找并更新项目
         project_found = False

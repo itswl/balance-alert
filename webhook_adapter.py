@@ -49,7 +49,7 @@ class WebhookAdapter:
         self.source = source
         
         if self.webhook_type not in self.SUPPORTED_TYPES:
-            print(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
+            logger.warning(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
             self.webhook_type = 'custom'
     
     def send_balance_alert(self, project_name, provider, balance_type, current_value, 

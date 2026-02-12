@@ -18,8 +18,8 @@ class SubscriptionChecker:
     
     def _load_config(self):
         """加载配置文件"""
-        with open(self.config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        from config_loader import load_config_with_env_vars
+        return load_config_with_env_vars(self.config_path)
     
     def check_subscriptions(self, dry_run=False):
         """
