@@ -1,10 +1,10 @@
 """
 TikHub 余额查询适配器
 """
-import requests
+from .base import BaseProvider
 
 
-class TikHubProvider:
+class TikHubProvider(BaseProvider):
     """TikHub 服务商适配器"""
     
     API_URL = "https://api.tikhub.dev/api/v1/tikhub/user/get_user_info"
@@ -16,7 +16,7 @@ class TikHubProvider:
         Args:
             api_key: TikHub API 密钥 (Token)
         """
-        self.api_key = api_key
+        super().__init__(api_key)
     
     def get_credits(self):
         """
@@ -30,24 +30,22 @@ class TikHubProvider:
                 - raw_data (dict): 原始 API 响应数据
         """
         try:
-            response = requests.get(
+            # 使用基类的请求方法
+            response = self._make_request(
+                'GET',
                 self.API_URL,
                 headers={
                     "accept": "application/json",
                     "Authorization": f"Bearer {self.api_key}"
-                },
-                timeout=10
+                }
             )
             
-            if response.status_code != 200:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"API 请求失败: HTTP {response.status_code}",
-                    'raw_data': response.text
-                }
+            # 使用基类的响应处理方法
+            result = self._handle_response(response)
+            if not result['success']:
+                return result
             
-            data = response.json()
+            data = result['raw_data']
             
             # TikHub 返回的数据结构可能在 user_data 或 data 字段中
             # {
@@ -71,27 +69,9 @@ class TikHubProvider:
                     'raw_data': data
                 }
             
-            return {
-                'success': True,
-                'credits': float(balance),
-                'error': None,
-                'raw_data': data
-            }
+            result['credits'] = float(balance)
+            return result
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
         except ValueError as e:
             return {
                 'success': False,
@@ -107,7 +87,7 @@ class TikHubProvider:
                 'raw_data': None
             }
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "TikHub"

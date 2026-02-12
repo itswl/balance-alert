@@ -1,15 +1,15 @@
 """
 火山云余额查询适配器
 """
+from .base import BaseProvider
 import datetime
 import hashlib
 import hmac
 from urllib.parse import quote
-import requests
 import json
 
 
-class VolcProvider:
+class VolcProvider(BaseProvider):
     """火山云服务适配器"""
     
     def __init__(self, api_key):
@@ -23,6 +23,7 @@ class VolcProvider:
         if ':' not in api_key:
             raise ValueError("火山云 API Key 格式错误，应为 'AK:SK' 格式")
         
+        super().__init__(api_key)
         self.ak, self.sk = api_key.split(':', 1)
         self.service = 'billing'
         self.action = 'QueryBalanceAcct'
@@ -43,9 +44,9 @@ class VolcProvider:
                 - raw_data (dict): 原始 API 响应数据
         """
         try:
-            response = self._send_request()
+            response_data = self._send_request()
             
-            if not response:
+            if not response_data:
                 return {
                     'success': False,
                     'credits': None,
@@ -54,54 +55,57 @@ class VolcProvider:
                 }
             
             # 检查响应中的错误
-            if response.get('ResponseMetadata', {}).get('Error'):
-                error_info = response['ResponseMetadata']['Error']
+            if response_data.get('ResponseMetadata', {}).get('Error'):
+                error_info = response_data['ResponseMetadata']['Error']
                 return {
                     'success': False,
                     'credits': None,
                     'error': f"API 返回错误: {error_info}",
-                    'raw_data': response
+                    'raw_data': response_data
                 }
             
             # 获取可用余额
-            available_balance = response.get('Result', {}).get('AvailableBalance')
+            available_balance = response_data.get('Result', {}).get('AvailableBalance')
             
             if available_balance is None:
                 return {
                     'success': False,
                     'credits': None,
                     'error': "无法从响应中解析 AvailableBalance 字段",
-                    'raw_data': response
+                    'raw_data': response_data
                 }
             
             return {
                 'success': True,
                 'credits': float(available_balance),
                 'error': None,
-                'raw_data': response
+                'raw_data': response_data
             }
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
         except Exception as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"未知错误: {str(e)}",
-                'raw_data': None
-            }
+            # 处理各种网络异常
+            error_msg = str(e)
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': "请求超时",
+                    'raw_data': None
+                }
+            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': f"网络连接错误: {error_msg}",
+                    'raw_data': None
+                }
+            else:
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': f"未知错误: {error_msg}",
+                    'raw_data': None
+                }
     
     def _send_request(self):
         """发送火山云 API 请求"""
@@ -119,7 +123,7 @@ class VolcProvider:
         }
         
         headers = self._build_headers(request_params)
-        response = self._make_request(request_params, headers)
+        response = self._make_volc_request(request_params, headers)
         
         if response.status_code != 200:
             raise Exception(f'HTTP请求失败，状态码：{response.status_code}\n响应内容：{response.text}')
@@ -194,15 +198,15 @@ class VolcProvider:
         credential_scope = f"{short_date}/{self.region}/{self.service}/request"
         return f"HMAC-SHA256 Credential={self.ak}/{credential_scope}, SignedHeaders=content-type;host;x-content-sha256;x-date, Signature={signature}"
     
-    def _make_request(self, request_params, headers):
+    def _make_volc_request(self, request_params, headers):
         """发起 HTTP 请求"""
         url = f"https://{request_params['host']}{request_params['path']}?{self._norm_query(request_params['query'])}"
-        return requests.request(
+        return self.session.request(
             method=request_params['method'],
             url=url,
             headers=headers,
             data=request_params['body'],
-            timeout=10
+            timeout=self.timeout
         )
     
     @staticmethod
@@ -227,7 +231,7 @@ class VolcProvider:
         """HMAC-SHA256"""
         return hmac.new(key, content.encode('utf-8'), hashlib.sha256).digest()
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "火山云"
