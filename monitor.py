@@ -13,6 +13,7 @@ from subscription_checker import SubscriptionChecker
 from email_scanner import EmailScanner
 from webhook_adapter import WebhookAdapter
 from logger import get_logger
+from config_loader import load_config_with_env_vars
 
 # 创建 logger
 logger = get_logger('monitor')
@@ -38,8 +39,7 @@ class CreditMonitor:
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
         
         try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return load_config_with_env_vars(str(self.config_path))
         except json.JSONDecodeError as e:
             raise ValueError(f"配置文件格式错误: {e}")
     

@@ -94,14 +94,30 @@ def get_webhook_from_env() -> Optional[Dict[str, str]]:
     }
 
 
-def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
-    """加载配置，环境变量优先于配置文件"""
+def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
+    """加载配置文件并替换环境变量占位符
+    
+    支持 ${VAR_NAME} 格式的环境变量替换
+    """
     # 首先加载 .env 文件
     load_env_file()
     
-    # 读取配置文件
+    # 读取配置文件内容
     with open(config_file, 'r', encoding='utf-8') as f:
-        config = json.load(f)
+        content = f.read()
+    
+    # 替换 ${VAR_NAME} 格式的环境变量
+    pattern = r'\$\{([^}]+)\}'
+    
+    def replace_env(match):
+        var_name = match.group(1)
+        # 从环境变量读取，如果不存在则保持原样
+        return os.environ.get(var_name, match.group(0))
+    
+    content = re.sub(pattern, replace_env, content)
+    
+    # 解析JSON
+    config = json.loads(content)
     
     # 环境变量覆盖 webhook 配置
     webhook_env = get_webhook_from_env()
@@ -132,6 +148,11 @@ def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
         config['settings']['balance_refresh_interval_seconds'] = refresh_interval
     
     return config
+
+
+def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
+    """加载配置，环境变量优先于配置文件（兼容旧接口）"""
+    return load_config_with_env_vars(config_file)
 
 
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
