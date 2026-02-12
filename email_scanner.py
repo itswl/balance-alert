@@ -325,7 +325,15 @@ class EmailScanner:
                 email_ids = messages[0].split()
                 total_emails = len(email_ids)
                 
-                logger.info(f"📬 找到 {total_emails} 封邮件")
+                # 应用扫描上限限制
+                max_scan_limit = int(os.environ.get('MAX_EMAILS_TO_SCAN', '1000'))
+                if total_emails > max_scan_limit:
+                    logger.warning(f"📬 邮件数量 {total_emails} 超过上限 {max_scan_limit}，仅扫描最新 {max_scan_limit} 封")
+                    # 取最新的邮件（列表末尾是最新邮件）
+                    email_ids = email_ids[-max_scan_limit:]
+                    total_emails = len(email_ids)
+                
+                logger.info(f"📬 找到 {total_emails} 封邮件（扫描范围: 最近{days}天）")
                 
                 if total_emails == 0:
                     logger.info("ℹ️  没有需要检查的邮件")
