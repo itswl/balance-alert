@@ -387,7 +387,7 @@ class EmailScanner:
         except imaplib.IMAP4.error as e:
             logger.error(f"❌ 邮箱连接错误: {e}")
             return 0, 0
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"❌ 扫描失败: {e}", exc_info=True)
             return 0, 0
         finally:
@@ -466,7 +466,7 @@ def main():
     try:
         scanner = EmailScanner(args.config)
         scanner.scan_emails(days=args.days, dry_run=args.dry_run)
-    except Exception as e:
+    except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as e:
         print(f"❌ 错误: {e}")
         exit(1)
 

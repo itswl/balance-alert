@@ -50,7 +50,7 @@ def get_refresh_interval() -> int:
         config = get_config('config.json')
         interval = config.get('settings', {}).get('balance_refresh_interval_seconds', 3600)
         return max(60, interval)  # 最小60秒（1分钟）
-    except Exception as e:
+    except (KeyError, TypeError, ValueError) as e:
         logger.warning(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
         return 3600
 
@@ -95,7 +95,7 @@ def save_cache_file(balance_results: List[Dict[str, Any]], subscription_results:
     try:
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False)
-    except Exception as e:
+    except (OSError, IOError, json.JSONEncodeError) as e:
         logger.error(f"保存缓存文件失败: {e}")
 
 
@@ -124,7 +124,7 @@ def update_credits():
             # 保存缓存到文件
             save_cache_file(monitor.results, subscription_checker.results)
             
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"更新数据失败: {e}", exc_info=True)
             metrics_collector.set_check_failed('balance')
         
@@ -188,7 +188,7 @@ def refresh_credits():
         
         with results_lock:
             return jsonify({'status': 'success', 'data': latest_results})
-    except Exception as e:
+    except (RuntimeError, ValueError, KeyError) as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/projects', methods=['GET'])
@@ -210,7 +210,7 @@ def get_projects_config():
             })
         
         return jsonify({'status': 'success', 'projects': projects})
-    except Exception as e:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscriptions')
@@ -228,7 +228,7 @@ def get_subscriptions_config():
         
         subscriptions = config.get('subscriptions', [])
         return jsonify({'status': 'success', 'subscriptions': subscriptions})
-    except Exception as e:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/subscription', methods=['POST'])

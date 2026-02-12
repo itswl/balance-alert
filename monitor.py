@@ -202,7 +202,7 @@ class CreditMonitor:
                 try:
                     result = future.result()
                     self.results.append(result)
-                except Exception as e:
+                except (RuntimeError, ValueError, KeyError) as e:
                     logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
                     self.results.append({
                         'project': project.get('name', 'Unknown'),
@@ -323,7 +323,7 @@ def main():
             email_scanner = EmailScanner(args.config)
             email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
             
-    except Exception as e:
+    except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as e:
         print(f"❌ 错误: {e}", file=sys.stderr)
         sys.exit(1)
 
