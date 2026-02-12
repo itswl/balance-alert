@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 邮箱扫描器 - 检测欠费、续费等提醒邮件
+支持重试机制和连接池
 """
 import imaplib
 import email
@@ -8,6 +9,7 @@ from email.header import decode_header
 import re
 from datetime import datetime, timedelta
 import json
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from webhook_adapter import WebhookAdapter
 from prometheus_exporter import metrics_collector
 from logger import get_logger
@@ -235,7 +237,26 @@ class EmailScanner:
         # 打印总汇总
         self._print_total_summary(total_emails, total_alerts)
     
-    def _scan_single_mailbox(self, email_config, days=1, dry_run=False):
+    @retry(
+        stop=stop_after_attempt(3),  # 最多重试3次
+        wait=wait_exponential(multiplier=1, min=4, max=10),  # 指数退避: 4s, 8s, 10s
+        retry=retry_if_exception_type((imaplib.IMAP4.error, ConnectionError, TimeoutError)),
+        reraise=True
+    )
+    def _connect_imap(self, host, port, username, password, use_ssl=True):
+        """连接IMAP服务器（带重试机制）"""
+        logger.info(f"正在连接IMAP服务器 {host}:{port} (SSL: {use_ssl})")
+        
+        if use_ssl:
+            mail = imaplib.IMAP4_SSL(host, port)
+        else:
+            mail = imaplib.IMAP4(host, port)
+        
+        mail.login(username, password)
+        mail.select('INBOX')
+        
+        logger.info("✅ IMAP连接成功")
+        return mail
         """
         扫描单个邮箱中的告警邮件
         
@@ -263,17 +284,8 @@ class EmailScanner:
         
         mail = None
         try:
-            # 连接邮箱
-            if use_ssl:
-                mail = imaplib.IMAP4_SSL(host, port)
-            else:
-                mail = imaplib.IMAP4(host, port)
-            
-            mail.login(username, password)
-            print("✅ 邮箱登录成功")
-            
-            # 选择收件箱
-            mail.select('INBOX')
+            # 连接邮箱（带重试机制）
+            mail = self._connect_imap(host, port, username, password, use_ssl)
             
             # 计算日期范围
             since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
