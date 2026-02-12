@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-多项目余额监控主程序
-支持配置驱动的多项目余额检查和告警
+异步版本的余额监控器
+使用 asyncio 提高并发效率，为未来性能优化做准备
 """
+import asyncio
 import json
 import sys
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Dict, Any, List
 from providers import get_provider
 from subscription_checker import SubscriptionChecker
 from email_scanner import EmailScanner
@@ -16,11 +17,11 @@ from logger import get_logger
 from config_loader import load_config_with_env_vars
 
 # 创建 logger
-logger = get_logger('monitor')
+logger = get_logger('async_monitor')
 
 
-class CreditMonitor:
-    """余额监控器"""
+class AsyncCreditMonitor:
+    """异步余额监控器"""
     
     def __init__(self, config_path='config.json'):
         """
@@ -44,20 +45,20 @@ class CreditMonitor:
             raise ValueError(f"配置文件格式错误: {e}")
     
     def _get_max_concurrent_checks(self):
-        """获取最大并发检查数，默认为5"""
+        """获取最大并发检查数，默认为10（异步版本可以更高）"""
         try:
-            max_concurrent = self.config.get('settings', {}).get('max_concurrent_checks', 5)
-            return max(1, min(max_concurrent, 20))  # 限制在1-20之间
+            max_concurrent = self.config.get('settings', {}).get('max_concurrent_checks', 10)
+            return max(1, min(max_concurrent, 50))  # 异步版本允许更高的并发数
         except (TypeError, ValueError):
-            return 5
+            return 10
     
-    def check_project(self, project_config, dry_run=False):
+    async def check_project_async(self, project_config: Dict[str, Any], dry_run: bool = False):
         """
-        检查单个项目的余额
+        异步检查单个项目的余额
         
         Args:
             project_config: 项目配置字典
-            dry_run: 是否为测试模式（不发送告警）
+            dry_run: 是否为测试模式
             
         Returns:
             dict: 检查结果
@@ -67,11 +68,7 @@ class CreditMonitor:
         api_key = project_config.get('api_key')
         threshold = project_config.get('threshold', 0)
         
-        print(f"\n{'='*60}")
-        print(f"📊 检查项目: {project_name}")
-        print(f"   服务商: {provider_name}")
-        print(f"   告警阈值: {threshold}")
-        print(f"{'='*60}")
+        logger.info(f"📊 检查项目: {project_name} ({provider_name})")
         
         # 获取服务商适配器
         try:
@@ -87,8 +84,19 @@ class CreditMonitor:
                 'alarm_sent': False
             }
         
-        # 获取余额
-        result = provider.get_credits()
+        # 获取余额（这里需要 Provider 支持异步方法）
+        try:
+            # TODO: 需要将 Provider 的 get_credits 方法改为异步
+            # result = await provider.get_credits_async()
+            result = provider.get_credits()  # 当前还是同步调用
+        except Exception as e:
+            logger.error(f"❌ 获取余额失败: {e}")
+            return {
+                'project': project_name,
+                'success': False,
+                'error': str(e),
+                'alarm_sent': False
+            }
         
         if not result['success']:
             logger.error(f"❌ 获取余额失败: {result['error']}")
@@ -100,26 +108,26 @@ class CreditMonitor:
             }
         
         credits = result['credits']
-        print(f"✅ 当前余额: {credits}")
+        logger.info(f"✅ 当前余额: {credits}")
         
         # 检查是否需要告警
         need_alarm = credits < threshold
         alarm_sent = False
         
         if need_alarm:
-            print(f"⚠️  余额不足! {credits} < {threshold}")
+            logger.warning(f"⚠️  余额不足! {credits} < {threshold}")
             
             if not dry_run:
                 alarm_sent = self._send_alarm(project_config, credits)
             else:
-                print("🔍 [测试模式] 跳过发送告警")
+                logger.info("🔍 [测试模式] 跳过发送告警")
         else:
-            print(f"✅ 余额充足: {credits} >= {threshold}")
+            logger.info(f"✅ 余额充足: {credits} >= {threshold}")
         
         return {
             'project': project_name,
             'provider': provider_name,
-            'type': project_config.get('type'),  # 传递类型字段到前端
+            'type': project_config.get('type'),
             'success': True,
             'credits': credits,
             'threshold': threshold,
@@ -128,7 +136,7 @@ class CreditMonitor:
             'error': None
         }
     
-    def _send_alarm(self, project_config, credits):
+    def _send_alarm(self, project_config: Dict[str, Any], credits: float) -> bool:
         """
         发送告警到 webhook
         
@@ -168,9 +176,9 @@ class CreditMonitor:
             unit=unit
         )
     
-    def run(self, project_name=None, dry_run=False):
+    async def run_async(self, project_name: str = None, dry_run: bool = False):
         """
-        运行监控检查
+        异步运行监控检查
         
         Args:
             project_name: 指定项目名称，None 表示检查所有启用的项目
@@ -191,37 +199,42 @@ class CreditMonitor:
         else:
             projects = [p for p in projects if p.get('enabled', True)]
         
-        print(f"\n🚀 开始监控 {len(projects)} 个项目...")
+        print(f"\n🚀 开始异步监控 {len(projects)} 个项目...")
         if dry_run:
             print("🔍 [测试模式] 不会发送实际告警\n")
         
         # 获取配置的并发数
-        max_workers = self._get_max_concurrent_checks()
-        actual_workers = min(max_workers, len(projects))
-        print(f"⚙️  并发检查数: {actual_workers} (配置: {max_workers}, 项目数: {len(projects)})")
+        max_concurrent = self._get_max_concurrent_checks()
+        semaphore = asyncio.Semaphore(max_concurrent)
         
-        # 使用线程池并发检查项目
-        with ThreadPoolExecutor(max_workers=actual_workers) as executor:
-            # 提交所有任务
-            future_to_project = {
-                executor.submit(self.check_project, project, dry_run): project 
-                for project in projects
-            }
-            
-            # 收集结果
-            for future in as_completed(future_to_project):
-                project = future_to_project[future]
-                try:
-                    result = future.result()
-                    self.results.append(result)
-                except (RuntimeError, ValueError, KeyError) as e:
-                    logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
-                    self.results.append({
-                        'project': project.get('name', 'Unknown'),
-                        'success': False,
-                        'error': str(e),
-                        'alarm_sent': False
-                    })
+        print(f"⚙️  最大并发数: {max_concurrent}")
+        
+        async def check_with_semaphore(project):
+            async with semaphore:
+                return await self.check_project_async(project, dry_run)
+        
+        # 创建所有任务
+        tasks = [check_with_semaphore(project) for project in projects]
+        
+        # 并发执行所有任务
+        self.results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 处理异常结果
+        processed_results = []
+        for i, result in enumerate(self.results):
+            if isinstance(result, Exception):
+                project = projects[i]
+                logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生异常: {result}")
+                processed_results.append({
+                    'project': project.get('name', 'Unknown'),
+                    'success': False,
+                    'error': str(result),
+                    'alarm_sent': False
+                })
+            else:
+                processed_results.append(result)
+        
+        self.results = processed_results
         
         # 输出汇总
         self._print_summary()
@@ -266,17 +279,14 @@ class CreditMonitor:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='多项目余额监控工具',
+        description='异步多项目余额监控工具',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s                          # 检查所有启用的项目
-  %(prog)s --project "项目A"        # 检查指定项目
+  %(prog)s                          # 异步检查所有启用的项目
+  %(prog)s --project "项目A"        # 异步检查指定项目
   %(prog)s --dry-run                # 测试模式，不发送告警
   %(prog)s --config custom.json     # 使用自定义配置文件
-  %(prog)s --check-subscriptions    # 检查订阅续费提醒
-  %(prog)s --check-email            # 扫描邮箱告警邮件
-  %(prog)s --check-email --email-days 3  # 扫描最近3天的邮件
         """
     )
     
@@ -297,44 +307,13 @@ def main():
         help='测试模式，只显示余额不发送告警'
     )
     
-    parser.add_argument(
-        '--check-subscriptions',
-        action='store_true',
-        help='检查订阅续费提醒'
-    )
-    
-    parser.add_argument(
-        '--check-email',
-        action='store_true',
-        help='扫描邮箱告警邮件'
-    )
-    
-    parser.add_argument(
-        '--email-days',
-        type=int,
-        default=1,
-        help='扫描最近几天的邮件 (默认: 1天)'
-    )
-    
     args = parser.parse_args()
     
     try:
-        # 检查余额/积分
-        monitor = CreditMonitor(args.config)
-        monitor.run(project_name=args.project, dry_run=args.dry_run)
+        # 异步运行监控
+        monitor = AsyncCreditMonitor(args.config)
+        asyncio.run(monitor.run_async(project_name=args.project, dry_run=args.dry_run))
         
-        # 检查订阅续费（默认启用）
-        if args.check_subscriptions or args.project is None:
-            print("\n" + "="*60)
-            subscription_checker = SubscriptionChecker(args.config)
-            subscription_checker.check_subscriptions(dry_run=args.dry_run)
-        
-        # 扫描邮箱（如果指定）
-        if args.check_email:
-            print("\n" + "="*60)
-            email_scanner = EmailScanner(args.config)
-            email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
-            
     except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as e:
         print(f"❌ 错误: {e}", file=sys.stderr)
         sys.exit(1)
