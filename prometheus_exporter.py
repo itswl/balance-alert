@@ -5,6 +5,7 @@ Prometheus Exporter - 暴露监控指标
 from prometheus_client import Gauge, Counter, Info, generate_latest, CONTENT_TYPE_LATEST
 from flask import Response
 import json
+import os
 import time
 from datetime import datetime
 
@@ -267,9 +268,10 @@ def metrics_endpoint():
 
 def load_cached_metrics():
     """从缓存文件加载指标数据"""
+    cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
     try:
         # 从 web_server 的缓存读取数据
-        with open('/tmp/balance_cache.json', 'r', encoding='utf-8') as f:
+        with open(cache_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
             # 更新余额指标
