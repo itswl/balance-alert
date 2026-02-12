@@ -32,14 +32,114 @@ ENABLE_WEB_ALARM = os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
 # 线程锁已在 state_manager 内部处理
 
 def get_refresh_interval() -> int:
-    """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
+    """从配置文件读取刷新间隔"""
     try:
         config = get_config('config.json')
-        interval = config.get('settings', {}).get('balance_refresh_interval_seconds', 3600)
-        return max(60, interval)  # 最小60秒（1分钟）
+        settings = config.get('settings', {})
+        
+        # 获取配置值
+        interval = settings.get('balance_refresh_interval_seconds', 3600)
+        min_interval = settings.get('min_refresh_interval_seconds', 60)
+        
+        # 验证配置合理性
+        if not isinstance(interval, (int, float)) or interval <= 0:
+            logger.warning(f"刷新间隔配置无效 ({interval})，使用默认值3600秒")
+            interval = 3600
+            
+        if not isinstance(min_interval, (int, float)) or min_interval <= 0:
+            logger.warning(f"最小刷新间隔配置无效 ({min_interval})，使用默认值60秒")
+            min_interval = 60
+        
+        # 确保刷新间隔不小于最小值
+        final_interval = max(min_interval, int(interval))
+        
+        logger.info(f"刷新间隔配置: 设置值={interval}s, 最小值={min_interval}s, 实际值={final_interval}s")
+        return final_interval
+        
     except (KeyError, TypeError, ValueError) as e:
         logger.warning(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
         return 3600
+
+
+def get_smart_refresh_config() -> Dict[str, Any]:
+    """获取智能刷新配置"""
+    try:
+        config = get_config('config.json')
+        settings = config.get('settings', {})
+        
+        return {
+            'enabled': settings.get('enable_smart_refresh', False),
+            'threshold_percent': settings.get('smart_refresh_threshold_percent', 5),
+            'min_check_interval': settings.get('min_refresh_interval_seconds', 60)
+        }
+    except Exception as e:
+        logger.warning(f"读取智能刷新配置失败: {e}")
+        return {
+            'enabled': False,
+            'threshold_percent': 5,
+            'min_check_interval': 60
+        }
+
+
+class DataChangeDetector:
+    """数据变化检测器，用于智能刷新"""
+    
+    def __init__(self):
+        self._last_data_hash = {}
+        self._last_check_time = {}
+    
+    def detect_changes(self, data: Dict[str, Any], data_type: str) -> bool:
+        """
+        检测数据是否发生变化
+        
+        Args:
+            data: 当前数据
+            data_type: 数据类型标识
+            
+        Returns:
+            bool: 是否发生变化
+        """
+        import hashlib
+        import json
+        
+        # 生成数据哈希
+        data_str = json.dumps(data, sort_keys=True, default=str)
+        current_hash = hashlib.md5(data_str.encode()).hexdigest()
+        
+        # 比较哈希值
+        last_hash = self._last_data_hash.get(data_type)
+        has_changed = (last_hash != current_hash)
+        
+        # 更新记录
+        self._last_data_hash[data_type] = current_hash
+        self._last_check_time[data_type] = time.time()
+        
+        if has_changed:
+            logger.debug(f"检测到 {data_type} 数据变化")
+        
+        return has_changed
+    
+    def should_force_refresh(self, data_type: str, threshold_percent: float = 5) -> bool:
+        """
+        判断是否应该强制刷新（即使数据未变化）
+        
+        Args:
+            data_type: 数据类型标识
+            threshold_percent: 强制刷新阈值百分比
+            
+        Returns:
+            bool: 是否应该强制刷新
+        """
+        last_check = self._last_check_time.get(data_type, 0)
+        elapsed = time.time() - last_check
+        max_interval = get_refresh_interval()
+        threshold_time = max_interval * (threshold_percent / 100)
+        
+        should_refresh = elapsed >= threshold_time
+        if should_refresh:
+            logger.debug(f"{data_type} 达到强制刷新时间阈值 ({elapsed:.1f}s >= {threshold_time:.1f}s)")
+        
+        return should_refresh
 
 
 def update_balance_cache(results: List[Dict[str, Any]]) -> None:
@@ -58,13 +158,31 @@ def save_cache_file(balance_results: List[Dict[str, Any]], subscription_results:
     state_manager.save_to_cache()
 
 
+# 全局数据变化检测器
+data_detector = DataChangeDetector()
+
+
 def update_credits():
     """后台定时更新余额数据"""
     while True:
         try:
+            # 获取智能刷新配置
+            smart_config = get_smart_refresh_config()
+            smart_refresh_enabled = smart_config['enabled']
+            
+            logger.info(f"开始更新数据 (智能刷新: {'启用' if smart_refresh_enabled else '禁用'})")
+            
             # 更新余额/积分数据
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not ENABLE_WEB_ALARM)
+            
+            # 检测余额数据变化（智能刷新）
+            balance_changed = False
+            if smart_refresh_enabled:
+                balance_changed = data_detector.detect_changes(
+                    monitor.results, 
+                    'balance'
+                )
             
             # 更新缓存
             update_balance_cache(monitor.results)
@@ -72,6 +190,14 @@ def update_credits():
             # 更新订阅数据
             subscription_checker = SubscriptionChecker('config.json')
             subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
+            
+            # 检测订阅数据变化（智能刷新）
+            subscription_changed = False
+            if smart_refresh_enabled:
+                subscription_changed = data_detector.detect_changes(
+                    subscription_checker.results, 
+                    'subscription'
+                )
             
             # 更新缓存
             update_subscription_cache(subscription_checker.results)
@@ -83,13 +209,37 @@ def update_credits():
             # 保存缓存到文件
             save_cache_file(monitor.results, subscription_checker.results)
             
+            # 智能刷新日志
+            if smart_refresh_enabled:
+                logger.info(f"数据更新完成 - 余额变化: {'是' if balance_changed else '否'}, "
+                           f"订阅变化: {'是' if subscription_changed else '否'}")
+            
         except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"更新数据失败: {e}", exc_info=True)
             metrics_collector.set_check_failed('balance')
         
         # 根据配置间隔等待
         sleep_seconds = get_refresh_interval()
-        logger.info(f"下次更新将在 {sleep_seconds} 秒后")
+        
+        # 智能刷新逻辑
+        if smart_config['enabled']:
+            # 检查是否需要强制刷新
+            force_balance_refresh = data_detector.should_force_refresh(
+                'balance', smart_config['threshold_percent']
+            )
+            force_subscription_refresh = data_detector.should_force_refresh(
+                'subscription', smart_config['threshold_percent']
+            )
+            
+            if force_balance_refresh or force_subscription_refresh:
+                logger.info(f"达到强制刷新阈值，下次将在 {sleep_seconds} 秒后更新")
+            elif balance_changed or subscription_changed:
+                logger.info(f"检测到数据变化，下次将在 {sleep_seconds} 秒后更新")
+            else:
+                logger.info(f"数据无变化，下次将在 {sleep_seconds} 秒后更新")
+        else:
+            logger.info(f"下次更新将在 {sleep_seconds} 秒后")
+        
         time.sleep(sleep_seconds)
 
 @app.route('/')
