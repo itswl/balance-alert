@@ -150,8 +150,10 @@ def refresh_credits():
         return jsonify({
             'status': 'success', 
             'data': {
-                'balance': balance_state,
-                'subscription': subscription_state
+                'last_update': balance_state.get('last_update'),
+                'projects': balance_state.get('projects', []),
+                'summary': balance_state.get('summary', {}),
+                'subscriptions': subscription_state.get('subscriptions', [])
             }
         })
     except (RuntimeError, ValueError, KeyError) as e:
