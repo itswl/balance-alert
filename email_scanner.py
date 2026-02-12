@@ -84,10 +84,10 @@ class EmailScanner:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except FileNotFoundError:
-            print(f"❌ 配置文件不存在: {self.config_path}")
+            logger.error(f"❌ 配置文件不存在: {self.config_path}")
             return {}
         except json.JSONDecodeError as e:
-            print(f"❌ 配置文件格式错误: {e}")
+            logger.error(f"❌ 配置文件格式错误: {e}")
             return {}
     
     def _parse_email_configs(self):
@@ -240,13 +240,13 @@ class EmailScanner:
             dry_run: 测试模式，不发送告警
         """
         if not self.email_configs:
-            print("❌ 未配置邮箱信息或所有邮箱均已禁用")
+            logger.error("❌ 未配置邮箱信息或所有邮箱均已禁用")
             return
         
-        print(f"\n{'='*60}")
-        print(f"📧 开始扫描 {len(self.email_configs)} 个邮箱")
-        print(f"   扫描范围: 最近 {days} 天")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"📧 开始扫描 {len(self.email_configs)} 个邮箱")
+        logger.info(f"   扫描范围: 最近 {days} 天")
+        logger.info(f"{'='*60}\n")
         
         # 扫描每个邮箱
         total_emails = 0
