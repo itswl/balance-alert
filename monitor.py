@@ -171,7 +171,7 @@ class CreditMonitor:
         projects = self.config.get('projects', [])
         
         if not projects:
-            print("⚠️  配置文件中没有项目")
+            logger.warning("⚠️  配置文件中没有项目")
             return
         
         # 过滤项目

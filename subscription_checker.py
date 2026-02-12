@@ -5,6 +5,10 @@
 import json
 from datetime import datetime, timedelta
 from webhook_adapter import WebhookAdapter
+from logger import get_logger
+
+# 创建 logger
+logger = get_logger('subscription_checker')
 
 
 class SubscriptionChecker:
@@ -31,7 +35,7 @@ class SubscriptionChecker:
         subscriptions = self.config.get('subscriptions', [])
         
         if not subscriptions:
-            print("📋 没有配置订阅项目")
+            logger.info("📋 没有配置订阅项目")
             return
         
         # 过滤启用的订阅
@@ -242,7 +246,7 @@ class SubscriptionChecker:
         webhook_source = webhook_config.get('source', 'credit-monitor')
         
         if not webhook_url:
-            print("❌ 未配置 webhook 地址")
+            logger.error("❌ 未配置 webhook 地址")
             return False
         
         # 创建 webhook 适配器
