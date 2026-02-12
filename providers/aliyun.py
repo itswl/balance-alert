@@ -1,17 +1,17 @@
 """
 阿里云余额查询适配器
 """
+from .base import BaseProvider
 import datetime
 import hashlib
 import hmac
 import base64
 from urllib.parse import quote
-import requests
 import json
 import uuid
 
 
-class AliyunProvider:
+class AliyunProvider(BaseProvider):
     """阿里云服务适配器"""
     
     def __init__(self, api_key):
@@ -24,6 +24,7 @@ class AliyunProvider:
         if ':' not in api_key:
             raise ValueError("阿里云 API Key 格式错误，应为 'AccessKeyId:AccessKeySecret' 格式")
         
+        super().__init__(api_key)
         self.access_key_id, self.access_key_secret = api_key.split(':', 1)
         self.endpoint = 'business.aliyuncs.com'
         self.action = 'QueryAccountBalance'
@@ -195,7 +196,7 @@ class AliyunProvider:
         encoded = encoded.replace('%7E', '~')
         return encoded
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "阿里云"

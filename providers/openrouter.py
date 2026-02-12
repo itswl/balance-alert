@@ -1,10 +1,11 @@
 """
 OpenRouter 余额查询适配器
 """
+from .base import BaseProvider
 import requests
 
 
-class OpenRouterProvider:
+class OpenRouterProvider(BaseProvider):
     """OpenRouter 服务商适配器"""
     
     API_URL = "https://openrouter.ai/api/v1/credits"
@@ -16,7 +17,7 @@ class OpenRouterProvider:
         Args:
             api_key: OpenRouter API 密钥
         """
-        self.api_key = api_key
+        super().__init__(api_key)
     
     def get_credits(self):
         """
@@ -32,23 +33,21 @@ class OpenRouterProvider:
                 - raw_data (dict): 原始 API 响应数据
         """
         try:
-            response = requests.get(
+            # 使用基类的请求方法
+            response = self._make_request(
+                'GET',
                 self.API_URL,
                 headers={
                     "Authorization": f"Bearer {self.api_key}"
-                },
-                timeout=10
+                }
             )
             
-            if response.status_code != 200:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"API 请求失败: HTTP {response.status_code}",
-                    'raw_data': response.text
-                }
+            # 使用基类的响应处理方法
+            result = self._handle_response(response)
+            if not result['success']:
+                return result
             
-            data = response.json()
+            data = result['raw_data']
             
             # OpenRouter 返回的数据结构
             # {
@@ -89,34 +88,9 @@ class OpenRouterProvider:
             # 计算可用余额 = 总积分 - 已使用积分
             available_credits = float(total_credits) - float(total_usage)
             
-            return {
-                'success': True,
-                'credits': available_credits,
-                'error': None,
-                'raw_data': data
-            }
+            result['credits'] = available_credits
+            return result
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
-        except ValueError as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"数据类型转换错误: {str(e)}",
-                'raw_data': None
-            }
         except Exception as e:
             return {
                 'success': False,
@@ -125,7 +99,7 @@ class OpenRouterProvider:
                 'raw_data': None
             }
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "OpenRouter"
