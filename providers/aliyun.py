@@ -104,27 +104,30 @@ class AliyunProvider(BaseProvider):
                 'raw_data': response
             }
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
         except Exception as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"未知错误: {str(e)}",
-                'raw_data': None
-            }
+            # 处理各种网络异常
+            error_msg = str(e)
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': "请求超时",
+                    'raw_data': None
+                }
+            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': f"网络连接错误: {error_msg}",
+                    'raw_data': None
+                }
+            else:
+                return {
+                    'success': False,
+                    'credits': None,
+                    'error': f"未知错误: {error_msg}",
+                    'raw_data': None
+                }
     
     def _send_request(self):
         """发送阿里云 API 请求"""
@@ -148,13 +151,9 @@ class AliyunProvider(BaseProvider):
         url = f"https://{self.endpoint}"
         
         try:
-            response = requests.get(url, params=params, timeout=10)
-            
-            if response.status_code != 200:
-                raise Exception(f'HTTP请求失败，状态码：{response.status_code}\n响应内容：{response.text}')
-            
+            # 使用基类的请求方法
+            response = self._make_request('GET', url, params=params)
             return response.json()
-            
         except json.JSONDecodeError:
             raise Exception(f'响应内容不是有效的JSON格式：{response.text}')
     
