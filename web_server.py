@@ -12,7 +12,7 @@ from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
-from config_loader import load_config_with_env_vars
+from config_loader import get_config, start_config_watcher, stop_config_watcher
 import threading
 import time
 
@@ -46,7 +46,7 @@ results_lock = threading.Lock()
 def get_refresh_interval():
     """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
     try:
-        config = load_config_with_env_vars('config.json')
+        config = get_config('config.json')
         interval = config.get('settings', {}).get('balance_refresh_interval_seconds', 3600)
         return max(60, interval)  # 最小60秒（1分钟）
     except Exception as e:
@@ -755,23 +755,32 @@ if __name__ == '__main__':
     web_port = int(os.environ.get('WEB_PORT', '8080'))
     metrics_port = int(os.environ.get('METRICS_PORT', '9100'))
     
-    # 启动后台更新线程
-    update_thread = threading.Thread(target=update_credits, daemon=True)
-    update_thread.start()
+    # 启动配置文件监听器
+    start_config_watcher('config.json')
     
-    # 启动独立的 Prometheus Metrics 服务器
-    from prometheus_client import start_http_server
-    logger.info(f"📊 启动 Prometheus Metrics 服务器...")
-    logger.info(f"🔗 Metrics 端点: http://localhost:{metrics_port}/metrics")
-    start_http_server(metrics_port)
-    
-    # 启动 Flask 服务器
-    logger.info(f"\n🚀 余额监控 Web 服务器启动中...")
-    logger.info(f"📊 访问地址: http://localhost:{web_port}")
-    if ENABLE_WEB_ALARM:
-        logger.warning("⚠️  告警模式: 已启用（Web 会发送真实告警）")
-    else:
-        logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
-    logger.info("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
-    logger.info("")
-    app.run(host='0.0.0.0', port=web_port, debug=False)
+    try:
+        # 启动后台更新线程
+        update_thread = threading.Thread(target=update_credits, daemon=True)
+        update_thread.start()
+        
+        # 启动独立的 Prometheus Metrics 服务器
+        from prometheus_client import start_http_server
+        logger.info(f"📊 启动 Prometheus Metrics 服务器...")
+        logger.info(f"🔗 Metrics 端点: http://localhost:{metrics_port}/metrics")
+        start_http_server(metrics_port)
+        
+        # 启动 Flask 服务器
+        logger.info(f"\n🚀 余额监控 Web 服务器启动中...")
+        logger.info(f"📊 访问地址: http://localhost:{web_port}")
+        if ENABLE_WEB_ALARM:
+            logger.warning("⚠️  告警模式: 已启用（Web 会发送真实告警）")
+        else:
+            logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
+        logger.info("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
+        logger.info("🔄 配置文件自动重载已启用")
+        logger.info("")
+        app.run(host='0.0.0.0', port=web_port, debug=False)
+        
+    finally:
+        # 程序退出时停止监听器
+        stop_config_watcher()
