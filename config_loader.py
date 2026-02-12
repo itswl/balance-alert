@@ -7,7 +7,7 @@
 import os
 import json
 import re
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from threading import Lock, Thread
 from watchdog.observers import Observer
@@ -70,6 +70,35 @@ _config_cache: Optional[Dict[str, Any]] = None
 _config_lock = Lock()
 _config_observer: Optional[Observer] = None
 _config_callback: Optional[Callable] = None
+_config_listeners: List[Callable[[Dict[str, Any]], None]] = []
+
+
+def register_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
+    """注册配置变更监听器"""
+    global _config_listeners
+    with _config_lock:
+        if listener not in _config_listeners:
+            _config_listeners.append(listener)
+            print(f"[Config] 已注册配置监听器: {listener.__name__}")
+
+
+def unregister_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
+    """注销配置变更监听器"""
+    global _config_listeners
+    with _config_lock:
+        if listener in _config_listeners:
+            _config_listeners.remove(listener)
+            print(f"[Config] 已注销配置监听器: {listener.__name__}")
+
+
+def _notify_config_listeners(config: Dict[str, Any]) -> None:
+    """通知所有配置监听器"""
+    listeners_copy = _config_listeners[:]  # 复制列表避免在迭代时修改
+    for listener in listeners_copy:
+        try:
+            listener(config)
+        except Exception as e:
+            print(f"[Config] 监听器 {listener.__name__} 执行失败: {e}")
 
 
 class ConfigFileHandler(FileSystemEventHandler):
@@ -195,6 +224,9 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
         if 'settings' not in config:
             config['settings'] = {}
         config['settings']['balance_refresh_interval_seconds'] = refresh_interval
+    
+    # 通知配置监听器
+    _notify_config_listeners(config)
     
     return config
 

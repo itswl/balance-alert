@@ -14,6 +14,7 @@ from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
 from config_loader import get_config, start_config_watcher, stop_config_watcher
+from state_manager import state_manager
 import threading
 import time
 
@@ -27,22 +28,8 @@ CORS(app)
 # 如果需要 Web 也发送告警，设置环境变量 ENABLE_WEB_ALARM=true
 ENABLE_WEB_ALARM = os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
 
-# 全局变量存储最新的监控结果
-latest_results = {
-    'last_update': None,
-    'projects': [],
-    'summary': {}
-}
-
-# 全局变量存储订阅检查结果
-latest_subscriptions = {
-    'last_update': None,
-    'subscriptions': [],
-    'summary': {}
-}
-
-# 线程锁保护共享状态
-results_lock = threading.Lock()
+# 使用 state_manager 替代全局变量
+# 线程锁已在 state_manager 内部处理
 
 def get_refresh_interval() -> int:
     """从配置文件读取刷新间隔，默认3600秒（60分钟）"""
@@ -56,47 +43,19 @@ def get_refresh_interval() -> int:
 
 
 def update_balance_cache(results: List[Dict[str, Any]]) -> None:
-    """更新余额缓存（线程安全）"""
-    global latest_results
-    with results_lock:
-        latest_results = {
-            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'projects': results,
-            'summary': {
-                'total': len(results),
-                'success': sum(1 for r in results if r['success']),
-                'failed': sum(1 for r in results if not r['success']),
-                'need_alarm': sum(1 for r in results if r.get('need_alarm', False)),
-            }
-        }
+    """更新余额缓存（使用状态管理器）"""
+    state_manager.update_balance_state(results)
 
 
 def update_subscription_cache(results: List[Dict[str, Any]]) -> None:
-    """更新订阅缓存（线程安全）"""
-    global latest_subscriptions
-    with results_lock:
-        latest_subscriptions = {
-            'last_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'subscriptions': results,
-            'summary': {
-                'total': len(results),
-                'need_alert': sum(1 for r in results if r.get('need_alert', False)),
-            }
-        }
+    """更新订阅缓存（使用状态管理器）"""
+    state_manager.update_subscription_state(results)
 
 
 def save_cache_file(balance_results: List[Dict[str, Any]], subscription_results: List[Dict[str, Any]]) -> None:
-    """保存缓存到文件"""
-    cache_data = {
-        'projects': balance_results,
-        'subscriptions': subscription_results
-    }
-    cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
-    try:
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(cache_data, f, ensure_ascii=False)
-    except (OSError, IOError, json.JSONEncodeError) as e:
-        logger.error(f"保存缓存文件失败: {e}")
+    """保存缓存到文件（使用状态管理器）"""
+    # 状态管理器会自动处理保存逻辑
+    state_manager.save_to_cache()
 
 
 def update_credits():
@@ -141,8 +100,7 @@ def index():
 @app.route('/health')
 def health():
     """健康检查端点"""
-    with results_lock:
-        has_data = latest_results.get('last_update') is not None
+    has_data = state_manager.has_data()
     
     status = {
         'status': 'ok' if has_data else 'initializing',
@@ -158,8 +116,7 @@ def health():
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
-    with results_lock:
-        return jsonify(latest_results)
+    return jsonify(state_manager.get_balance_state())
 
 @app.route('/api/refresh')
 def refresh_credits():
@@ -225,8 +182,7 @@ def get_projects_config():
 @app.route('/api/subscriptions')
 def get_subscriptions():
     """获取订阅数据"""
-    with results_lock:
-        return jsonify(latest_subscriptions)
+    return jsonify(state_manager.get_subscription_state())
 
 @app.route('/api/config/subscriptions', methods=['GET'])
 def get_subscriptions_config():
