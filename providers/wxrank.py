@@ -1,11 +1,11 @@
 """
 微信排名积分查询适配器
 """
-import requests
+from .base import BaseProvider
 import re
 
 
-class WxRankProvider:
+class WxRankProvider(BaseProvider):
     """微信排名服务适配器"""
     
     API_URL = "http://data.wxrank.com/weixin/score"
@@ -17,7 +17,7 @@ class WxRankProvider:
         Args:
             api_key: WxRank API 密钥
         """
-        self.api_key = api_key
+        super().__init__(api_key)
     
     def get_credits(self):
         """
@@ -31,21 +31,19 @@ class WxRankProvider:
                 - raw_data (dict): 原始 API 响应数据
         """
         try:
-            response = requests.get(
+            # 使用基类的请求方法
+            response = self._make_request(
+                'GET',
                 self.API_URL,
-                params={'key': self.api_key},
-                timeout=10
+                params={'key': self.api_key}
             )
             
-            if response.status_code != 200:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"API 请求失败: HTTP {response.status_code}",
-                    'raw_data': response.text
-                }
+            # 使用基类的响应处理方法
+            result = self._handle_response(response)
+            if not result['success']:
+                return result
             
-            data = response.json()
+            data = result['raw_data']
             
             # 检查返回码
             if data.get('code') != 0:
@@ -88,27 +86,9 @@ class WxRankProvider:
                     'raw_data': data
                 }
             
-            return {
-                'success': True,
-                'credits': float(credits),
-                'error': None,
-                'raw_data': data
-            }
+            result['credits'] = float(credits)
+            return result
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
         except Exception as e:
             return {
                 'success': False,
@@ -117,7 +97,7 @@ class WxRankProvider:
                 'raw_data': None
             }
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "WxRank"

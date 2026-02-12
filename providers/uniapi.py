@@ -1,10 +1,10 @@
 """
 UniAPI 积分查询适配器
 """
-import requests
+from .base import BaseProvider
 
 
-class UniAPIProvider:
+class UniAPIProvider(BaseProvider):
     """UniAPI 服务商适配器"""
     
     API_URL = "https://api.uniapi.io/v1/billing/usage"
@@ -16,7 +16,7 @@ class UniAPIProvider:
         Args:
             api_key: UniAPI API 密钥
         """
-        self.api_key = api_key
+        super().__init__(api_key)
     
     def get_credits(self):
         """
@@ -32,24 +32,22 @@ class UniAPIProvider:
                 - raw_data (dict): 原始 API 响应数据
         """
         try:
-            response = requests.get(
+            # 使用基类的请求方法
+            response = self._make_request(
+                'GET',
                 self.API_URL,
                 params={"unit": "usd"},
                 headers={
                     "Authorization": f"Bearer {self.api_key}"
-                },
-                timeout=10
+                }
             )
             
-            if response.status_code != 200:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"API 请求失败: HTTP {response.status_code}",
-                    'raw_data': response.text
-                }
+            # 使用基类的响应处理方法
+            result = self._handle_response(response)
+            if not result['success']:
+                return result
             
-            data = response.json()
+            data = result['raw_data']
             
             # UniAPI 返回的数据结构
             # {
@@ -83,28 +81,9 @@ class UniAPIProvider:
                     'raw_data': data
                 }
             
-            # 返回可用积分
-            return {
-                'success': True,
-                'credits': float(balance),
-                'error': None,
-                'raw_data': data
-            }
+            result['credits'] = float(balance)
+            return result
             
-        except requests.exceptions.Timeout:
-            return {
-                'success': False,
-                'credits': None,
-                'error': "请求超时",
-                'raw_data': None
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"网络请求错误: {str(e)}",
-                'raw_data': None
-            }
         except ValueError as e:
             return {
                 'success': False,
@@ -120,7 +99,7 @@ class UniAPIProvider:
                 'raw_data': None
             }
     
-    @staticmethod
-    def get_provider_name():
+    @classmethod
+    def get_provider_name(cls):
         """返回服务商名称"""
         return "UniAPI"
