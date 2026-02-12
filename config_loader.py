@@ -2,96 +2,94 @@
 """
 配置加载模块
 支持从环境变量读取敏感配置，优先于配置文件
+支持配置文件变化监听和自动重载
 """
 import os
 import json
 import re
 from typing import Dict, Any, Optional
+from pathlib import Path
+from threading import Lock, Thread
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 
-def load_env_file(env_file: str = '.env') -> None:
-    """加载 .env 文件到环境变量"""
-    if not os.path.exists(env_file):
-        return
-    
-    with open(env_file, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            key, value = line.split('=', 1)
-            os.environ.setdefault(key, value)
+# 全局配置缓存和锁
+_config_cache: Optional[Dict[str, Any]] = None
+_config_lock = Lock()
+_config_observer: Optional[Observer] = None
+_config_callback = None
 
 
-def get_env(key: str, default: Any = None) -> Any:
-    """获取环境变量，支持类型转换"""
-    value = os.environ.get(key, default)
-    if value is None:
-        return default
+class ConfigFileHandler(FileSystemEventHandler):
+    """配置文件变化处理器"""
     
-    # 布尔值转换
-    if isinstance(default, bool):
-        return value.lower() in ('true', '1', 'yes', 'on')
+    def __init__(self, config_file: str, callback):
+        self.config_file = Path(config_file).resolve()
+        self.callback = callback
     
-    # 整数转换
-    if isinstance(default, int):
-        try:
-            return int(value)
-        except ValueError:
-            return default
+    def on_modified(self, event):
+        """文件修改事件"""
+        if event.is_directory:
+            return
+            
+        event_path = Path(event.src_path).resolve()
+        if event_path == self.config_file:
+            print(f"[Config] 检测到配置文件变化: {event_path}")
+            self.callback()
     
-    # 浮点数转换
-    if isinstance(default, float):
-        try:
-            return float(value)
-        except ValueError:
-            return default
-    
-    return value
+    def on_created(self, event):
+        """文件创建事件"""
+        if event.is_directory:
+            return
+            
+        event_path = Path(event.src_path).resolve()
+        if event_path == self.config_file:
+            print(f"[Config] 检测到配置文件创建: {event_path}")
+            self.callback()
 
 
-def get_api_key_from_env(project_name: str) -> Optional[str]:
-    """从环境变量获取 API Key
+def start_config_watcher(config_file: str = 'config.json', callback=None):
+    """启动配置文件监听器"""
+    global _config_observer, _config_callback
     
-    环境变量命名规则: API_KEY_<项目名称大写>
-    特殊字符替换: - -> _, 空格 -> _, . -> _
+    if _config_observer is not None:
+        # 如果已经在运行，先停止
+        stop_config_watcher()
     
-    示例:
-        项目 "OpenRouter" -> API_KEY_OPENROUTER
-        项目 "Volc-火山引擎" -> API_KEY_VOLC_火山引擎
-    """
-    # 转换项目名称
-    env_name = re.sub(r'[^a-zA-Z0-9]', '_', project_name).upper()
-    env_key = f"API_KEY_{env_name}"
-    return os.environ.get(env_key)
+    _config_callback = callback or clear_config_cache
+    
+    # 创建观察者
+    _config_observer = Observer()
+    handler = ConfigFileHandler(config_file, _config_callback)
+    
+    # 监听配置文件所在目录
+    config_path = Path(config_file)
+    watch_path = config_path.parent.resolve()
+    
+    _config_observer.schedule(handler, str(watch_path), recursive=False)
+    _config_observer.start()
+    
+    print(f"[Config] 开始监听配置文件: {config_path}")
 
 
-def get_email_password_from_env(email_name: str) -> Optional[str]:
-    """从环境变量获取邮箱密码
+def stop_config_watcher():
+    """停止配置文件监听器"""
+    global _config_observer
     
-    环境变量命名规则: EMAIL_PASSWORD_<邮箱名称大写>
-    特殊字符替换: @ -> _, . -> _, - -> _
-    
-    示例:
-        邮箱 "dexxxv@xxx.ai" -> EMAIL_PASSWORD_DEXXXV_XXX_AI
-    """
-    # 转换邮箱名称
-    env_name = re.sub(r'[^a-zA-Z0-9]', '_', email_name).upper()
-    env_key = f"EMAIL_PASSWORD_{env_name}"
-    return os.environ.get(env_key)
+    if _config_observer is not None:
+        _config_observer.stop()
+        _config_observer.join()
+        _config_observer = None
+        print("[Config] 已停止配置文件监听")
 
 
-def get_webhook_from_env() -> Optional[Dict[str, str]]:
-    """从环境变量获取 Webhook 配置"""
-    url = os.environ.get('WEBHOOK_URL')
-    if not url:
-        return None
-    
-    return {
-        'url': url,
-        'type': os.environ.get('WEBHOOK_TYPE', 'feishu'),
-        'source': os.environ.get('WEBHOOK_SOURCE', 'credit-monitor')
-    }
+def clear_config_cache():
+    """清除配置缓存"""
+    global _config_cache
+    with _config_lock:
+        _config_cache = None
+        print("[Config] 配置缓存已清除")
 
 
 def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
@@ -155,6 +153,26 @@ def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
     return load_config_with_env_vars(config_file)
 
 
+def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
+    """获取配置，带缓存和自动重载"""
+    global _config_cache
+    
+    # 如果使用缓存且缓存存在，直接返回
+    if use_cache:
+        with _config_lock:
+            if _config_cache is not None:
+                return _config_cache
+    
+    # 加载新配置
+    config = load_config_with_env_vars(config_file)
+    
+    # 更新缓存
+    with _config_lock:
+        _config_cache = config
+    
+    return config
+
+
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
     """脱敏处理，用于日志输出"""
     import copy
@@ -183,24 +201,3 @@ def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
                     project['api_key'] = '***'
     
     return masked
-
-
-# 全局配置缓存
-_config_cache: Optional[Dict[str, Any]] = None
-
-
-def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
-    """获取配置，带缓存"""
-    global _config_cache
-    
-    if use_cache and _config_cache is not None:
-        return _config_cache
-    
-    _config_cache = load_config(config_file)
-    return _config_cache
-
-
-def clear_config_cache() -> None:
-    """清除配置缓存"""
-    global _config_cache
-    _config_cache = None
