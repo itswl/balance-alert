@@ -7,6 +7,10 @@ import json
 import os
 import requests
 from datetime import datetime
+from logger import get_logger
+
+# 创建 logger
+logger = get_logger('webhook_adapter')
 
 # 从环境变量读取超时时间，默认 10 秒
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
