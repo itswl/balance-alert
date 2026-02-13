@@ -5,9 +5,11 @@
 """
 from flask import Flask, jsonify, render_template, send_from_directory, request
 from flask_cors import CORS
+from functools import wraps
 import json
 import os
 import fcntl
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import hashlib
@@ -16,8 +18,10 @@ from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
 from config_loader import get_config, start_config_watcher, stop_config_watcher
-from state_manager import StateManager, StateManager as StateManagerClass
+from state_manager import StateManager
+import signal
 import threading
+from datetime import datetime
 import time
 
 # 创建 logger
@@ -25,6 +29,45 @@ logger = get_logger('web_server')
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
+
+# API 认证
+API_KEY = os.environ.get('API_KEY', '')
+
+# 请求体大小限制 (1MB)
+MAX_CONTENT_LENGTH = 1 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+
+# 默认刷新间隔常量
+DEFAULT_REFRESH_INTERVAL = 3600  # 默认刷新间隔（秒）
+DEFAULT_MIN_REFRESH_INTERVAL = 60  # 默认最小刷新间隔（秒）
+
+# 刷新接口速率限制
+_refresh_lock = threading.Lock()
+_last_refresh_time = 0.0
+REFRESH_COOLDOWN = 30  # 最少间隔30秒
+
+# 优雅关闭事件
+_stop_event = threading.Event()
+
+# 健康检查常量
+CRON_FAILURE_LOG = '/app/logs/cron_failures.log'
+STALENESS_MULTIPLIER = 3  # last_update 超过 refresh_interval * 此倍数视为过期
+
+
+def require_api_key(f):
+    """API 认证装饰器，仅在设置了 API_KEY 时启用"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not API_KEY:
+            return f(*args, **kwargs)
+        token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+        if not token:
+            token = request.args.get('api_key', '')
+        if token != API_KEY:
+            return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
 
 # 配置：是否在 Web 模式下发送真实告警（默认不发送，避免重复告警）
 # 如果需要 Web 也发送告警，设置环境变量 ENABLE_WEB_ALARM=true
@@ -39,17 +82,17 @@ def get_refresh_interval() -> int:
         settings = config.get('settings', {})
         
         # 获取配置值
-        interval = settings.get('balance_refresh_interval_seconds', 3600)
-        min_interval = settings.get('min_refresh_interval_seconds', 60)
-        
+        interval = settings.get('balance_refresh_interval_seconds', DEFAULT_REFRESH_INTERVAL)
+        min_interval = settings.get('min_refresh_interval_seconds', DEFAULT_MIN_REFRESH_INTERVAL)
+
         # 验证配置合理性
         if not isinstance(interval, (int, float)) or interval <= 0:
-            logger.warning(f"刷新间隔配置无效 ({interval})，使用默认值3600秒")
-            interval = 3600
-            
+            logger.warning(f"刷新间隔配置无效 ({interval})，使用默认值{DEFAULT_REFRESH_INTERVAL}秒")
+            interval = DEFAULT_REFRESH_INTERVAL
+
         if not isinstance(min_interval, (int, float)) or min_interval <= 0:
-            logger.warning(f"最小刷新间隔配置无效 ({min_interval})，使用默认值60秒")
-            min_interval = 60
+            logger.warning(f"最小刷新间隔配置无效 ({min_interval})，使用默认值{DEFAULT_MIN_REFRESH_INTERVAL}秒")
+            min_interval = DEFAULT_MIN_REFRESH_INTERVAL
         
         # 确保刷新间隔不小于最小值
         final_interval = max(min_interval, int(interval))
@@ -58,8 +101,8 @@ def get_refresh_interval() -> int:
         return final_interval
         
     except (KeyError, TypeError, ValueError) as e:
-        logger.warning(f"读取刷新间隔配置失败，使用默认值3600秒: {e}")
-        return 3600
+        logger.warning(f"读取刷新间隔配置失败，使用默认值{DEFAULT_REFRESH_INTERVAL}秒: {e}")
+        return DEFAULT_REFRESH_INTERVAL
 
 
 def get_smart_refresh_config() -> Dict[str, Any]:
@@ -88,6 +131,7 @@ class DataChangeDetector:
     def __init__(self) -> None:
         self._last_data_hash: Dict[str, str] = {}
         self._last_check_time: Dict[str, float] = {}
+        self._lock: threading.Lock = threading.Lock()
 
     def detect_changes(self, data: Dict[str, Any], data_type: str) -> bool:
         """
@@ -104,13 +148,14 @@ class DataChangeDetector:
         data_str = json.dumps(data, sort_keys=True, default=str)
         current_hash = hashlib.md5(data_str.encode()).hexdigest()
 
-        # 比较哈希值
-        last_hash = self._last_data_hash.get(data_type)
-        has_changed = (last_hash != current_hash)
+        with self._lock:
+            # 比较哈希值
+            last_hash = self._last_data_hash.get(data_type)
+            has_changed = (last_hash != current_hash)
 
-        # 更新记录
-        self._last_data_hash[data_type] = current_hash
-        self._last_check_time[data_type] = time.time()
+            # 更新记录
+            self._last_data_hash[data_type] = current_hash
+            self._last_check_time[data_type] = time.time()
 
         if has_changed:
             logger.debug(f"检测到 {data_type} 数据变化")
@@ -128,7 +173,8 @@ class DataChangeDetector:
         Returns:
             bool: 是否应该强制刷新
         """
-        last_check = self._last_check_time.get(data_type, 0)
+        with self._lock:
+            last_check = self._last_check_time.get(data_type, 0)
         elapsed = time.time() - last_check
         max_interval = get_refresh_interval()
         threshold_time = max_interval * (threshold_percent / 100)
@@ -148,30 +194,33 @@ from state_manager import state_manager as global_state_manager
 data_detector = DataChangeDetector()
 
 
-def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManagerClass = global_state_manager) -> None:
+def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManager = global_state_manager) -> None:
     """更新余额缓存（使用状态管理器）"""
     state_mgr.update_balance_state(results)
 
 
-def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateManagerClass = global_state_manager) -> None:
+def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateManager = global_state_manager) -> None:
     """更新订阅缓存（使用状态管理器）"""
     state_mgr.update_subscription_state(results)
 
 
-def save_cache_file(state_mgr: StateManagerClass = global_state_manager) -> None:
+def save_cache_file(state_mgr: StateManager = global_state_manager) -> None:
     """保存缓存到文件（使用状态管理器）"""
     # 状态管理器会自动处理保存逻辑
     state_mgr.save_to_cache()
 
 
 def _write_config(config: Dict[str, Any], config_path: str = 'config.json') -> None:
-    """写入配置文件（带文件锁）"""
-    with open(config_path, 'w', encoding='utf-8') as f:
-        try:
-            fcntl.flock(f, fcntl.LOCK_EX)
+    """原子写入配置文件（写入临时文件后重命名）"""
+    dir_path = os.path.dirname(os.path.abspath(config_path))
+    fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp', prefix='.config_')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+        os.replace(tmp_path, config_path)
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
 
 def _validate_renewal_day(renewal_day: int, cycle_type: str) -> Optional[str]:
@@ -185,7 +234,6 @@ def _validate_renewal_day(renewal_day: int, cycle_type: str) -> Optional[str]:
 
 def _calculate_yearly_renewed_date(renewal_month: int, renewal_day: int) -> Tuple[Optional[str], Optional[str]]:
     """计算年周期的 last_renewed_date，返回 (date_str, error_msg)"""
-    from datetime import datetime
     current_year = datetime.now().year
     try:
         base_date = datetime(current_year, renewal_month, renewal_day)
@@ -196,7 +244,7 @@ def _calculate_yearly_renewed_date(renewal_month: int, renewal_day: int) -> Tupl
         return None, f'{renewal_month}月{renewal_day}日不是有效日期'
 
 
-def refresh_subscription_cache(state_mgr: StateManagerClass = global_state_manager) -> None:
+def refresh_subscription_cache(state_mgr: StateManager = global_state_manager) -> None:
     """重新检查订阅并更新缓存（公共逻辑提取）"""
     try:
         subscription_checker = SubscriptionChecker('config.json')
@@ -206,7 +254,7 @@ def refresh_subscription_cache(state_mgr: StateManagerClass = global_state_manag
         logger.error(f'更新订阅缓存失败: {e}')
 
 
-def update_credits(state_mgr: StateManagerClass = global_state_manager, detector: Optional[DataChangeDetector] = None):
+def update_credits(state_mgr: StateManager = global_state_manager, detector: Optional[DataChangeDetector] = None):
     """
     后台定时更新余额数据
 
@@ -217,7 +265,7 @@ def update_credits(state_mgr: StateManagerClass = global_state_manager, detector
     if detector is None:
         detector = data_detector
 
-    while True:
+    while not _stop_event.is_set():
         try:
             # 获取智能刷新配置
             smart_config = get_smart_refresh_config()
@@ -293,7 +341,8 @@ def update_credits(state_mgr: StateManagerClass = global_state_manager, detector
         else:
             logger.info(f"下次更新将在 {sleep_seconds} 秒后")
 
-        time.sleep(sleep_seconds)
+        # 使用可中断的 sleep
+        _stop_event.wait(sleep_seconds)
 
 @app.route('/')
 def index():
@@ -304,26 +353,91 @@ def index():
 def health():
     """健康检查端点"""
     has_data = global_state_manager.has_data()
+    now = time.time()
+
+    # 数据过期检测
+    data_stale = False
+    if has_data:
+        balance_state = global_state_manager.get_balance_state()
+        last_update_str = balance_state.get('last_update')
+        if last_update_str:
+            try:
+                last_update_dt = datetime.strptime(last_update_str, '%Y-%m-%d %H:%M:%S')
+                age_seconds = now - last_update_dt.timestamp()
+                refresh_interval = get_refresh_interval()
+                if age_seconds > refresh_interval * STALENESS_MULTIPLIER:
+                    data_stale = True
+            except (ValueError, OSError):
+                pass
+
+    # Cron 失败检测
+    cron_healthy = True
+    last_cron_failure = None
+    try:
+        if os.path.exists(CRON_FAILURE_LOG):
+            stat = os.stat(CRON_FAILURE_LOG)
+            if stat.st_size > 0:
+                cron_healthy = False
+                last_cron_failure = datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+    except OSError:
+        pass
+
+    # 决定状态
+    if not has_data:
+        health_status = 'initializing'
+        code = 503
+    elif data_stale or not cron_healthy:
+        health_status = 'degraded'
+        code = 503
+    else:
+        health_status = 'ok'
+        code = 200
 
     status = {
-        'status': 'ok' if has_data else 'initializing',
-        'timestamp': time.time(),
+        'status': health_status,
+        'timestamp': now,
         'has_data': has_data,
+        'data_stale': data_stale,
+        'cron_healthy': cron_healthy,
         'web_alarm_enabled': get_enable_web_alarm()
     }
+    if last_cron_failure:
+        status['last_cron_failure'] = last_cron_failure
 
-    # 如果有数据，返回 200；否则返回 503（服务暂不可用）
-    code = 200 if has_data else 503
     return jsonify(status), code
+
+def _make_etag_response(data):
+    """生成带 ETag 的 JSON 响应，支持 304 Not Modified"""
+    body = json.dumps(data, ensure_ascii=False, sort_keys=True, default=str)
+    etag = '"' + hashlib.md5(body.encode()).hexdigest() + '"'
+
+    if request.headers.get('If-None-Match') == etag:
+        return '', 304
+
+    resp = app.response_class(body, mimetype='application/json')
+    resp.headers['ETag'] = etag
+    return resp
+
 
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
-    return jsonify(global_state_manager.get_balance_state())
+    return _make_etag_response(global_state_manager.get_balance_state())
 
-@app.route('/api/refresh')
+@app.route('/api/refresh', methods=['GET', 'POST'])
+@require_api_key
 def refresh_credits():
-    """手动刷新余额"""
+    """手动刷新余额（带速率限制）"""
+    global _last_refresh_time
+    with _refresh_lock:
+        now = time.time()
+        if now - _last_refresh_time < REFRESH_COOLDOWN:
+            remaining = int(REFRESH_COOLDOWN - (now - _last_refresh_time))
+            return jsonify({
+                'status': 'error',
+                'message': f'刷新过于频繁，请 {remaining} 秒后再试'
+            }), 429
+        _last_refresh_time = now
     try:
         # 刷新余额/积分
         monitor = CreditMonitor('config.json')
@@ -362,7 +476,6 @@ def refresh_credits():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/config/projects', methods=['GET'])
 def load_config_safe(config_path='config.json'):
     """安全加载配置文件"""
     try:
@@ -373,6 +486,7 @@ def load_config_safe(config_path='config.json'):
         return {}
 
 
+@app.route('/api/config/projects', methods=['GET'])
 def get_projects_config():
     """获取所有项目配置"""
     try:
@@ -396,7 +510,7 @@ def get_projects_config():
 @app.route('/api/subscriptions')
 def get_subscriptions():
     """获取订阅数据"""
-    return jsonify(global_state_manager.get_subscription_state())
+    return _make_etag_response(global_state_manager.get_subscription_state())
 
 @app.route('/api/config/subscriptions', methods=['GET'])
 def get_subscriptions_config():
@@ -409,6 +523,7 @@ def get_subscriptions_config():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/subscription', methods=['POST'])
+@require_api_key
 def update_subscription():
     """更新订阅配置"""
     try:
@@ -510,6 +625,7 @@ def update_subscription():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscription/add', methods=['POST'])
+@require_api_key
 def add_subscription():
     """添加新订阅"""
     try:
@@ -619,7 +735,8 @@ def add_subscription():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/subscription/delete', methods=['POST'])
+@app.route('/api/subscription/delete', methods=['POST', 'DELETE'])
+@require_api_key
 def delete_subscription():
     """删除订阅"""
     try:
@@ -671,6 +788,7 @@ def delete_subscription():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscription/mark_renewed', methods=['POST'])
+@require_api_key
 def mark_subscription_renewed():
     """标记订阅已续费"""
     try:
@@ -686,7 +804,6 @@ def mark_subscription_renewed():
         
         # 如果没有提供续费日期，使用今天
         if not renewed_date:
-            from datetime import datetime
             renewed_date = datetime.now().strftime('%Y-%m-%d')
         else:
             # 验证日期格式
@@ -734,6 +851,7 @@ def mark_subscription_renewed():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscription/clear_renewed', methods=['POST'])
+@require_api_key
 def clear_subscription_renewed():
     """清除订阅续费标记"""
     try:
@@ -780,6 +898,7 @@ def clear_subscription_renewed():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/threshold', methods=['POST'])
+@require_api_key
 def update_threshold():
     """更新项目的告警阈值"""
     try:
@@ -852,10 +971,19 @@ if __name__ == '__main__':
     # 从环境变量读取端口配置
     web_port = int(os.environ.get('WEB_PORT', '8080'))
     metrics_port = int(os.environ.get('METRICS_PORT', '9100'))
-    
+
+    # 注册信号处理器实现优雅关闭
+    def _shutdown_handler(signum, frame):
+        sig_name = signal.Signals(signum).name
+        logger.info(f"收到 {sig_name} 信号，正在优雅关闭...")
+        _stop_event.set()
+
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+    signal.signal(signal.SIGINT, _shutdown_handler)
+
     # 启动配置文件监听器
     start_config_watcher('config.json')
-    
+
     try:
         # 启动后台更新线程
         update_thread = threading.Thread(target=update_credits, daemon=True)
@@ -877,8 +1005,17 @@ if __name__ == '__main__':
         logger.info("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
         logger.info("🔄 配置文件自动重载已启用")
         logger.info("")
-        app.run(host='0.0.0.0', port=web_port, debug=False)
+        try:
+            from waitress import serve
+            logger.info("使用 waitress 生产服务器")
+            serve(app, host='0.0.0.0', port=web_port)
+        except ImportError:
+            logger.warning("waitress 未安装，使用 Flask 开发服务器")
+            app.run(host='0.0.0.0', port=web_port, debug=False)
         
     finally:
-        # 程序退出时停止监听器
+        # 优雅关闭：通知后台线程停止
+        _stop_event.set()
+        # 停止配置文件监听器
         stop_config_watcher()
+        logger.info("服务已关闭")

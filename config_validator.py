@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 配置验证模块
-使用 Pydantic 验证配置文件结构
+使用 dataclasses 验证配置文件结构
 """
 from typing import Dict, Any, List, Optional, Literal
 from dataclasses import dataclass, field
@@ -231,6 +231,7 @@ class SettingsConfig:
 @dataclass
 class AppConfig:
     """应用完整配置"""
+    version: Optional[str] = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     webhook: Optional[WebhookConfig] = None
     email: List[EmailConfig] = field(default_factory=list)
@@ -241,6 +242,7 @@ class AppConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
         """从字典创建配置"""
         return cls(
+            version=data.get('version'),
             settings=SettingsConfig.from_dict(data.get('settings', {})),
             webhook=WebhookConfig.from_dict(data.get('webhook', {})) if data.get('webhook') else None,
             email=[EmailConfig.from_dict(e) for e in data.get('email', [])],

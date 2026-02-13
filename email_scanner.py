@@ -5,7 +5,9 @@
 """
 import imaplib
 import email
+import hashlib
 import os
+import sys
 from email.header import decode_header
 import re
 from datetime import datetime, timedelta
@@ -18,6 +20,28 @@ from logger import get_logger
 
 # 创建 logger
 logger = get_logger('email_scanner')
+
+# 邮件扫描常量
+DEFAULT_BATCH_SIZE = 100
+DEFAULT_MAX_EMAILS = 1000
+
+# 默认告警关键词
+DEFAULT_ALERT_KEYWORDS = [
+    # 中文关键词
+    '欠费', '余额不足', '余额预警', '余额告警',
+    '即将到期', '已到期', '续费提醒', '续费通知',
+    '账单逾期', '缴费通知', '请及时续费', '停机',
+    '暂停服务', '服务即将暂停', '充值提醒',
+    # 英文关键词
+    'overdue', 'past due', 'payment due', 'payment overdue',
+    'low balance', 'insufficient balance', 'balance alert',
+    'expiring soon', 'expired', 'expiration notice',
+    'renewal reminder', 'renewal notice', 'renew now',
+    'payment reminder', 'payment required', 'bill overdue',
+    'service suspension', 'service suspended', 'suspended',
+    'recharge reminder', 'top up', 'account suspended',
+    'unpaid invoice', 'outstanding balance', 'payment failed'
+]
 
 
 @contextmanager
@@ -60,24 +84,22 @@ class EmailScanner:
         self.config = self._load_config()
         self.email_configs = self._parse_email_configs()
         self.results = []
-        
-        # 关键词匹配规则
-        self.alert_keywords = [
-            # 中文关键词
-            '欠费', '余额不足', '余额预警', '余额告警',
-            '即将到期', '已到期', '续费提醒', '续费通知',
-            '账单逾期', '缴费通知', '请及时续费', '停机',
-            '暂停服务', '服务即将暂停', '充值提醒',
-            # 英文关键词
-            'overdue', 'past due', 'payment due', 'payment overdue',
-            'low balance', 'insufficient balance', 'balance alert',
-            'expiring soon', 'expired', 'expiration notice',
-            'renewal reminder', 'renewal notice', 'renew now',
-            'payment reminder', 'payment required', 'bill overdue',
-            'service suspension', 'service suspended', 'suspended',
-            'recharge reminder', 'top up', 'account suspended',
-            'unpaid invoice', 'outstanding balance', 'payment failed'
-        ]
+        self._seen_ids = set()  # 邮件去重集合
+
+        # 关键词匹配规则（支持配置覆盖和追加）
+        email_settings = self.config.get('email_settings', {})
+        custom_keywords = email_settings.get('alert_keywords')
+        extra_keywords = email_settings.get('extra_alert_keywords', [])
+
+        if custom_keywords is not None:
+            # 完全替换默认关键词
+            self.alert_keywords = list(custom_keywords)
+        else:
+            self.alert_keywords = list(DEFAULT_ALERT_KEYWORDS)
+
+        # 追加额外关键词
+        if extra_keywords:
+            self.alert_keywords.extend(extra_keywords)
 
         # 预编译关键词正则表达式（性能优化）
         escaped_keywords = [re.escape(kw.lower()) for kw in self.alert_keywords]
@@ -185,6 +207,18 @@ class EmailScanner:
         matched_lower = set(m.lower() for m in matches)
         return [kw for kw in self.alert_keywords if kw.lower() in matched_lower]
     
+    def _get_email_id(self, msg) -> str:
+        """获取邮件唯一标识，优先 Message-ID，回退 md5(date|subject|from)"""
+        message_id = msg.get('Message-ID', '').strip()
+        if message_id:
+            return message_id
+        # 回退方案：用 date+subject+from 的哈希
+        date = msg.get('Date', '')
+        subject = msg.get('Subject', '')
+        sender = msg.get('From', '')
+        raw = f"{date}|{subject}|{sender}"
+        return hashlib.md5(raw.encode('utf-8', errors='ignore')).hexdigest()
+
     def _extract_service_info(self, subject, body):
         """尝试从邮件中提取服务名称和金额信息"""
         full_text = f"{subject}\n{body}"
@@ -245,16 +279,26 @@ class EmailScanner:
         logger.info(f"   扫描范围: 最近 {days} 天")
         logger.info(f"{'='*60}\n")
         
-        # 扫描每个邮箱
+        # 并行扫描邮箱
         total_emails = 0
         total_alerts = 0
-        
-        for i, email_config in enumerate(self.email_configs, 1):
-            logger.info(f"扫描邮箱 [{i}/{len(self.email_configs)}]: {email_config.get('username', 'Unknown')}")
-            
-            emails, alerts = self._scan_single_mailbox(email_config, days, dry_run)
-            total_emails += emails
-            total_alerts += alerts
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        max_workers = min(len(self.email_configs), 5)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_config = {
+                executor.submit(self._scan_single_mailbox, cfg, days, dry_run): cfg
+                for cfg in self.email_configs
+            }
+            for future in as_completed(future_to_config):
+                cfg = future_to_config[future]
+                try:
+                    emails, alerts = future.result()
+                    total_emails += emails
+                    total_alerts += alerts
+                except Exception as e:
+                    logger.error(f"❌ 扫描邮箱 {cfg.get('username', 'Unknown')} 失败: {e}")
         
         # 打印总汇总
         self._print_total_summary(total_emails, total_alerts)
@@ -321,7 +365,7 @@ class EmailScanner:
                 total_emails = len(email_ids)
                 
                 # 应用扫描上限限制
-                max_scan_limit = int(os.environ.get('MAX_EMAILS_TO_SCAN', '1000'))
+                max_scan_limit = int(os.environ.get('MAX_EMAILS_TO_SCAN', str(DEFAULT_MAX_EMAILS)))
                 if total_emails > max_scan_limit:
                     logger.warning(f"📬 邮件数量 {total_emails} 超过上限 {max_scan_limit}，仅扫描最新 {max_scan_limit} 封")
                     # 取最新的邮件（列表末尾是最新邮件）
@@ -334,8 +378,8 @@ class EmailScanner:
                     logger.info("ℹ️  没有需要检查的邮件")
                     return 0, 0
                 
-                # 分批处理邮件，每批最多100封
-                batch_size = 100
+                # 分批处理邮件
+                batch_size = DEFAULT_BATCH_SIZE
                 alert_count = 0
                 processed_count = 0
                 
@@ -347,7 +391,14 @@ class EmailScanner:
                     
                     # 解析邮件
                     msg = email.message_from_bytes(msg_data[0][1])
-                    
+
+                    # 邮件去重
+                    email_uid = self._get_email_id(msg)
+                    if email_uid in self._seen_ids:
+                        processed_count += 1
+                        continue
+                    self._seen_ids.add(email_uid)
+
                     # 获取邮件信息
                     subject = self._decode_str(msg.get('Subject', ''))
                     sender = self._decode_str(msg.get('From', ''))
@@ -474,7 +525,7 @@ def main():
         scanner.scan_emails(days=args.days, dry_run=args.dry_run)
     except Exception as e:
         logger.error(f"错误: {e}")
-        exit(1)
+        sys.exit(1)
 
 
 if __name__ == '__main__':

@@ -53,6 +53,9 @@ class StateManager:
         self._lock: threading.RLock = threading.RLock()
         self._callbacks: List[Callable[[str, Any], None]] = []
         self._cache_file: str = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
+        # 预计算快照，避免每次 get 都 deepcopy
+        self._balance_snapshot: Optional[Dict[str, Any]] = None
+        self._subscription_snapshot: Optional[Dict[str, Any]] = None
     
     def register_callback(self, callback: Callable[[str, Any], None]) -> None:
         """注册状态变更回调函数"""
@@ -84,10 +87,12 @@ class StateManager:
                 'failed': sum(1 for r in projects if not r['success']),
                 'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
             }
-            
+            # 预计算快照
+            self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
+
             # 通知回调
             self._notify_callbacks('balance', self._balance_state)
-            
+
             logger.info(f"余额状态已更新: {self._balance_state.summary}")
     
     def update_subscription_state(self, subscriptions: List[Dict[str, Any]]) -> None:
@@ -99,20 +104,26 @@ class StateManager:
                 'total': len(subscriptions),
                 'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
             }
-            
+            # 预计算快照
+            self._subscription_snapshot = copy.deepcopy(asdict(self._subscription_state))
+
             # 通知回调
             self._notify_callbacks('subscription', self._subscription_state)
-            
+
             logger.info(f"订阅状态已更新: {self._subscription_state.summary}")
     
     def get_balance_state(self) -> Dict[str, Any]:
-        """获取余额状态（线程安全，返回深拷贝快照）"""
+        """获取余额状态（线程安全，返回预计算快照）"""
         with self._lock:
+            if self._balance_snapshot is not None:
+                return self._balance_snapshot
             return copy.deepcopy(asdict(self._balance_state))
-    
+
     def get_subscription_state(self) -> Dict[str, Any]:
-        """获取订阅状态（线程安全，返回深拷贝快照）"""
+        """获取订阅状态（线程安全，返回预计算快照）"""
         with self._lock:
+            if self._subscription_snapshot is not None:
+                return self._subscription_snapshot
             return copy.deepcopy(asdict(self._subscription_state))
     
     def has_data(self) -> bool:
@@ -123,22 +134,23 @@ class StateManager:
     def save_to_cache(self) -> bool:
         """保存状态到缓存文件"""
         try:
-            cache_data = {
-                'projects': self._balance_state.projects,
-                'subscriptions': self._subscription_state.subscriptions,
-                'metadata': {
-                    'balance_last_update': self._balance_state.last_update,
-                    'subscription_last_update': self._subscription_state.last_update,
-                    'saved_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            with self._lock:
+                cache_data = {
+                    'projects': copy.deepcopy(self._balance_state.projects),
+                    'subscriptions': copy.deepcopy(self._subscription_state.subscriptions),
+                    'metadata': {
+                        'balance_last_update': self._balance_state.last_update,
+                        'subscription_last_update': self._subscription_state.last_update,
+                        'saved_at': time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
                 }
-            }
-            
+
             with open(self._cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
-            
+
             logger.info(f"状态已保存到缓存文件: {self._cache_file}")
             return True
-            
+
         except (OSError, IOError, json.JSONEncodeError) as e:
             logger.error(f"保存缓存文件失败: {e}")
             return False
@@ -181,19 +193,25 @@ class StateManager:
             'failed': sum(1 for r in projects if not r['success']),
             'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
         }
-        
+
         # 重建订阅摘要
         subscriptions = self._subscription_state.subscriptions
         self._subscription_state.summary = {
             'total': len(subscriptions),
             'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
         }
+
+        # 重建快照
+        self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
+        self._subscription_snapshot = copy.deepcopy(asdict(self._subscription_state))
     
     def clear_state(self) -> None:
         """清空所有状态"""
         with self._lock:
             self._balance_state = BalanceState()
             self._subscription_state = SubscriptionState()
+            self._balance_snapshot = None
+            self._subscription_snapshot = None
             logger.info("状态已清空")
 
 
