@@ -12,6 +12,7 @@ from email.header import decode_header
 import re
 from datetime import datetime, timedelta
 import json
+from collections import OrderedDict
 from contextlib import contextmanager
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from webhook_adapter import WebhookAdapter
@@ -24,6 +25,7 @@ logger = get_logger('email_scanner')
 # 邮件扫描常量
 DEFAULT_BATCH_SIZE = 100
 DEFAULT_MAX_EMAILS = 1000
+MAX_SEEN_IDS = 10000
 
 # 默认告警关键词
 DEFAULT_ALERT_KEYWORDS = [
@@ -84,7 +86,7 @@ class EmailScanner:
         self.config = self._load_config()
         self.email_configs = self._parse_email_configs()
         self.results = []
-        self._seen_ids = set()  # 邮件去重集合
+        self._seen_ids = OrderedDict()  # 邮件去重集合（有界，FIFO 淘汰）
 
         # 关键词匹配规则（支持配置覆盖和追加）
         email_settings = self.config.get('email_settings', {})
@@ -382,71 +384,72 @@ class EmailScanner:
                 batch_size = DEFAULT_BATCH_SIZE
                 alert_count = 0
                 processed_count = 0
-                
-                for i, email_id in enumerate(email_ids):
-                    status, msg_data = mail.fetch(email_id, '(RFC822)')
-                    
-                    if status != 'OK':
-                        continue
-                    
-                    # 解析邮件
-                    msg = email.message_from_bytes(msg_data[0][1])
 
-                    # 邮件去重
-                    email_uid = self._get_email_id(msg)
-                    if email_uid in self._seen_ids:
+                # 按批次获取邮件
+                for batch_start in range(0, len(email_ids), batch_size):
+                    batch_ids = email_ids[batch_start:batch_start + batch_size]
+
+                    # 尝试批量 fetch
+                    fetched_messages = self._batch_fetch_emails(mail, batch_ids)
+
+                    for msg in fetched_messages:
+                        # 邮件去重
+                        email_uid = self._get_email_id(msg)
+                        if email_uid in self._seen_ids:
+                            processed_count += 1
+                            continue
+                        self._seen_ids[email_uid] = None
+                        if len(self._seen_ids) > MAX_SEEN_IDS:
+                            self._seen_ids.popitem(last=False)
+
+                        # 获取邮件信息
+                        subject = self._decode_str(msg.get('Subject', ''))
+                        sender = self._decode_str(msg.get('From', ''))
+                        date = self._decode_str(msg.get('Date', ''))
+
+                        # 提取邮件正文
+                        body = self._extract_text_from_email(msg)
+
+                        # 检查是否包含告警关键词
+                        matched_keywords = self._check_alert_keywords(subject, body)
+
+                        if matched_keywords:
+                            alert_count += 1
+                            # 尝试提取服务信息
+                            service_name, amount = self._extract_service_info(subject, body)
+
+                            amount_str = f" | 金额: ¥{amount}" if amount else ""
+                            logger.warning(
+                                f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
+                                f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
+                                f"服务: {service_name}{amount_str}"
+                            )
+
+                            # 记录结果
+                            result = {
+                                'mailbox': mailbox_name,
+                                'subject': subject,
+                                'sender': sender,
+                                'date': date,
+                                'keywords': matched_keywords,
+                                'service_name': service_name,
+                                'amount': amount,
+                                'alert_sent': False
+                            }
+
+                            # 发送告警
+                            if not dry_run:
+                                alert_sent = self._send_alert(result)
+                                result['alert_sent'] = alert_sent
+                            else:
+                                logger.info("[测试模式] 跳过发送告警")
+
+                            self.results.append(result)
+
                         processed_count += 1
-                        continue
-                    self._seen_ids.add(email_uid)
 
-                    # 获取邮件信息
-                    subject = self._decode_str(msg.get('Subject', ''))
-                    sender = self._decode_str(msg.get('From', ''))
-                    date = self._decode_str(msg.get('Date', ''))
-                    
-                    # 提取邮件正文
-                    body = self._extract_text_from_email(msg)
-                    
-                    # 检查是否包含告警关键词
-                    matched_keywords = self._check_alert_keywords(subject, body)
-                    
-                    if matched_keywords:
-                        alert_count += 1
-                        # 尝试提取服务信息
-                        service_name, amount = self._extract_service_info(subject, body)
-
-                        amount_str = f" | 金额: ¥{amount}" if amount else ""
-                        logger.warning(
-                            f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
-                            f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
-                            f"服务: {service_name}{amount_str}"
-                        )
-                        
-                        # 记录结果
-                        result = {
-                            'mailbox': mailbox_name,
-                            'subject': subject,
-                            'sender': sender,
-                            'date': date,
-                            'keywords': matched_keywords,
-                            'service_name': service_name,
-                            'amount': amount,
-                            'alert_sent': False
-                        }
-                        
-                        # 发送告警
-                        if not dry_run:
-                            alert_sent = self._send_alert(result)
-                            result['alert_sent'] = alert_sent
-                        else:
-                            logger.info("[测试模式] 跳过发送告警")
-                        
-                        self.results.append(result)
-                    
-                    processed_count += 1
-                    
-                    # 每处理100封邮件，打印进度
-                    if processed_count % batch_size == 0:
+                    # 每批次打印进度
+                    if processed_count > 0:
                         logger.info(f"扫描进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
                 
                 # 打印单个邮箱汇总
@@ -464,6 +467,41 @@ class EmailScanner:
             logger.error(f"❌ 扫描失败: {e}", exc_info=True)
             return 0, 0
     
+    def _batch_fetch_emails(self, mail, batch_ids):
+        """批量获取邮件，失败时降级为逐条获取
+
+        Args:
+            mail: IMAP 连接对象
+            batch_ids: 邮件 ID 列表
+
+        Returns:
+            list: 解析后的邮件消息列表
+        """
+        messages = []
+
+        # 尝试批量 fetch
+        try:
+            joined_ids = b','.join(batch_ids)
+            status, msg_data = mail.fetch(joined_ids, '(RFC822)')
+            if status == 'OK':
+                for item in msg_data:
+                    if isinstance(item, tuple):
+                        messages.append(email.message_from_bytes(item[1]))
+                return messages
+        except Exception as e:
+            logger.warning(f"批量 fetch 失败，降级为逐条获取: {e}")
+
+        # 降级：逐条 fetch
+        messages = []
+        for email_id in batch_ids:
+            try:
+                status, msg_data = mail.fetch(email_id, '(RFC822)')
+                if status == 'OK':
+                    messages.append(email.message_from_bytes(msg_data[0][1]))
+            except Exception as e:
+                logger.warning(f"获取邮件 {email_id} 失败: {e}")
+        return messages
+
     def _send_alert(self, email_info):
         """发送告警通知"""
         webhook_config = self.config.get('webhook', {})

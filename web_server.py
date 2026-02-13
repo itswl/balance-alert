@@ -210,6 +210,13 @@ def save_cache_file(state_mgr: StateManager = global_state_manager) -> None:
     state_mgr.save_to_cache()
 
 
+def _audit_log(action: str, details: Dict[str, Any]) -> None:
+    """记录配置变更审计日志"""
+    ip = request.remote_addr if request else 'N/A'
+    details_json = json.dumps(details, ensure_ascii=False, default=str)
+    logger.info(f"[AUDIT] {action} | ip={ip} | {details_json}")
+
+
 def _write_config(config: Dict[str, Any], config_path: str = 'config.json') -> None:
     """原子写入配置文件（写入临时文件后重命名）"""
     dir_path = os.path.dirname(os.path.abspath(config_path))
@@ -609,10 +616,11 @@ def update_subscription():
                 'status': 'error',
                 'message': f'未找到订阅: {subscription_name}'
             }), 404
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('update_subscription', {'subscription': subscription_name, 'fields': list(data.keys())})
+
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
@@ -715,10 +723,11 @@ def add_subscription():
         # 添加到配置
         subscriptions.append(new_subscription)
         config['subscriptions'] = subscriptions
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('add_subscription', {'subscription': name, 'cycle_type': cycle_type, 'amount': amount})
+
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
@@ -772,10 +781,11 @@ def delete_subscription():
         
         # 更新配置
         config['subscriptions'] = new_subscriptions
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('delete_subscription', {'subscription': subscription_name})
+
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
@@ -831,10 +841,11 @@ def mark_subscription_renewed():
                 'status': 'error',
                 'message': f'未找到订阅: {subscription_name}'
             }), 404
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('mark_renewed', {'subscription': subscription_name, 'renewed_date': renewed_date})
+
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
@@ -882,10 +893,11 @@ def clear_subscription_renewed():
                 'status': 'error',
                 'message': f'未找到订阅: {subscription_name}'
             }), 404
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('clear_renewed', {'subscription': subscription_name})
+
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
@@ -940,10 +952,11 @@ def update_threshold():
                 'status': 'error',
                 'message': f'未找到项目: {project_name}'
             }), 404
-        
+
         # 保存配置文件
         _write_config(config)
-        
+        _audit_log('update_threshold', {'project': project_name, 'old': old_threshold, 'new': new_threshold})
+
         # 立即重新检查一次，更新缓存
         try:
             monitor = CreditMonitor('config.json')

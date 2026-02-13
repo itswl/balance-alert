@@ -273,6 +273,9 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
                     error_messages.append(f"    - {err}")
             logger.warning(f"配置验证发现以下问题:\n" + "\n".join(error_messages))
 
+    # 调试日志：输出脱敏配置
+    logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
+
     # 通知配置监听器
     _notify_config_listeners(config)
 

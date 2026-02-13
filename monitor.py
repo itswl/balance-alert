@@ -31,6 +31,33 @@ DEFAULT_RESPONSE_CACHE_TTL = 300  # 默认缓存 5 分钟
 _response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
 
+# Provider 实例缓存（复用 Session，避免每次创建新实例）
+PROVIDER_CACHE_TTL = 600  # 实例缓存 10 分钟
+_provider_cache: Dict[str, Tuple[float, Any]] = {}
+
+
+def _get_or_create_provider(provider_name: str, api_key: str) -> Any:
+    """获取或创建 Provider 实例（带 TTL 缓存）"""
+    cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
+    now = time.time()
+
+    with _cache_lock:
+        if cache_key in _provider_cache:
+            cached_time, cached_provider = _provider_cache[cache_key]
+            if now - cached_time < PROVIDER_CACHE_TTL:
+                return cached_provider
+            # TTL 过期，移除旧实例
+            del _provider_cache[cache_key]
+
+    # 在锁外创建新实例
+    provider_class = get_provider(provider_name)
+    provider = provider_class(api_key)
+
+    with _cache_lock:
+        _provider_cache[cache_key] = (now, provider)
+
+    return provider
+
 
 class CreditMonitor:
     """余额监控器"""
@@ -91,10 +118,9 @@ class CreditMonitor:
         
         logger.info(f"检查项目: {project_name} | 服务商: {provider_name} | 告警阈值: {threshold}")
         
-        # 获取服务商适配器
+        # 获取服务商适配器（复用缓存实例）
         try:
-            provider_class = get_provider(provider_name)
-            provider = provider_class(api_key)
+            provider = _get_or_create_provider(provider_name, api_key)
         except ValueError as e:
             error_msg = str(e)
             logger.error(f"❌ {error_msg}")
