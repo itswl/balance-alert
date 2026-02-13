@@ -7,14 +7,16 @@ from flask import Flask, jsonify, render_template, send_from_directory, request
 from flask_cors import CORS
 import json
 import os
+import fcntl
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Optional, Tuple
+import hashlib
 from monitor import CreditMonitor
 from subscription_checker import SubscriptionChecker
 from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
 from config_loader import get_config, start_config_watcher, stop_config_watcher
-from state_manager import state_manager
+from state_manager import StateManager, StateManager as StateManagerClass
 import threading
 import time
 
@@ -26,10 +28,9 @@ CORS(app)
 
 # 配置：是否在 Web 模式下发送真实告警（默认不发送，避免重复告警）
 # 如果需要 Web 也发送告警，设置环境变量 ENABLE_WEB_ALARM=true
-ENABLE_WEB_ALARM = os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
-
-# 使用 state_manager 替代全局变量
-# 线程锁已在 state_manager 内部处理
+def get_enable_web_alarm() -> bool:
+    """动态读取 ENABLE_WEB_ALARM 环境变量"""
+    return os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
 
 def get_refresh_interval() -> int:
     """从配置文件读取刷新间隔"""
@@ -83,50 +84,47 @@ def get_smart_refresh_config() -> Dict[str, Any]:
 
 class DataChangeDetector:
     """数据变化检测器，用于智能刷新"""
-    
-    def __init__(self):
-        self._last_data_hash = {}
-        self._last_check_time = {}
-    
+
+    def __init__(self) -> None:
+        self._last_data_hash: Dict[str, str] = {}
+        self._last_check_time: Dict[str, float] = {}
+
     def detect_changes(self, data: Dict[str, Any], data_type: str) -> bool:
         """
         检测数据是否发生变化
-        
+
         Args:
             data: 当前数据
             data_type: 数据类型标识
-            
+
         Returns:
             bool: 是否发生变化
         """
-        import hashlib
-        import json
-        
         # 生成数据哈希
         data_str = json.dumps(data, sort_keys=True, default=str)
         current_hash = hashlib.md5(data_str.encode()).hexdigest()
-        
+
         # 比较哈希值
         last_hash = self._last_data_hash.get(data_type)
         has_changed = (last_hash != current_hash)
-        
+
         # 更新记录
         self._last_data_hash[data_type] = current_hash
         self._last_check_time[data_type] = time.time()
-        
+
         if has_changed:
             logger.debug(f"检测到 {data_type} 数据变化")
-        
+
         return has_changed
-    
+
     def should_force_refresh(self, data_type: str, threshold_percent: float = 5) -> bool:
         """
         判断是否应该强制刷新（即使数据未变化）
-        
+
         Args:
             data_type: 数据类型标识
             threshold_percent: 强制刷新阈值百分比
-            
+
         Returns:
             bool: 是否应该强制刷新
         """
@@ -134,103 +132,158 @@ class DataChangeDetector:
         elapsed = time.time() - last_check
         max_interval = get_refresh_interval()
         threshold_time = max_interval * (threshold_percent / 100)
-        
+
         should_refresh = elapsed >= threshold_time
         if should_refresh:
             logger.debug(f"{data_type} 达到强制刷新时间阈值 ({elapsed:.1f}s >= {threshold_time:.1f}s)")
-        
+
         return should_refresh
 
 
-def update_balance_cache(results: List[Dict[str, Any]]) -> None:
-    """更新余额缓存（使用状态管理器）"""
-    state_manager.update_balance_state(results)
-
-
-def update_subscription_cache(results: List[Dict[str, Any]]) -> None:
-    """更新订阅缓存（使用状态管理器）"""
-    state_manager.update_subscription_state(results)
-
-
-def save_cache_file(balance_results: List[Dict[str, Any]], subscription_results: List[Dict[str, Any]]) -> None:
-    """保存缓存到文件（使用状态管理器）"""
-    # 状态管理器会自动处理保存逻辑
-    state_manager.save_to_cache()
-
+# 全局状态管理器实例（向后兼容）
+# 新代码建议通过参数传递
+from state_manager import state_manager as global_state_manager
 
 # 全局数据变化检测器
 data_detector = DataChangeDetector()
 
 
-def update_credits():
-    """后台定时更新余额数据"""
+def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManagerClass = global_state_manager) -> None:
+    """更新余额缓存（使用状态管理器）"""
+    state_mgr.update_balance_state(results)
+
+
+def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateManagerClass = global_state_manager) -> None:
+    """更新订阅缓存（使用状态管理器）"""
+    state_mgr.update_subscription_state(results)
+
+
+def save_cache_file(state_mgr: StateManagerClass = global_state_manager) -> None:
+    """保存缓存到文件（使用状态管理器）"""
+    # 状态管理器会自动处理保存逻辑
+    state_mgr.save_to_cache()
+
+
+def _write_config(config: Dict[str, Any], config_path: str = 'config.json') -> None:
+    """写入配置文件（带文件锁）"""
+    with open(config_path, 'w', encoding='utf-8') as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _validate_renewal_day(renewal_day: int, cycle_type: str) -> Optional[str]:
+    """验证续费日期，返回错误消息或 None"""
+    if cycle_type == 'weekly' and (renewal_day < 1 or renewal_day > 7):
+        return '周周期的续费日期必须在 1-7 之间'
+    elif (cycle_type == 'monthly' or cycle_type == 'yearly') and (renewal_day < 1 or renewal_day > 31):
+        return '续费日期必须在 1-31 之间' if cycle_type == 'monthly' else '月/年周期的续费日期必须在 1-31 之间'
+    return None
+
+
+def _calculate_yearly_renewed_date(renewal_month: int, renewal_day: int) -> Tuple[Optional[str], Optional[str]]:
+    """计算年周期的 last_renewed_date，返回 (date_str, error_msg)"""
+    from datetime import datetime
+    current_year = datetime.now().year
+    try:
+        base_date = datetime(current_year, renewal_month, renewal_day)
+        if base_date > datetime.now():
+            base_date = datetime(current_year - 1, renewal_month, renewal_day)
+        return base_date.strftime('%Y-%m-%d'), None
+    except ValueError:
+        return None, f'{renewal_month}月{renewal_day}日不是有效日期'
+
+
+def refresh_subscription_cache(state_mgr: StateManagerClass = global_state_manager) -> None:
+    """重新检查订阅并更新缓存（公共逻辑提取）"""
+    try:
+        subscription_checker = SubscriptionChecker('config.json')
+        subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+        update_subscription_cache(subscription_checker.results, state_mgr)
+    except Exception as e:
+        logger.error(f'更新订阅缓存失败: {e}')
+
+
+def update_credits(state_mgr: StateManagerClass = global_state_manager, detector: Optional[DataChangeDetector] = None):
+    """
+    后台定时更新余额数据
+
+    Args:
+        state_mgr: 状态管理器实例（默认使用全局实例）
+        detector: 数据变化检测器（默认使用全局实例）
+    """
+    if detector is None:
+        detector = data_detector
+
     while True:
         try:
             # 获取智能刷新配置
             smart_config = get_smart_refresh_config()
             smart_refresh_enabled = smart_config['enabled']
-            
+
             logger.info(f"开始更新数据 (智能刷新: {'启用' if smart_refresh_enabled else '禁用'})")
-            
+
             # 更新余额/积分数据
             monitor = CreditMonitor('config.json')
-            monitor.run(dry_run=not ENABLE_WEB_ALARM)
-            
+            monitor.run(dry_run=not get_enable_web_alarm())
+
             # 检测余额数据变化（智能刷新）
             balance_changed = False
             if smart_refresh_enabled:
-                balance_changed = data_detector.detect_changes(
-                    monitor.results, 
+                balance_changed = detector.detect_changes(
+                    monitor.results,
                     'balance'
                 )
-            
+
             # 更新缓存
-            update_balance_cache(monitor.results)
-            
+            update_balance_cache(monitor.results, state_mgr)
+
             # 更新订阅数据
             subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
+            subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+
             # 检测订阅数据变化（智能刷新）
             subscription_changed = False
             if smart_refresh_enabled:
-                subscription_changed = data_detector.detect_changes(
-                    subscription_checker.results, 
+                subscription_changed = detector.detect_changes(
+                    subscription_checker.results,
                     'subscription'
                 )
-            
+
             # 更新缓存
-            update_subscription_cache(subscription_checker.results)
-            
+            update_subscription_cache(subscription_checker.results, state_mgr)
+
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
             metrics_collector.update_subscription_metrics(subscription_checker.results)
-            
+
             # 保存缓存到文件
-            save_cache_file(monitor.results, subscription_checker.results)
-            
+            save_cache_file(state_mgr)
+
             # 智能刷新日志
             if smart_refresh_enabled:
                 logger.info(f"数据更新完成 - 余额变化: {'是' if balance_changed else '否'}, "
                            f"订阅变化: {'是' if subscription_changed else '否'}")
-            
-        except (RuntimeError, ValueError, KeyError) as e:
+
+        except Exception as e:
             logger.error(f"更新数据失败: {e}", exc_info=True)
             metrics_collector.set_check_failed('balance')
-        
+
         # 根据配置间隔等待
         sleep_seconds = get_refresh_interval()
-        
+
         # 智能刷新逻辑
         if smart_config['enabled']:
             # 检查是否需要强制刷新
-            force_balance_refresh = data_detector.should_force_refresh(
+            force_balance_refresh = detector.should_force_refresh(
                 'balance', smart_config['threshold_percent']
             )
-            force_subscription_refresh = data_detector.should_force_refresh(
+            force_subscription_refresh = detector.should_force_refresh(
                 'subscription', smart_config['threshold_percent']
             )
-            
+
             if force_balance_refresh or force_subscription_refresh:
                 logger.info(f"达到强制刷新阈值，下次将在 {sleep_seconds} 秒后更新")
             elif balance_changed or subscription_changed:
@@ -239,7 +292,7 @@ def update_credits():
                 logger.info(f"数据无变化，下次将在 {sleep_seconds} 秒后更新")
         else:
             logger.info(f"下次更新将在 {sleep_seconds} 秒后")
-        
+
         time.sleep(sleep_seconds)
 
 @app.route('/')
@@ -250,15 +303,15 @@ def index():
 @app.route('/health')
 def health():
     """健康检查端点"""
-    has_data = state_manager.has_data()
-    
+    has_data = global_state_manager.has_data()
+
     status = {
         'status': 'ok' if has_data else 'initializing',
         'timestamp': time.time(),
         'has_data': has_data,
-        'web_alarm_enabled': ENABLE_WEB_ALARM
+        'web_alarm_enabled': get_enable_web_alarm()
     }
-    
+
     # 如果有数据，返回 200；否则返回 503（服务暂不可用）
     code = 200 if has_data else 503
     return jsonify(status), code
@@ -266,7 +319,7 @@ def health():
 @app.route('/api/credits')
 def get_credits():
     """获取所有项目余额"""
-    return jsonify(state_manager.get_balance_state())
+    return jsonify(global_state_manager.get_balance_state())
 
 @app.route('/api/refresh')
 def refresh_credits():
@@ -274,31 +327,31 @@ def refresh_credits():
     try:
         # 刷新余额/积分
         monitor = CreditMonitor('config.json')
-        monitor.run(dry_run=not ENABLE_WEB_ALARM)
-        
+        monitor.run(dry_run=not get_enable_web_alarm())
+
         # 使用公共方法更新缓存
-        update_balance_cache(monitor.results)
-        
+        update_balance_cache(monitor.results, global_state_manager)
+
         # 刷新订阅
         subscription_checker = SubscriptionChecker('config.json')
-        subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-        
+        subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+
         # 使用公共方法更新缓存
-        update_subscription_cache(subscription_checker.results)
-        
+        update_subscription_cache(subscription_checker.results, global_state_manager)
+
         # 更新 Prometheus 指标
         metrics_collector.update_balance_metrics(monitor.results)
         metrics_collector.update_subscription_metrics(subscription_checker.results)
-        
+
         # 保存缓存到文件
-        save_cache_file(monitor.results, subscription_checker.results)
-        
+        save_cache_file(global_state_manager)
+
         # 返回最新的状态数据
-        balance_state = state_manager.get_balance_state()
-        subscription_state = state_manager.get_subscription_state()
-        
+        balance_state = global_state_manager.get_balance_state()
+        subscription_state = global_state_manager.get_subscription_state()
+
         return jsonify({
-            'status': 'success', 
+            'status': 'success',
             'data': {
                 'last_update': balance_state.get('last_update'),
                 'projects': balance_state.get('projects', []),
@@ -306,7 +359,7 @@ def refresh_credits():
                 'subscriptions': subscription_state.get('subscriptions', [])
             }
         })
-    except (RuntimeError, ValueError, KeyError) as e:
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/projects', methods=['GET'])
@@ -337,13 +390,13 @@ def get_projects_config():
             })
         
         return jsonify({'status': 'success', 'projects': projects})
-    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscriptions')
 def get_subscriptions():
     """获取订阅数据"""
-    return jsonify(state_manager.get_subscription_state())
+    return jsonify(global_state_manager.get_subscription_state())
 
 @app.route('/api/config/subscriptions', methods=['GET'])
 def get_subscriptions_config():
@@ -352,7 +405,7 @@ def get_subscriptions_config():
         config = load_config_safe()
         subscriptions = config.get('subscriptions', [])
         return jsonify({'status': 'success', 'subscriptions': subscriptions})
-    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/config/subscription', methods=['POST'])
@@ -389,40 +442,28 @@ def update_subscription():
                 if 'renewal_day' in data:
                     renewal_day = int(data['renewal_day'])
                     cycle_type = sub.get('cycle_type', 'monthly')
-                    
+
                     # 根据周期类型验证
-                    if cycle_type == 'weekly' and (renewal_day < 1 or renewal_day > 7):
+                    error_msg = _validate_renewal_day(renewal_day, cycle_type)
+                    if error_msg:
                         return jsonify({
                             'status': 'error',
-                            'message': '周周期的续费日期必须在 1-7 之间'
+                            'message': error_msg
                         }), 400
-                    elif (cycle_type == 'monthly' or cycle_type == 'yearly') and (renewal_day < 1 or renewal_day > 31):
-                        return jsonify({
-                            'status': 'error',
-                            'message': '续费日期必须在 1-31 之间'
-                        }), 400
-                    
+
                     sub['renewal_day'] = renewal_day
                 
                 # 如果是年周期且提供了月份，更新 last_renewed_date
                 if 'renewal_month' in data and sub.get('cycle_type') == 'yearly':
-                    from datetime import datetime
                     renewal_month = int(data['renewal_month'])
                     renewal_day = sub.get('renewal_day', 1)
-                    current_year = datetime.now().year
-                    
-                    try:
-                        # 设置一个基准日期（使用当前年份或去年）
-                        base_date = datetime(current_year, renewal_month, renewal_day)
-                        # 如果这个日期还没到，使用去年
-                        if base_date > datetime.now():
-                            base_date = datetime(current_year - 1, renewal_month, renewal_day)
-                        sub['last_renewed_date'] = base_date.strftime('%Y-%m-%d')
-                    except ValueError:
+                    date_str, error_msg = _calculate_yearly_renewed_date(renewal_month, renewal_day)
+                    if error_msg:
                         return jsonify({
                             'status': 'error',
-                            'message': f'{renewal_month}月{renewal_day}日不是有效日期'
+                            'message': error_msg
                         }), 400
+                    sub['last_renewed_date'] = date_str
                 
                 if 'alert_days_before' in data:
                     alert_days = int(data['alert_days_before'])
@@ -455,19 +496,11 @@ def update_subscription():
             }), 404
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
-        try:
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
-            # 使用公共方法更新缓存（线程安全）
-            update_subscription_cache(subscription_checker.results)
-        except Exception as e:
-            logger.error(f'更新订阅缓存失败: {e}')
-        
+        refresh_subscription_cache(global_state_manager)
+
         return jsonify({
             'status': 'success',
             'message': f'订阅 [{subscription_name}] 配置已更新'
@@ -508,15 +541,11 @@ def add_subscription():
         
         renewal_day = int(data['renewal_day'])
         # 根据周期类型验证续费日
-        if cycle_type == 'weekly' and (renewal_day < 1 or renewal_day > 7):
+        error_msg = _validate_renewal_day(renewal_day, cycle_type)
+        if error_msg:
             return jsonify({
                 'status': 'error',
-                'message': '周周期的续费日期必须在 1-7 之间'
-            }), 400
-        elif cycle_type == 'monthly' and (renewal_day < 1 or renewal_day > 31):
-            return jsonify({
-                'status': 'error',
-                'message': '月周期的续费日期必须在 1-31 之间'
+                'message': error_msg
             }), 400
         
         alert_days = int(data['alert_days_before'])
@@ -558,41 +587,25 @@ def add_subscription():
         
         # 如果是年周期且提供了月份，设置 last_renewed_date
         if cycle_type == 'yearly' and 'renewal_month' in data:
-            from datetime import datetime
             renewal_month = int(data['renewal_month'])
-            current_year = datetime.now().year
-            
-            try:
-                # 设置基准日期
-                base_date = datetime(current_year, renewal_month, renewal_day)
-                # 如果这个日期还没到，使用去年
-                if base_date > datetime.now():
-                    base_date = datetime(current_year - 1, renewal_month, renewal_day)
-                new_subscription['last_renewed_date'] = base_date.strftime('%Y-%m-%d')
-            except ValueError:
+            date_str, error_msg = _calculate_yearly_renewed_date(renewal_month, renewal_day)
+            if error_msg:
                 return jsonify({
                     'status': 'error',
-                    'message': f'{renewal_month}月{renewal_day}日不是有效日期'
+                    'message': error_msg
                 }), 400
+            new_subscription['last_renewed_date'] = date_str
         
         # 添加到配置
         subscriptions.append(new_subscription)
         config['subscriptions'] = subscriptions
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
-        try:
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
-            # 使用公共方法更新缓存（线程安全）
-            update_subscription_cache(subscription_checker.results)
-        except Exception as e:
-            logger.error(f'更新订阅缓存失败: {e}')
-        
+        refresh_subscription_cache(global_state_manager)
+
         return jsonify({
             'status': 'success',
             'message': f'订阅 [{name}] 已成功添加'
@@ -644,19 +657,11 @@ def delete_subscription():
         config['subscriptions'] = new_subscriptions
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
-        try:
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
-            # 使用公共方法更新缓存（线程安全）
-            update_subscription_cache(subscription_checker.results)
-        except Exception as e:
-            logger.error(f'更新订阅缓存失败: {e}')
-        
+        refresh_subscription_cache(global_state_manager)
+
         return jsonify({
             'status': 'success',
             'message': f'订阅 [{subscription_name}] 已成功删除'
@@ -711,19 +716,11 @@ def mark_subscription_renewed():
             }), 404
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
-        try:
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
-            # 使用公共方法更新缓存（线程安全）
-            update_subscription_cache(subscription_checker.results)
-        except Exception as e:
-            logger.error(f'更新订阅缓存失败: {e}')
-        
+        refresh_subscription_cache(global_state_manager)
+
         return jsonify({
             'status': 'success',
             'message': f'订阅 [{subscription_name}] 已标记为已续费',
@@ -769,19 +766,11 @@ def clear_subscription_renewed():
             }), 404
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
-        try:
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not ENABLE_WEB_ALARM)
-            
-            # 使用公共方法更新缓存（线程安全）
-            update_subscription_cache(subscription_checker.results)
-        except Exception as e:
-            logger.error(f'更新订阅缓存失败: {e}')
-        
+        refresh_subscription_cache(global_state_manager)
+
         return jsonify({
             'status': 'success',
             'message': f'已取消订阅 [{subscription_name}] 的续费标记'
@@ -834,16 +823,15 @@ def update_threshold():
             }), 404
         
         # 保存配置文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        _write_config(config)
         
         # 立即重新检查一次，更新缓存
         try:
             monitor = CreditMonitor('config.json')
-            monitor.run(dry_run=not ENABLE_WEB_ALARM)
-            
+            monitor.run(dry_run=not get_enable_web_alarm())
+
             # 使用公共方法更新缓存（线程安全）
-            update_balance_cache(monitor.results)
+            update_balance_cache(monitor.results, global_state_manager)
         except Exception as e:
             logger.error(f'更新缓存失败: {e}')
         
@@ -882,7 +870,7 @@ if __name__ == '__main__':
         # 启动 Flask 服务器
         logger.info(f"\n🚀 余额监控 Web 服务器启动中...")
         logger.info(f"📊 访问地址: http://localhost:{web_port}")
-        if ENABLE_WEB_ALARM:
+        if get_enable_web_alarm():
             logger.warning("⚠️  告警模式: 已启用（Web 会发送真实告警）")
         else:
             logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")

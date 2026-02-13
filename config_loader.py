@@ -13,13 +13,17 @@ from threading import Lock, Thread
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
+from config_validator import AppConfig
+from logger import get_logger
+
+logger = get_logger('config_loader')
 
 
 def load_env_file(env_file: str = '.env') -> None:
     """加载 .env 文件"""
     if os.path.exists(env_file):
         load_dotenv(env_file, override=True)
-        print(f"[Config] 已加载环境变量文件: {env_file}")
+        logger.info(f"[Config] 已加载环境变量文件: {env_file}")
 
 
 def get_env(key: str, default=None) -> Optional[str]:
@@ -79,7 +83,7 @@ def register_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None
     with _config_lock:
         if listener not in _config_listeners:
             _config_listeners.append(listener)
-            print(f"[Config] 已注册配置监听器: {listener.__name__}")
+            logger.debug(f"[Config] 已注册配置监听器: {listener.__name__}")
 
 
 def unregister_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
@@ -88,7 +92,7 @@ def unregister_config_listener(listener: Callable[[Dict[str, Any]], None]) -> No
     with _config_lock:
         if listener in _config_listeners:
             _config_listeners.remove(listener)
-            print(f"[Config] 已注销配置监听器: {listener.__name__}")
+            logger.debug(f"[Config] 已注销配置监听器: {listener.__name__}")
 
 
 def _notify_config_listeners(config: Dict[str, Any]) -> None:
@@ -98,7 +102,7 @@ def _notify_config_listeners(config: Dict[str, Any]) -> None:
         try:
             listener(config)
         except Exception as e:
-            print(f"[Config] 监听器 {listener.__name__} 执行失败: {e}")
+            logger.error(f"[Config] 监听器 {listener.__name__} 执行失败: {e}")
 
 
 class ConfigFileHandler(FileSystemEventHandler):
@@ -112,20 +116,20 @@ class ConfigFileHandler(FileSystemEventHandler):
         """文件修改事件"""
         if event.is_directory:
             return
-            
+
         event_path = Path(event.src_path).resolve()
         if event_path == self.config_file:
-            print(f"[Config] 检测到配置文件变化: {event_path}")
+            logger.info(f"[Config] 检测到配置文件变化: {event_path}")
             self.callback()
-    
+
     def on_created(self, event):
         """文件创建事件"""
         if event.is_directory:
             return
-            
+
         event_path = Path(event.src_path).resolve()
         if event_path == self.config_file:
-            print(f"[Config] 检测到配置文件创建: {event_path}")
+            logger.info(f"[Config] 检测到配置文件创建: {event_path}")
             self.callback()
 
 
@@ -149,19 +153,19 @@ def start_config_watcher(config_file: str = 'config.json', callback: Optional[Ca
     
     _config_observer.schedule(handler, str(watch_path), recursive=False)
     _config_observer.start()
-    
-    print(f"[Config] 开始监听配置文件: {config_path}")
+
+    logger.info(f"[Config] 开始监听配置文件: {config_path}")
 
 
 def stop_config_watcher() -> None:
     """停止配置文件监听器"""
     global _config_observer
-    
+
     if _config_observer is not None:
         _config_observer.stop()
         _config_observer.join()
         _config_observer = None
-        print("[Config] 已停止配置文件监听")
+        logger.info("[Config] 已停止配置文件监听")
 
 
 def clear_config_cache() -> None:
@@ -169,39 +173,49 @@ def clear_config_cache() -> None:
     global _config_cache
     with _config_lock:
         _config_cache = None
-        print("[Config] 配置缓存已清除")
+        logger.debug("[Config] 配置缓存已清除")
 
 
-def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
+def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
-    
+
     支持 ${VAR_NAME} 格式的环境变量替换
+
+    Args:
+        config_file: 配置文件路径
+        validate: 是否验证配置（默认 True）
+
+    Returns:
+        Dict[str, Any]: 配置字典
+
+    Raises:
+        ValueError: 当配置验证失败时
     """
     # 首先加载 .env 文件
     load_env_file()
-    
+
     # 读取配置文件内容
     with open(config_file, 'r', encoding='utf-8') as f:
         content = f.read()
-    
+
     # 替换 ${VAR_NAME} 格式的环境变量
     pattern = r'\$\{([^}]+)\}'
-    
+
     def replace_env(match):
         var_name = match.group(1)
         # 从环境变量读取，如果不存在则保持原样
         return os.environ.get(var_name, match.group(0))
-    
+
     content = re.sub(pattern, replace_env, content)
-    
+
     # 解析JSON
     config = json.loads(content)
-    
+
     # 环境变量覆盖 webhook 配置
     webhook_env = get_webhook_from_env()
     if webhook_env:
         config['webhook'] = webhook_env
-    
+
     # 环境变量覆盖邮箱密码
     if 'email' in config:
         for email in config['email']:
@@ -209,7 +223,7 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
             env_password = get_email_password_from_env(email_name)
             if env_password:
                 email['password'] = env_password
-    
+
     # 环境变量覆盖 API Key
     if 'projects' in config:
         for project in config['projects']:
@@ -217,17 +231,29 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
             env_api_key = get_api_key_from_env(project_name)
             if env_api_key:
                 project['api_key'] = env_api_key
-    
+
     # 环境变量覆盖刷新间隔
     refresh_interval = get_env('BALANCE_REFRESH_INTERVAL', None)
     if refresh_interval is not None:
         if 'settings' not in config:
             config['settings'] = {}
         config['settings']['balance_refresh_interval_seconds'] = refresh_interval
-    
+
+    # 验证配置
+    if validate:
+        app_config = AppConfig.from_dict(config)
+        errors = app_config.validate()
+        if errors:
+            error_messages = []
+            for section, section_errors in errors.items():
+                error_messages.append(f"  {section}:")
+                for err in section_errors:
+                    error_messages.append(f"    - {err}")
+            logger.warning(f"配置验证发现以下问题:\n" + "\n".join(error_messages))
+
     # 通知配置监听器
     _notify_config_listeners(config)
-    
+
     return config
 
 

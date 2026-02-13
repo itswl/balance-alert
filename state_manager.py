@@ -8,6 +8,7 @@ import threading
 import time
 import json
 import os
+import copy
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, asdict
 from logger import get_logger
@@ -19,10 +20,10 @@ logger = get_logger('state_manager')
 class BalanceState:
     """余额状态数据类"""
     last_update: Optional[str] = None
-    projects: List[Dict[str, Any]] = None
-    summary: Dict[str, Any] = None
-    
-    def __post_init__(self):
+    projects: Optional[List[Dict[str, Any]]] = None
+    summary: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
         if self.projects is None:
             self.projects = []
         if self.summary is None:
@@ -33,10 +34,10 @@ class BalanceState:
 class SubscriptionState:
     """订阅状态数据类"""
     last_update: Optional[str] = None
-    subscriptions: List[Dict[str, Any]] = None
-    summary: Dict[str, Any] = None
-    
-    def __post_init__(self):
+    subscriptions: Optional[List[Dict[str, Any]]] = None
+    summary: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
         if self.subscriptions is None:
             self.subscriptions = []
         if self.summary is None:
@@ -45,26 +46,26 @@ class SubscriptionState:
 
 class StateManager:
     """状态管理器类"""
+
+    def __init__(self) -> None:
+        self._balance_state: BalanceState = BalanceState()
+        self._subscription_state: SubscriptionState = SubscriptionState()
+        self._lock: threading.RLock = threading.RLock()
+        self._callbacks: List[Callable[[str, Any], None]] = []
+        self._cache_file: str = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
     
-    def __init__(self):
-        self._balance_state = BalanceState()
-        self._subscription_state = SubscriptionState()
-        self._lock = threading.RLock()
-        self._callbacks = []
-        self._cache_file = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
-    
-    def register_callback(self, callback: Callable[[str, Any], None]):
+    def register_callback(self, callback: Callable[[str, Any], None]) -> None:
         """注册状态变更回调函数"""
         with self._lock:
             self._callbacks.append(callback)
     
-    def unregister_callback(self, callback: Callable[[str, Any], None]):
+    def unregister_callback(self, callback: Callable[[str, Any], None]) -> None:
         """注销状态变更回调函数"""
         with self._lock:
             if callback in self._callbacks:
                 self._callbacks.remove(callback)
     
-    def _notify_callbacks(self, state_type: str, state_data: Any):
+    def _notify_callbacks(self, state_type: str, state_data: Any) -> None:
         """通知所有注册的回调函数"""
         for callback in self._callbacks[:]:  # 复制列表避免在迭代时修改
             try:
@@ -105,14 +106,14 @@ class StateManager:
             logger.info(f"订阅状态已更新: {self._subscription_state.summary}")
     
     def get_balance_state(self) -> Dict[str, Any]:
-        """获取余额状态（线程安全）"""
+        """获取余额状态（线程安全，返回深拷贝快照）"""
         with self._lock:
-            return asdict(self._balance_state)
+            return copy.deepcopy(asdict(self._balance_state))
     
     def get_subscription_state(self) -> Dict[str, Any]:
-        """获取订阅状态（线程安全）"""
+        """获取订阅状态（线程安全，返回深拷贝快照）"""
         with self._lock:
-            return asdict(self._subscription_state)
+            return copy.deepcopy(asdict(self._subscription_state))
     
     def has_data(self) -> bool:
         """检查是否有数据（线程安全）"""
@@ -170,7 +171,7 @@ class StateManager:
             logger.error(f"加载缓存文件失败: {e}")
             return False
     
-    def _rebuild_summaries(self):
+    def _rebuild_summaries(self) -> None:
         """重建状态摘要信息"""
         # 重建余额摘要
         projects = self._balance_state.projects
@@ -188,7 +189,7 @@ class StateManager:
             'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
         }
     
-    def clear_state(self):
+    def clear_state(self) -> None:
         """清空所有状态"""
         with self._lock:
             self._balance_state = BalanceState()

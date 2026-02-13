@@ -6,6 +6,9 @@ Webhook 适配器
 import json
 import os
 import requests
+import requests.adapters
+from typing import Dict, Any, List, Optional, Tuple
+from contextlib import contextmanager
 from datetime import datetime
 from logger import get_logger
 
@@ -15,23 +18,29 @@ logger = get_logger('webhook_adapter')
 # 从环境变量读取超时时间，默认 10 秒
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
 
-# 创建全局 Session 连接池
-_session = None
 
+@contextmanager
 def get_session():
-    """获取或创建全局 Session"""
-    global _session
-    if _session is None:
-        _session = requests.Session()
-        # 配置连接池
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=10,
-            pool_maxsize=100,
-            max_retries=3
-        )
-        _session.mount('http://', adapter)
-        _session.mount('https://', adapter)
-    return _session
+    """
+    获取 HTTP Session 上下文管理器
+
+    使用后自动关闭连接池
+    """
+    session = requests.Session()
+    # 配置连接池
+    adapter = requests.adapters.HTTPAdapter(
+        pool_connections=10,
+        pool_maxsize=100,
+        max_retries=3
+    )
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
+    try:
+        yield session
+    finally:
+        session.close()
+        logger.debug("HTTP Session 已关闭")
 
 
 class WebhookAdapter:
@@ -56,8 +65,8 @@ class WebhookAdapter:
             logger.warning(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
             self.webhook_type = 'custom'
     
-    def send_balance_alert(self, project_name, provider, balance_type, current_value, 
-                          threshold, unit=''):
+    def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
+                          threshold: float, unit: str = '') -> bool:
         """
         发送余额/积分告警
         
@@ -89,8 +98,8 @@ class WebhookAdapter:
                 project_name, provider, balance_type, current_value, threshold, unit
             )
     
-    def send_subscription_alert(self, subscription_name, renewal_day, days_until_renewal,
-                               amount, currency):
+    def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
+                               amount: float, currency: str) -> bool:
         """
         发送订阅续费提醒
         
@@ -123,8 +132,8 @@ class WebhookAdapter:
     
     # ==================== 飞书 ====================
     
-    def _send_feishu_balance_alert(self, project_name, provider, balance_type, 
-                                   current_value, threshold, unit):
+    def _send_feishu_balance_alert(self, project_name: str, provider: str, balance_type: str,
+                                   current_value: float, threshold: float, unit: str) -> bool:
         """发送飞书余额告警"""
         text = f"【余额告警】\n\n" \
                f"项目: {project_name}\n" \
@@ -143,8 +152,8 @@ class WebhookAdapter:
         
         return self._send_request(payload)
     
-    def _send_feishu_subscription_alert(self, subscription_name, renewal_day, 
-                                       days_until_renewal, amount, currency):
+    def _send_feishu_subscription_alert(self, subscription_name: str, renewal_day: int,
+                                       days_until_renewal: int, amount: float, currency: str) -> bool:
         """发送飞书订阅提醒"""
         days_text = "今天" if days_until_renewal == 0 else \
                    "明天" if days_until_renewal == 1 else \
@@ -307,75 +316,40 @@ class WebhookAdapter:
         Returns:
             bool: 是否发送成功
         """
-        print(f"\n{'='*60}")
-        print(f"📤 准备发送 Webhook")
-        print(f"{'='*60}")
-        print(f"🎯 目标 URL: {self.webhook_url}")
-        print(f"🔖 Webhook 类型: {self.webhook_type}")
-        print(f"📝 请求体:")
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
-        print(f"{'='*60}")
+        logger.info(f"准备发送 Webhook | URL: {self.webhook_url} | 类型: {self.webhook_type}")
+        logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:500]}")
         
         try:
             import time
             start_time = time.time()
-            
-            session = get_session()
-            response = session.post(
-                self.webhook_url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=REQUEST_TIMEOUT
-            )
-            
+
+            with get_session() as session:
+                response = session.post(
+                    self.webhook_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=REQUEST_TIMEOUT
+                )
+
             elapsed_time = time.time() - start_time
             
-            print(f"\n📥 响应信息:")
-            print(f"   状态码: {response.status_code}")
-            print(f"   耗时: {elapsed_time:.2f} 秒")
-            print(f"   响应头:")
-            for key, value in response.headers.items():
-                if key.lower() in ['content-type', 'content-length', 'date', 'server']:
-                    print(f"      {key}: {value}")
-            
-            print(f"\n   响应内容:")
-            try:
-                response_json = response.json()
-                print(json.dumps(response_json, ensure_ascii=False, indent=2))
-            except (ValueError, json.JSONDecodeError) as e:
-                # 响应不是 JSON 格式，显示文本内容
-                response_text = response.text[:500]  # 只显示前500字符
-                print(f"      {response_text}")
-                if len(response.text) > 500:
-                    print(f"      ... (共 {len(response.text)} 字符)")
-            
-            if response.status_code == 200:
-                print(f"\n✅ 告警发送成功 ({self.webhook_type})")
-                print(f"{'='*60}\n")
+            logger.debug(f"响应状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
+
+            if 200 <= response.status_code < 300:
+                logger.info(f"告警发送成功 ({self.webhook_type})")
                 return True
             else:
-                print(f"\n❌ 告警发送失败: HTTP {response.status_code}")
-                print(f"{'='*60}\n")
+                logger.error(f"告警发送失败: HTTP {response.status_code} | 响应: {response.text[:500]}")
                 return False
                 
         except requests.exceptions.Timeout as e:
-            print(f"\n❌ 请求超时: {e}")
-            print(f"{'='*60}\n")
+            logger.error(f"请求超时: {e}")
             return False
         except requests.exceptions.ConnectionError as e:
-            print(f"\n❌ 连接错误: {e}")
-            print(f"   请检查:")
-            print(f"   1. 网络连接是否正常")
-            print(f"   2. Webhook URL 是否正确")
-            print(f"   3. 防火墙设置是否允许访问")
-            print(f"{'='*60}\n")
+            logger.error(f"连接错误: {e} | 请检查网络连接、Webhook URL 和防火墙设置")
             return False
         except Exception as e:
-            print(f"\n❌ 发送失败: {type(e).__name__}: {e}")
-            import traceback
-            print(f"\n详细错误信息:")
-            print(traceback.format_exc())
-            print(f"{'='*60}\n")
+            logger.error(f"发送失败: {type(e).__name__}: {e}", exc_info=True)
             return False
     
     def send_custom_alert(self, title, content):
@@ -399,12 +373,12 @@ class WebhookAdapter:
             else:
                 return self._send_custom_webhook_custom(title, content)
         except Exception as e:
-            print(f"❌ 发送自定义告警失败: {e}")
+            logger.error(f"发送自定义告警失败: {e}")
             return False
     
     def _send_feishu_custom(self, title, content):
         """发送飞书自定义告警"""
-        data = {
+        payload = {
             "msg_type": "interactive",
             "card": {
                 "header": {
@@ -422,91 +396,35 @@ class WebhookAdapter:
                 ]
             }
         }
-        
-        session = get_session()
-        response = session.post(
-            self.webhook_url,
-            json=data,
-            headers={'Content-Type': 'application/json'},
-            timeout=REQUEST_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ 飞书告警发送成功")
-            return True
-        else:
-            print(f"❌ 飞书告警发送失败: {response.text}")
-            return False
-    
+        return self._send_request(payload)
+
     def _send_dingtalk_custom(self, title, content):
         """发送钉钉自定义告警"""
-        data = {
+        payload = {
             "msgtype": "markdown",
             "markdown": {
                 "title": title,
                 "text": f"### {title}\n\n{content}"
             }
         }
-        
-        session = get_session()
-        response = session.post(
-            self.webhook_url,
-            json=data,
-            headers={'Content-Type': 'application/json'},
-            timeout=REQUEST_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ 钉钉告警发送成功")
-            return True
-        else:
-            print(f"❌ 钉钉告警发送失败: {response.text}")
-            return False
-    
+        return self._send_request(payload)
+
     def _send_wecom_custom(self, title, content):
         """发送企业微信自定义告警"""
-        data = {
+        payload = {
             "msgtype": "markdown",
             "markdown": {
                 "content": f"### {title}\n\n{content}"
             }
         }
-        
-        session = get_session()
-        response = session.post(
-            self.webhook_url,
-            json=data,
-            headers={'Content-Type': 'application/json'},
-            timeout=REQUEST_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ 企业微信告警发送成功")
-            return True
-        else:
-            print(f"❌ 企业微信告警发送失败: {response.text}")
-            return False
-    
+        return self._send_request(payload)
+
     def _send_custom_webhook_custom(self, title, content):
         """发送自定义 Webhook 告警"""
-        data = {
+        payload = {
             "title": title,
             "content": content,
             "source": self.source,
             "timestamp": datetime.now().isoformat()
         }
-        
-        session = get_session()
-        response = session.post(
-            self.webhook_url,
-            json=data,
-            headers={'Content-Type': 'application/json'},
-            timeout=REQUEST_TIMEOUT
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ 自定义告警发送成功")
-            return True
-        else:
-            print(f"❌ 自定义告警发送失败: {response.text}")
-            return False
+        return self._send_request(payload)

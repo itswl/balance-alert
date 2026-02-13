@@ -8,7 +8,7 @@ import re
 class WxRankProvider(BaseProvider):
     """微信排名服务适配器"""
     
-    API_URL = "http://data.wxrank.com/weixin/score"
+    API_URL = "https://data.wxrank.com/weixin/score"
     
     def __init__(self, api_key):
         """
@@ -90,12 +90,7 @@ class WxRankProvider(BaseProvider):
             return result
             
         except Exception as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"未知错误: {str(e)}",
-                'raw_data': None
-            }
+            return self._classify_exception(e)
     
     @classmethod
     def get_provider_name(cls):
