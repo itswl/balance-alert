@@ -170,83 +170,112 @@ class SubscriptionChecker:
     def _calculate_days_until_renewal(self, cycle_type, renewal_day, today, last_renewed_date=None):
         """
         计算距离续费日的天数
-        
+
         Args:
             cycle_type: 周期类型 (weekly, monthly, yearly)
             renewal_day: 续费日 (weekly: 1-7表示周一到周日, monthly: 1-31, yearly: 使用上次续费的月日)
             today: 当前日期
             last_renewed_date: 上次续费日期字符串
-            
+
         Returns:
             (days, next_renewal_date): 距离续费的天数和下次续费日期
         """
         if cycle_type == 'weekly':
-            # 周周期：找到下一个指定的星期几
-            # renewal_day: 1=周一, 2=周二, ..., 7=周日
-            current_weekday = today.weekday() + 1  # Python的weekday: 0=周一, 6=周日
-            days_ahead = renewal_day - current_weekday
-            
-            if days_ahead < 0:  # 本周已过
-                days_ahead += 7
-            
-            next_renewal_date = today + timedelta(days=days_ahead)
-            return days_ahead, next_renewal_date
-            
+            return self._calculate_weekly_renewal(renewal_day, today)
         elif cycle_type == 'yearly':
-            # 年周期：基于上次续费日期或使用今年的同日期
-            if last_renewed_date:
-                try:
-                    last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
-                    # 下次续费日期是去年续费日期+1年
-                    next_renewal_date = self._safe_replace_year(last_renewed, last_renewed.year + 1)
+            return self._calculate_yearly_renewal(renewal_day, today, last_renewed_date)
+        else:
+            return self._calculate_monthly_renewal(renewal_day, today)
 
-                    # 如果下次续费日期已经过了，再加一年
-                    while next_renewal_date <= today:
-                        next_renewal_date = self._safe_replace_year(next_renewal_date, next_renewal_date.year + 1)
-                    
-                    delta = next_renewal_date - today
-                    return delta.days, next_renewal_date
-                except ValueError:
-                    pass
-            
-            # 如果没有上次续费日期，使用今年的今天作为续费日
-            next_renewal_date = self._safe_replace_year(today, today.year + 1)
-            delta = next_renewal_date - today
-            return delta.days, next_renewal_date
-            
-        else:  # monthly (默认)
-            # 月周期：计算下个月的续费日
-            current_day = today.day
-            
-            if current_day <= renewal_day:
-                # 本月还没到续费日
-                try:
-                    next_renewal_date = datetime(today.year, today.month, renewal_day)
-                except ValueError:
-                    # 如果续费日超过本月天数，使用本月最后一天
-                    next_month = today.month + 1 if today.month < 12 else 1
-                    next_year = today.year if today.month < 12 else today.year + 1
-                    next_renewal_date = datetime(next_year, next_month, 1) - timedelta(days=1)
+    def _calculate_weekly_renewal(self, renewal_day, today):
+        """计算周周期的下次续费日期
+
+        Args:
+            renewal_day: 1=周一, 2=周二, ..., 7=周日
+            today: 当前日期
+
+        Returns:
+            (days, next_renewal_date)
+        """
+        current_weekday = today.weekday() + 1  # Python的weekday: 0=周一, 6=周日
+        days_ahead = renewal_day - current_weekday
+
+        if days_ahead < 0:  # 本周已过
+            days_ahead += 7
+
+        next_renewal_date = today + timedelta(days=days_ahead)
+        return days_ahead, next_renewal_date
+
+    def _calculate_yearly_renewal(self, renewal_day, today, last_renewed_date=None):
+        """计算年周期的下次续费日期
+
+        Args:
+            renewal_day: 续费日
+            today: 当前日期
+            last_renewed_date: 上次续费日期字符串
+
+        Returns:
+            (days, next_renewal_date)
+        """
+        if last_renewed_date:
+            try:
+                last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
+                next_renewal_date = self._safe_replace_year(last_renewed, last_renewed.year + 1)
+
+                while next_renewal_date <= today:
+                    next_renewal_date = self._safe_replace_year(next_renewal_date, next_renewal_date.year + 1)
+
+                delta = next_renewal_date - today
+                return delta.days, next_renewal_date
+            except ValueError:
+                pass
+
+        # 如果没有上次续费日期，使用今年的今天作为续费日
+        next_renewal_date = self._safe_replace_year(today, today.year + 1)
+        delta = next_renewal_date - today
+        return delta.days, next_renewal_date
+
+    def _calculate_monthly_renewal(self, renewal_day, today):
+        """计算月周期的下次续费日期
+
+        Args:
+            renewal_day: 续费日 (1-31)
+            today: 当前日期
+
+        Returns:
+            (days, next_renewal_date)
+        """
+        current_day = today.day
+
+        if current_day <= renewal_day:
+            # 本月还没到续费日
+            try:
+                next_renewal_date = datetime(today.year, today.month, renewal_day)
+            except ValueError:
+                # 如果续费日超过本月天数，使用本月最后一天
+                next_month = today.month + 1 if today.month < 12 else 1
+                next_year = today.year if today.month < 12 else today.year + 1
+                next_renewal_date = datetime(next_year, next_month, 1) - timedelta(days=1)
+        else:
+            # 已经过了本月续费日，计算下个月
+            if today.month == 12:
+                next_year = today.year + 1
+                next_month = 1
             else:
-                # 已经过了本月续费日，计算下个月
-                if today.month == 12:
-                    next_year = today.year + 1
-                    next_month = 1
+                next_year = today.year
+                next_month = today.month + 1
+
+            try:
+                next_renewal_date = datetime(next_year, next_month, renewal_day)
+            except ValueError:
+                # 如果续费日超过下月天数，使用下月最后一天
+                if next_month == 12:
+                    next_renewal_date = datetime(next_year, 12, 31)
                 else:
-                    next_year = today.year
-                    next_month = today.month + 1
-                
-                try:
-                    next_renewal_date = datetime(next_year, next_month, renewal_day)
-                except ValueError:
-                    # 如果续费日超过下月天数，使用下月最后一天
-                    if next_month == 12:
-                        next_renewal_date = datetime(next_year, 12, 31)
-                    else:
-                        next_renewal_date = datetime(next_year, next_month + 1, 1) - timedelta(days=1)
-            
-            delta = next_renewal_date - today
-            return delta.days, next_renewal_date
+                    next_renewal_date = datetime(next_year, next_month + 1, 1) - timedelta(days=1)
+
+        delta = next_renewal_date - today
+        return delta.days, next_renewal_date
     
     def _send_alert(self, sub, days_until_renewal):
         """发送续费提醒告警"""

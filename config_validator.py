@@ -8,6 +8,22 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
+def _safe_int(value: Any, default: int) -> int:
+    """安全转换为 int，非法值返回默认值"""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(value: Any, default: float) -> float:
+    """安全转换为 float，非法值返回默认值"""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 class CycleType(str, Enum):
     """订阅周期类型"""
     WEEKLY = "weekly"
@@ -91,9 +107,9 @@ class SubscriptionConfig:
 
         return cls(
             name=data.get('name', ''),
-            renewal_day=int(data.get('renewal_day', 1)),
-            alert_days_before=int(data.get('alert_days_before', 3)),
-            amount=float(data.get('amount', 0)),
+            renewal_day=_safe_int(data.get('renewal_day', 1), 1),
+            alert_days_before=_safe_int(data.get('alert_days_before', 3), 3),
+            amount=_safe_float(data.get('amount', 0), 0.0),
             currency=data.get('currency', 'CNY'),
             cycle_type=cycle_type,
             enabled=data.get('enabled', True),
@@ -147,7 +163,7 @@ class ProjectConfig:
             name=data.get('name', ''),
             provider=data.get('provider', ''),
             api_key=data.get('api_key', ''),
-            threshold=float(data.get('threshold', 0)),
+            threshold=_safe_float(data.get('threshold', 0), 0.0),
             type=project_type,
             enabled=data.get('enabled', True)
         )
@@ -209,11 +225,11 @@ class SettingsConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "SettingsConfig":
         """从字典创建配置"""
         return cls(
-            balance_refresh_interval_seconds=int(data.get('balance_refresh_interval_seconds', 3600)),
-            max_concurrent_checks=int(data.get('max_concurrent_checks', 5)),
-            min_refresh_interval_seconds=int(data.get('min_refresh_interval_seconds', 60)),
+            balance_refresh_interval_seconds=_safe_int(data.get('balance_refresh_interval_seconds', 3600), 3600),
+            max_concurrent_checks=_safe_int(data.get('max_concurrent_checks', 5), 5),
+            min_refresh_interval_seconds=_safe_int(data.get('min_refresh_interval_seconds', 60), 60),
             enable_smart_refresh=bool(data.get('enable_smart_refresh', False)),
-            smart_refresh_threshold_percent=int(data.get('smart_refresh_threshold_percent', 5))
+            smart_refresh_threshold_percent=_safe_int(data.get('smart_refresh_threshold_percent', 5), 5)
         )
 
     def validate(self) -> List[str]:

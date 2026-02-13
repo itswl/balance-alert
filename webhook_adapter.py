@@ -67,11 +67,63 @@ class WebhookAdapter:
             self._session.close()
             self._session = None
     
+    @staticmethod
+    def _format_days_text(days: int) -> str:
+        """格式化天数文本"""
+        if days == 0:
+            return "今天"
+        elif days == 1:
+            return "明天"
+        return f"{days} 天后"
+
+    def _build_balance_text(self, project_name: str, provider: str, balance_type: str,
+                            current_value: float, threshold: float, unit: str) -> str:
+        """生成余额告警通用文本"""
+        return (
+            f"项目: {project_name}\n"
+            f"服务商: {provider}\n"
+            f"当前{balance_type}: {unit}{current_value:,.2f}\n"
+            f"告警阈值: {unit}{threshold:,.2f}\n"
+            f"状态: ⚠️ {balance_type}不足"
+        )
+
+    def _build_subscription_text(self, subscription_name: str, renewal_day: int,
+                                 days_until_renewal: int, amount: float, currency: str) -> str:
+        """生成订阅提醒通用文本"""
+        days_text = self._format_days_text(days_until_renewal)
+        return (
+            f"订阅: {subscription_name}\n"
+            f"续费日期: 每月 {renewal_day} 号\n"
+            f"距离续费: {days_text}\n"
+            f"续费金额: {currency} {amount}"
+        )
+
+    def _wrap_payload(self, title: str, text: str) -> Dict[str, Any]:
+        """按平台包装消息 payload"""
+        if self.webhook_type == 'feishu':
+            return {
+                "msg_type": "text",
+                "content": {"text": f"【{title}】\n\n{text}\n来源: {self.source}"}
+            }
+        elif self.webhook_type == 'dingtalk':
+            md_text = "\n".join(f"- **{line.split(': ', 1)[0]}**: {line.split(': ', 1)[1]}"
+                                if ': ' in line else f"- {line}"
+                                for line in text.split('\n'))
+            return {
+                "msgtype": "markdown",
+                "markdown": {"title": title, "text": f"## {title}\n\n{md_text}"}
+            }
+        else:  # wecom
+            return {
+                "msgtype": "text",
+                "text": {"content": f"【{title}】\n{text}"}
+            }
+
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
                           threshold: float, unit: str = '') -> bool:
         """
         发送余额/积分告警
-        
+
         Args:
             project_name: 项目名称
             provider: 服务商
@@ -79,190 +131,39 @@ class WebhookAdapter:
             current_value: 当前值
             threshold: 阈值
             unit: 单位
-        
+
         Returns:
             bool: 是否发送成功
         """
-        if self.webhook_type == 'feishu':
-            return self._send_feishu_balance_alert(
-                project_name, provider, balance_type, current_value, threshold, unit
-            )
-        elif self.webhook_type == 'dingtalk':
-            return self._send_dingtalk_balance_alert(
-                project_name, provider, balance_type, current_value, threshold, unit
-            )
-        elif self.webhook_type == 'wecom':
-            return self._send_wecom_balance_alert(
-                project_name, provider, balance_type, current_value, threshold, unit
-            )
-        else:
+        if self.webhook_type == 'custom':
             return self._send_custom_balance_alert(
                 project_name, provider, balance_type, current_value, threshold, unit
             )
+        text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit)
+        payload = self._wrap_payload("余额告警", text)
+        return self._send_request(payload)
     
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
                                amount: float, currency: str) -> bool:
         """
         发送订阅续费提醒
-        
+
         Args:
             subscription_name: 订阅名称
             renewal_day: 续费日期
             days_until_renewal: 距离续费天数
             amount: 金额
             currency: 货币
-        
+
         Returns:
             bool: 是否发送成功
         """
-        if self.webhook_type == 'feishu':
-            return self._send_feishu_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount, currency
-            )
-        elif self.webhook_type == 'dingtalk':
-            return self._send_dingtalk_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount, currency
-            )
-        elif self.webhook_type == 'wecom':
-            return self._send_wecom_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount, currency
-            )
-        else:
+        if self.webhook_type == 'custom':
             return self._send_custom_subscription_alert(
                 subscription_name, renewal_day, days_until_renewal, amount, currency
             )
-    
-    # ==================== 飞书 ====================
-    
-    def _send_feishu_balance_alert(self, project_name: str, provider: str, balance_type: str,
-                                   current_value: float, threshold: float, unit: str) -> bool:
-        """发送飞书余额告警"""
-        text = f"【余额告警】\n\n" \
-               f"项目: {project_name}\n" \
-               f"服务商: {provider}\n" \
-               f"当前{balance_type}: {unit}{current_value:,.2f}\n" \
-               f"告警阈值: {unit}{threshold:,.2f}\n" \
-               f"状态: ⚠️ {balance_type}不足\n" \
-               f"来源: {self.source}"
-        
-        payload = {
-            "msg_type": "text",
-            "content": {
-                "text": text
-            }
-        }
-        
-        return self._send_request(payload)
-    
-    def _send_feishu_subscription_alert(self, subscription_name: str, renewal_day: int,
-                                       days_until_renewal: int, amount: float, currency: str) -> bool:
-        """发送飞书订阅提醒"""
-        days_text = "今天" if days_until_renewal == 0 else \
-                   "明天" if days_until_renewal == 1 else \
-                   f"{days_until_renewal} 天后"
-        
-        text = f"【订阅续费提醒】\n\n" \
-               f"订阅: {subscription_name}\n" \
-               f"续费日期: 每月 {renewal_day} 号\n" \
-               f"距离续费: {days_text}\n" \
-               f"续费金额: {currency} {amount}\n" \
-               f"来源: {self.source}"
-        
-        payload = {
-            "msg_type": "text",
-            "content": {
-                "text": text
-            }
-        }
-        
-        return self._send_request(payload)
-    
-    # ==================== 钉钉 ====================
-    
-    def _send_dingtalk_balance_alert(self, project_name, provider, balance_type,
-                                     current_value, threshold, unit):
-        """发送钉钉余额告警"""
-        text = f"## 余额告警\n\n" \
-               f"- **项目**: {project_name}\n" \
-               f"- **服务商**: {provider}\n" \
-               f"- **当前{balance_type}**: {unit}{current_value:,.2f}\n" \
-               f"- **告警阈值**: {unit}{threshold:,.2f}\n" \
-               f"- **状态**: ⚠️ {balance_type}不足"
-        
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {
-                "title": "余额告警",
-                "text": text
-            }
-        }
-        
-        return self._send_request(payload)
-    
-    def _send_dingtalk_subscription_alert(self, subscription_name, renewal_day,
-                                         days_until_renewal, amount, currency):
-        """发送钉钉订阅提醒"""
-        days_text = "今天" if days_until_renewal == 0 else \
-                   "明天" if days_until_renewal == 1 else \
-                   f"{days_until_renewal} 天后"
-        
-        text = f"## 订阅续费提醒\n\n" \
-               f"- **订阅**: {subscription_name}\n" \
-               f"- **续费日期**: 每月 {renewal_day} 号\n" \
-               f"- **距离续费**: {days_text}\n" \
-               f"- **续费金额**: {currency} {amount}"
-        
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {
-                "title": "订阅续费提醒",
-                "text": text
-            }
-        }
-        
-        return self._send_request(payload)
-    
-    # ==================== 企业微信 ====================
-    
-    def _send_wecom_balance_alert(self, project_name, provider, balance_type,
-                                  current_value, threshold, unit):
-        """发送企业微信余额告警"""
-        text = f"【余额告警】\n" \
-               f"项目: {project_name}\n" \
-               f"服务商: {provider}\n" \
-               f"当前{balance_type}: {unit}{current_value:,.2f}\n" \
-               f"告警阈值: {unit}{threshold:,.2f}\n" \
-               f"状态: ⚠️ {balance_type}不足"
-        
-        payload = {
-            "msgtype": "text",
-            "text": {
-                "content": text
-            }
-        }
-        
-        return self._send_request(payload)
-    
-    def _send_wecom_subscription_alert(self, subscription_name, renewal_day,
-                                      days_until_renewal, amount, currency):
-        """发送企业微信订阅提醒"""
-        days_text = "今天" if days_until_renewal == 0 else \
-                   "明天" if days_until_renewal == 1 else \
-                   f"{days_until_renewal} 天后"
-        
-        text = f"【订阅续费提醒】\n" \
-               f"订阅: {subscription_name}\n" \
-               f"续费日期: 每月 {renewal_day} 号\n" \
-               f"距离续费: {days_text}\n" \
-               f"续费金额: {currency} {amount}"
-        
-        payload = {
-            "msgtype": "text",
-            "text": {
-                "content": text
-            }
-        }
-        
+        text = self._build_subscription_text(subscription_name, renewal_day, days_until_renewal, amount, currency)
+        payload = self._wrap_payload("订阅续费提醒", text)
         return self._send_request(payload)
     
     # ==================== 自定义格式 ====================
@@ -355,7 +256,7 @@ class WebhookAdapter:
         logger.debug(f"响应状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
 
         if 200 <= response.status_code < 300:
-            logger.info(f"告警发送成功 ({self.webhook_type})")
+            logger.info(f"告警发送成功 | 类型: {self.webhook_type} | 状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
             return True
         elif 500 <= response.status_code < 600:
             # 5xx 服务端错误，抛出异常以触发重试

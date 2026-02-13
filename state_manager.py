@@ -113,17 +113,17 @@ class StateManager:
             logger.info(f"订阅状态已更新: {self._subscription_state.summary}")
     
     def get_balance_state(self) -> Dict[str, Any]:
-        """获取余额状态（线程安全，返回预计算快照）"""
+        """获取余额状态（线程安全，返回独立副本）"""
         with self._lock:
             if self._balance_snapshot is not None:
-                return self._balance_snapshot
+                return copy.deepcopy(self._balance_snapshot)
             return copy.deepcopy(asdict(self._balance_state))
 
     def get_subscription_state(self) -> Dict[str, Any]:
-        """获取订阅状态（线程安全，返回预计算快照）"""
+        """获取订阅状态（线程安全，返回独立副本）"""
         with self._lock:
             if self._subscription_snapshot is not None:
-                return self._subscription_snapshot
+                return copy.deepcopy(self._subscription_snapshot)
             return copy.deepcopy(asdict(self._subscription_state))
     
     def has_data(self) -> bool:
