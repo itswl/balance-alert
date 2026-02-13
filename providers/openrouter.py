@@ -92,12 +92,7 @@ class OpenRouterProvider(BaseProvider):
             return result
             
         except Exception as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"未知错误: {str(e)}",
-                'raw_data': None
-            }
+            return self._classify_exception(e)
     
     @classmethod
     def get_provider_name(cls):

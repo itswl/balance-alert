@@ -14,4 +14,7 @@ build
 .idea
 *.md
 logs/
+tests/
 .DS_Store
+.env
+config.json

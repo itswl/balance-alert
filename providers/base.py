@@ -5,6 +5,7 @@
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import json
 import requests
 from logger import get_logger
 
@@ -77,7 +78,7 @@ class BaseProvider(ABC):
         """
         # 设置默认超时时间
         if 'timeout' not in kwargs:
-            kwargs['timeout'] = 10
+            kwargs['timeout'] = self.timeout
         
         logger.debug(f"发送 {method} 请求到 {url}")
         response = self.session.request(method, url, **kwargs)
@@ -168,6 +169,63 @@ class BaseProvider(ABC):
         except (ValueError, TypeError):
             return None
     
+    def _extract_field(self, data: Dict[str, Any], *paths: str) -> Any:
+        """
+        从嵌套字典中按路径提取字段，返回第一个非None的值
+
+        Args:
+            data: 数据字典
+            *paths: 字段路径，支持点分隔，如 'data.balance', 'Result.AvailableBalance'
+
+        Returns:
+            找到的值，全部未找到返回 None
+        """
+        for path in paths:
+            value = data
+            try:
+                for key in path.split('.'):
+                    if isinstance(value, dict):
+                        value = value.get(key)
+                    else:
+                        value = None
+                        break
+                if value is not None:
+                    return value
+            except (KeyError, TypeError, AttributeError):
+                continue
+        return None
+
+    def _classify_exception(self, e: Exception) -> Dict[str, Any]:
+        """
+        统一异常分类，返回标准化的错误响应
+
+        Args:
+            e: 异常对象
+
+        Returns:
+            dict: 标准化错误响应
+        """
+        import requests as req
+        error_msg = str(e)
+
+        if isinstance(e, req.exceptions.Timeout):
+            error = "请求超时"
+        elif isinstance(e, req.exceptions.ConnectionError):
+            error = f"网络连接错误: {error_msg}"
+        elif isinstance(e, req.exceptions.HTTPError):
+            error = f"HTTP错误: {error_msg}"
+        elif isinstance(e, (ValueError, json.JSONDecodeError)):
+            error = f"数据解析错误: {error_msg}"
+        else:
+            error = f"未知错误: {error_msg}"
+
+        return {
+            'success': False,
+            'credits': None,
+            'error': error,
+            'raw_data': None
+        }
+
     def __del__(self):
         """析构函数，关闭 session"""
         if hasattr(self, 'session') and self.session:

@@ -6,6 +6,8 @@
 import json
 import sys
 import argparse
+import threading
+from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
@@ -22,19 +24,24 @@ logger = get_logger('monitor')
 class CreditMonitor:
     """余额监控器"""
     
-    def __init__(self, config_path='config.json'):
+    def __init__(self, config_path: str = 'config.json') -> None:
         """
         初始化监控器
-        
+
         Args:
             config_path: 配置文件路径
         """
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
-        self.results = []
-    
-    def _load_config(self):
-        """加载配置文件"""
+        self.config_path: Path = Path(config_path)
+        self.config: Dict[str, Any] = self._load_config()
+        self.results: List[Dict[str, Any]] = []
+        self._results_lock = threading.Lock()
+
+    def _load_config(self) -> Dict[str, Any]:
+        """加载配置文件
+
+        Returns:
+            Dict[str, Any]: 配置字典
+        """
         if not self.config_path.exists():
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
         
@@ -43,22 +50,26 @@ class CreditMonitor:
         except json.JSONDecodeError as e:
             raise ValueError(f"配置文件格式错误: {e}")
     
-    def _get_max_concurrent_checks(self):
-        """获取最大并发检查数，默认为5"""
+    def _get_max_concurrent_checks(self) -> int:
+        """获取最大并发检查数，默认为5
+
+        Returns:
+            int: 最大并发检查数
+        """
         try:
             max_concurrent = self.config.get('settings', {}).get('max_concurrent_checks', 5)
             return max(1, min(max_concurrent, 20))  # 限制在1-20之间
         except (TypeError, ValueError):
             return 5
     
-    def check_project(self, project_config, dry_run=False):
+    def check_project(self, project_config: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """
         检查单个项目的余额
-        
+
         Args:
             project_config: 项目配置字典
             dry_run: 是否为测试模式（不发送告警）
-            
+
         Returns:
             dict: 检查结果
         """
@@ -67,11 +78,7 @@ class CreditMonitor:
         api_key = project_config.get('api_key')
         threshold = project_config.get('threshold', 0)
         
-        print(f"\n{'='*60}")
-        print(f"📊 检查项目: {project_name}")
-        print(f"   服务商: {provider_name}")
-        print(f"   告警阈值: {threshold}")
-        print(f"{'='*60}")
+        logger.info(f"检查项目: {project_name} | 服务商: {provider_name} | 告警阈值: {threshold}")
         
         # 获取服务商适配器
         try:
@@ -100,21 +107,21 @@ class CreditMonitor:
             }
         
         credits = result['credits']
-        print(f"✅ 当前余额: {credits}")
+        logger.info(f"[{project_name}] 当前余额: {credits}")
         
         # 检查是否需要告警
         need_alarm = credits < threshold
         alarm_sent = False
         
         if need_alarm:
-            print(f"⚠️  余额不足! {credits} < {threshold}")
-            
+            logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
+
             if not dry_run:
                 alarm_sent = self._send_alarm(project_config, credits)
             else:
-                print("🔍 [测试模式] 跳过发送告警")
+                logger.info(f"[{project_name}] [测试模式] 跳过发送告警")
         else:
-            print(f"✅ 余额充足: {credits} >= {threshold}")
+            logger.info(f"[{project_name}] 余额充足: {credits} >= {threshold}")
         
         return {
             'project': project_name,
@@ -128,14 +135,14 @@ class CreditMonitor:
             'error': None
         }
     
-    def _send_alarm(self, project_config, credits):
+    def _send_alarm(self, project_config: Dict[str, Any], credits: float) -> bool:
         """
         发送告警到 webhook
-        
+
         Args:
             project_config: 项目配置
             credits: 当前余额
-            
+
         Returns:
             bool: 是否发送成功
         """
@@ -168,10 +175,10 @@ class CreditMonitor:
             unit=unit
         )
     
-    def run(self, project_name=None, dry_run=False):
+    def run(self, project_name: Optional[str] = None, dry_run: bool = False) -> None:
         """
         运行监控检查
-        
+
         Args:
             project_name: 指定项目名称，None 表示检查所有启用的项目
             dry_run: 测试模式，不发送告警
@@ -186,19 +193,19 @@ class CreditMonitor:
         if project_name:
             projects = [p for p in projects if p.get('name') == project_name]
             if not projects:
-                print(f"❌ 未找到项目: {project_name}")
+                logger.error(f"未找到项目: {project_name}")
                 return
         else:
             projects = [p for p in projects if p.get('enabled', True)]
         
-        print(f"\n🚀 开始监控 {len(projects)} 个项目...")
+        logger.info(f"开始监控 {len(projects)} 个项目...")
         if dry_run:
-            print("🔍 [测试模式] 不会发送实际告警\n")
+            logger.info("[测试模式] 不会发送实际告警")
         
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
         actual_workers = min(max_workers, len(projects))
-        print(f"⚙️  并发检查数: {actual_workers} (配置: {max_workers}, 项目数: {len(projects)})")
+        logger.info(f"并发检查数: {actual_workers} (配置: {max_workers}, 项目数: {len(projects)})")
         
         # 使用线程池并发检查项目
         with ThreadPoolExecutor(max_workers=actual_workers) as executor:
@@ -213,57 +220,49 @@ class CreditMonitor:
                 project = future_to_project[future]
                 try:
                     result = future.result()
-                    self.results.append(result)
-                except (RuntimeError, ValueError, KeyError) as e:
+                    with self._results_lock:
+                        self.results.append(result)
+                except Exception as e:
                     logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
-                    self.results.append({
-                        'project': project.get('name', 'Unknown'),
-                        'success': False,
-                        'error': str(e),
-                        'alarm_sent': False
-                    })
+                    with self._results_lock:
+                        self.results.append({
+                            'project': project.get('name', 'Unknown'),
+                            'success': False,
+                            'error': str(e),
+                            'alarm_sent': False
+                        })
         
         # 输出汇总
         self._print_summary()
     
-    def _print_summary(self):
+    def _print_summary(self) -> None:
         """打印检查汇总"""
-        print(f"\n\n{'='*60}")
-        print("📋 检查汇总")
-        print(f"{'='*60}")
-        
         total = len(self.results)
         success = sum(1 for r in self.results if r['success'])
         failed = total - success
         need_alarm = sum(1 for r in self.results if r.get('need_alarm', False))
         alarm_sent = sum(1 for r in self.results if r.get('alarm_sent', False))
-        
-        print(f"总项目数: {total}")
-        print(f"检查成功: {success}")
-        print(f"检查失败: {failed}")
-        print(f"需要告警: {need_alarm}")
-        print(f"告警已发送: {alarm_sent}")
-        
+
+        logger.info(f"检查汇总: 总项目={total}, 成功={success}, 失败={failed}, 需告警={need_alarm}, 已告警={alarm_sent}")
+
         # 详细列表
-        if self.results:
-            print(f"\n详细结果:")
-            for r in self.results:
-                status = "✅" if r['success'] else "❌"
-                project = r['project']
-                
-                if r['success']:
-                    credits = r['credits']
-                    threshold = r['threshold']
-                    alarm_status = "🔔已告警" if r.get('alarm_sent') else ("⚠️需告警" if r.get('need_alarm') else "✅正常")
-                    print(f"  {status} {project}: {credits} / {threshold} - {alarm_status}")
+        for r in self.results:
+            project = r['project']
+            if r['success']:
+                credits = r['credits']
+                threshold = r['threshold']
+                if r.get('alarm_sent'):
+                    logger.warning(f"  {project}: {credits} / {threshold} - 已告警")
+                elif r.get('need_alarm'):
+                    logger.warning(f"  {project}: {credits} / {threshold} - 需告警")
                 else:
-                    error = r.get('error', 'Unknown error')
-                    print(f"  {status} {project}: {error}")
-        
-        print(f"{'='*60}\n")
+                    logger.info(f"  {project}: {credits} / {threshold} - 正常")
+            else:
+                error = r.get('error', 'Unknown error')
+                logger.error(f"  {project}: {error}")
 
 
-def main():
+def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(
         description='多项目余额监控工具',
@@ -325,18 +324,16 @@ def main():
         
         # 检查订阅续费（默认启用）
         if args.check_subscriptions or args.project is None:
-            print("\n" + "="*60)
             subscription_checker = SubscriptionChecker(args.config)
             subscription_checker.check_subscriptions(dry_run=args.dry_run)
         
         # 扫描邮箱（如果指定）
         if args.check_email:
-            print("\n" + "="*60)
             email_scanner = EmailScanner(args.config)
             email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
             
-    except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as e:
-        print(f"❌ 错误: {e}", file=sys.stderr)
+    except Exception as e:
+        logger.error(f"错误: {e}")
         sys.exit(1)
 
 

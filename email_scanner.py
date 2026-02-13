@@ -78,6 +78,10 @@ class EmailScanner:
             'recharge reminder', 'top up', 'account suspended',
             'unpaid invoice', 'outstanding balance', 'payment failed'
         ]
+
+        # 预编译关键词正则表达式（性能优化）
+        escaped_keywords = [re.escape(kw.lower()) for kw in self.alert_keywords]
+        self._keywords_pattern = re.compile('|'.join(escaped_keywords), re.IGNORECASE)
     
     def _load_config(self):
         """加载配置文件"""
@@ -172,15 +176,14 @@ class EmailScanner:
         return '\n'.join(text_content)
     
     def _check_alert_keywords(self, subject, body):
-        """检查是否包含告警关键词（不区分大小写）"""
-        full_text = f"{subject}\n{body}".lower()  # 转换为小写进行匹配
-        matched_keywords = []
-        
-        for keyword in self.alert_keywords:
-            if keyword.lower() in full_text:
-                matched_keywords.append(keyword)
-        
-        return matched_keywords
+        """检查是否包含告警关键词（不区分大小写，使用预编译正则）"""
+        full_text = f"{subject}\n{body}"
+        matches = self._keywords_pattern.findall(full_text)
+        if not matches:
+            return []
+        # 将匹配结果映射回原始关键词（保持大小写）
+        matched_lower = set(m.lower() for m in matches)
+        return [kw for kw in self.alert_keywords if kw.lower() in matched_lower]
     
     def _extract_service_info(self, subject, body):
         """尝试从邮件中提取服务名称和金额信息"""
@@ -247,9 +250,7 @@ class EmailScanner:
         total_alerts = 0
         
         for i, email_config in enumerate(self.email_configs, 1):
-            print(f"\n{'='*60}")
-            print(f"📬 邮箱 [{i}/{len(self.email_configs)}]: {email_config.get('username', 'Unknown')}")
-            print(f"{'='*60}")
+            logger.info(f"扫描邮箱 [{i}/{len(self.email_configs)}]: {email_config.get('username', 'Unknown')}")
             
             emails, alerts = self._scan_single_mailbox(email_config, days, dry_run)
             total_emails += emails
@@ -301,8 +302,7 @@ class EmailScanner:
             logger.warning("❌ 邮箱配置不完整，跳过")
             return 0, 0
         
-        print(f"   服务器: {host}:{port}")
-        print(f"   用户名: {username}")
+        logger.info(f"连接邮箱 | 服务器: {host}:{port} | 用户名: {username}")
         
         try:
             # 使用上下文管理器连接邮箱
@@ -361,21 +361,15 @@ class EmailScanner:
                     
                     if matched_keywords:
                         alert_count += 1
-                        print(f"{'='*60}")
-                        print(f"⚠️  发现告警邮件 #{alert_count}")
-                        print(f"   邮箱: {mailbox_name}")
-                        print(f"   发件人: {sender}")
-                        print(f"   主题: {subject}")
-                        print(f"   日期: {date}")
-                        print(f"   匹配关键词: {', '.join(matched_keywords)}")
-                        
                         # 尝试提取服务信息
                         service_name, amount = self._extract_service_info(subject, body)
-                        print(f"   服务: {service_name}")
-                        if amount:
-                            print(f"   金额: ¥{amount}")
-                        
-                        print(f"{'='*60}\n")
+
+                        amount_str = f" | 金额: ¥{amount}" if amount else ""
+                        logger.warning(
+                            f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
+                            f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
+                            f"服务: {service_name}{amount_str}"
+                        )
                         
                         # 记录结果
                         result = {
@@ -394,7 +388,7 @@ class EmailScanner:
                             alert_sent = self._send_alert(result)
                             result['alert_sent'] = alert_sent
                         else:
-                            print("🔍 [测试模式] 跳过发送告警")
+                            logger.info("[测试模式] 跳过发送告警")
                         
                         self.results.append(result)
                     
@@ -402,7 +396,7 @@ class EmailScanner:
                     
                     # 每处理100封邮件，打印进度
                     if processed_count % batch_size == 0:
-                        print(f"   进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
+                        logger.info(f"扫描进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
                 
                 # 打印单个邮箱汇总
                 self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
@@ -415,7 +409,7 @@ class EmailScanner:
         except imaplib.IMAP4.error as e:
             logger.error(f"❌ 邮箱连接错误: {e}")
             return 0, 0
-        except (RuntimeError, ValueError, KeyError) as e:
+        except Exception as e:
             logger.error(f"❌ 扫描失败: {e}", exc_info=True)
             return 0, 0
     
@@ -453,23 +447,15 @@ class EmailScanner:
     
     def _print_mailbox_summary(self, mailbox_name, total_emails, alert_count):
         """打印单个邮箱扫描汇总"""
-        print(f"\n{'='*60}")
-        print(f"📊 [{mailbox_name}] 扫描汇总")
-        print(f"{'='*60}")
-        print(f"总邮件数: {total_emails}")
-        print(f"告警邮件数: {alert_count}")
-        print(f"{'='*60}\n")
+        logger.info(f"[{mailbox_name}] 扫描汇总: 总邮件={total_emails}, 告警邮件={alert_count}")
     
     def _print_total_summary(self, total_emails, total_alerts):
         """打印所有邮箱的总汇总"""
-        print(f"\n{'='*60}")
-        print("📊 总汇总")
-        print(f"{'='*60}")
-        print(f"扫描邮箱数: {len(self.email_configs)}")
-        print(f"总邮件数: {total_emails}")
-        print(f"总告警邮件数: {total_alerts}")
-        print(f"已发送告警: {sum(1 for r in self.results if r.get('alert_sent', False))}")
-        print(f"{'='*60}\n")
+        alerts_sent = sum(1 for r in self.results if r.get('alert_sent', False))
+        logger.info(
+            f"邮箱扫描总汇总: 邮箱数={len(self.email_configs)}, 总邮件={total_emails}, "
+            f"告警邮件={total_alerts}, 已发送告警={alerts_sent}"
+        )
 
 
 def main():
@@ -486,8 +472,8 @@ def main():
     try:
         scanner = EmailScanner(args.config)
         scanner.scan_emails(days=args.days, dry_run=args.dry_run)
-    except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as e:
-        print(f"❌ 错误: {e}")
+    except Exception as e:
+        logger.error(f"错误: {e}")
         exit(1)
 
 

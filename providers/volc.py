@@ -86,29 +86,7 @@ class VolcProvider(BaseProvider):
             }
             
         except Exception as e:
-            # 处理各种网络异常
-            error_msg = str(e)
-            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': "请求超时",
-                    'raw_data': None
-                }
-            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"网络连接错误: {error_msg}",
-                    'raw_data': None
-                }
-            else:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"未知错误: {error_msg}",
-                    'raw_data': None
-                }
+            return self._classify_exception(e)
     
     def _send_request(self):
         """发送火山云 API 请求"""

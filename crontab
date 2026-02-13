@@ -6,6 +6,3 @@
 
 # 每天早上 10 点扫描邮箱（最近1天）
 0 10 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 email_scanner.py --days 1 >> /app/logs/cron.log 2>&1
-
-# 保持容器运行（添加一个每分钟的心跳任务，输出到空设备）
-* * * * * echo "alive" > /dev/null 2>&1 

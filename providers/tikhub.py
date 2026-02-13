@@ -72,20 +72,8 @@ class TikHubProvider(BaseProvider):
             result['credits'] = float(balance)
             return result
             
-        except ValueError as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"数据解析或类型转换错误: {str(e)}",
-                'raw_data': None
-            }
         except Exception as e:
-            return {
-                'success': False,
-                'credits': None,
-                'error': f"未知错误: {str(e)}",
-                'raw_data': None
-            }
+            return self._classify_exception(e)
     
     @classmethod
     def get_provider_name(cls):
