@@ -5,11 +5,98 @@
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+from enum import Enum
 import json
+import time
+import threading
 import requests
 from logger import get_logger
 
 logger = get_logger('provider_base')
+
+# HTTP 连接默认常量
+DEFAULT_TIMEOUT = 15
+DEFAULT_POOL_CONNECTIONS = 10
+DEFAULT_POOL_MAXSIZE = 100
+DEFAULT_MAX_RETRIES = 3
+
+# 熔断器常量
+CIRCUIT_FAILURE_THRESHOLD = 3  # 连续失败次数阈值
+CIRCUIT_OPEN_TIMEOUT = 60  # 熔断打开持续时间（秒）
+
+
+class CircuitState(Enum):
+    CLOSED = 'closed'
+    OPEN = 'open'
+    HALF_OPEN = 'half_open'
+
+
+class CircuitBreaker:
+    """熔断器：连续失败达到阈值后暂停请求"""
+
+    def __init__(self, name: str, failure_threshold: int = CIRCUIT_FAILURE_THRESHOLD,
+                 open_timeout: float = CIRCUIT_OPEN_TIMEOUT):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.open_timeout = open_timeout
+        self._state = CircuitState.CLOSED
+        self._failure_count = 0
+        self._last_failure_time: float = 0
+        self._lock = threading.Lock()
+
+    @property
+    def state(self) -> CircuitState:
+        with self._lock:
+            if self._state == CircuitState.OPEN:
+                if time.time() - self._last_failure_time >= self.open_timeout:
+                    self._state = CircuitState.HALF_OPEN
+                    logger.info(f"[CircuitBreaker:{self.name}] OPEN -> HALF_OPEN")
+            return self._state
+
+    def allow_request(self) -> bool:
+        """检查是否允许请求通过"""
+        current = self.state
+        if current == CircuitState.CLOSED:
+            return True
+        if current == CircuitState.HALF_OPEN:
+            return True  # 允许一次试探请求
+        return False
+
+    def record_success(self) -> None:
+        """记录成功请求"""
+        with self._lock:
+            self._failure_count = 0
+            if self._state == CircuitState.HALF_OPEN:
+                self._state = CircuitState.CLOSED
+                logger.info(f"[CircuitBreaker:{self.name}] HALF_OPEN -> CLOSED")
+
+    def record_failure(self) -> None:
+        """记录失败请求"""
+        with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.time()
+            if self._state == CircuitState.HALF_OPEN:
+                self._state = CircuitState.OPEN
+                logger.warning(f"[CircuitBreaker:{self.name}] HALF_OPEN -> OPEN (试探失败)")
+            elif self._failure_count >= self.failure_threshold:
+                self._state = CircuitState.OPEN
+                logger.warning(
+                    f"[CircuitBreaker:{self.name}] CLOSED -> OPEN "
+                    f"(连续失败 {self._failure_count} 次, 熔断 {self.open_timeout}s)"
+                )
+
+
+# 全局熔断器注册表（按 provider name 共享）
+_circuit_breakers: Dict[str, CircuitBreaker] = {}
+_circuit_breakers_lock = threading.Lock()
+
+
+def get_circuit_breaker(name: str) -> CircuitBreaker:
+    """获取或创建指定 provider 的熔断器"""
+    with _circuit_breakers_lock:
+        if name not in _circuit_breakers:
+            _circuit_breakers[name] = CircuitBreaker(name)
+        return _circuit_breakers[name]
 
 
 class BaseProvider(ABC):
@@ -23,7 +110,7 @@ class BaseProvider(ABC):
             api_key: API 密钥
         """
         self.api_key = api_key
-        self.timeout = 15  # 默认超时时间（秒）
+        self.timeout = DEFAULT_TIMEOUT
         self.session = self._create_session()
     
     def _create_session(self) -> requests.Session:
@@ -32,9 +119,9 @@ class BaseProvider(ABC):
         
         # 配置连接池
         adapter = requests.adapters.HTTPAdapter(
-            pool_connections=10,
-            pool_maxsize=100,
-            max_retries=3
+            pool_connections=DEFAULT_POOL_CONNECTIONS,
+            pool_maxsize=DEFAULT_POOL_MAXSIZE,
+            max_retries=DEFAULT_MAX_RETRIES
         )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
@@ -63,30 +150,45 @@ class BaseProvider(ABC):
     
     def _make_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
-        发送 HTTP 请求的基础方法
-        
+        发送 HTTP 请求的基础方法（带熔断器保护）
+
         Args:
             method: HTTP 方法 ('GET', 'POST', etc.)
             url: 请求 URL
             **kwargs: 其他 requests 参数
-            
+
         Returns:
             requests.Response: 响应对象
-            
+
         Raises:
             requests.RequestException: 网络请求异常
+            ProviderError: 熔断器打开时
         """
+        # 检查熔断器
+        breaker = get_circuit_breaker(self.get_provider_name())
+        if not breaker.allow_request():
+            raise ProviderError(
+                f"Provider [{self.get_provider_name()}] 熔断器已打开，"
+                f"请求被拒绝（将在 {CIRCUIT_OPEN_TIMEOUT}s 后自动恢复）"
+            )
+
         # 设置默认超时时间
         if 'timeout' not in kwargs:
             kwargs['timeout'] = self.timeout
-        
+
         logger.debug(f"发送 {method} 请求到 {url}")
-        response = self.session.request(method, url, **kwargs)
-        
-        if response.status_code != 200:
-            logger.warning(f"HTTP {response.status_code}: {response.text[:200]}")
-        
-        return response
+        try:
+            response = self.session.request(method, url, **kwargs)
+
+            if response.status_code != 200:
+                logger.warning(f"HTTP {response.status_code}: {response.text[:200]}")
+
+            # 成功响应（包括非 200 但连接成功的）记录成功
+            breaker.record_success()
+            return response
+        except requests.RequestException:
+            breaker.record_failure()
+            raise
     
     def _handle_response(self, response: requests.Response, success_condition=None) -> Dict[str, Any]:
         """
@@ -226,10 +328,14 @@ class BaseProvider(ABC):
             'raw_data': None
         }
 
-    def __del__(self):
-        """析构函数，关闭 session"""
+    def close(self):
+        """显式关闭 session"""
         if hasattr(self, 'session') and self.session:
             self.session.close()
+
+    def __del__(self):
+        """析构函数，关闭 session"""
+        self.close()
 
 
 # 异常类定义

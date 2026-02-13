@@ -7,6 +7,7 @@
 import os
 import json
 import re
+import hashlib
 from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from threading import Lock, Thread
@@ -75,6 +76,7 @@ _config_lock = Lock()
 _config_observer: Optional[Observer] = None
 _config_callback: Optional[Callable] = None
 _config_listeners: List[Callable[[Dict[str, Any]], None]] = []
+_last_config_hash: Optional[str] = None
 
 
 def register_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
@@ -96,7 +98,16 @@ def unregister_config_listener(listener: Callable[[Dict[str, Any]], None]) -> No
 
 
 def _notify_config_listeners(config: Dict[str, Any]) -> None:
-    """通知所有配置监听器"""
+    """通知所有配置监听器（仅在配置实际变化时）"""
+    global _last_config_hash
+    config_str = json.dumps(config, sort_keys=True, ensure_ascii=False)
+    config_hash = hashlib.md5(config_str.encode()).hexdigest()
+
+    if config_hash == _last_config_hash:
+        logger.debug("[Config] 配置未变化，跳过通知监听器")
+        return
+
+    _last_config_hash = config_hash
     listeners_copy = _config_listeners[:]  # 复制列表避免在迭代时修改
     for listener in listeners_copy:
         try:
@@ -170,9 +181,10 @@ def stop_config_watcher() -> None:
 
 def clear_config_cache() -> None:
     """清除配置缓存"""
-    global _config_cache
+    global _config_cache, _last_config_hash
     with _config_lock:
         _config_cache = None
+        _last_config_hash = None
         logger.debug("[Config] 配置缓存已清除")
 
 
@@ -191,8 +203,10 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
     Raises:
         ValueError: 当配置验证失败时
     """
-    # 首先加载 .env 文件
-    load_env_file()
+    # 首先加载 .env 文件（只在首次调用时加载）
+    if not getattr(load_config_with_env_vars, '_env_loaded', False):
+        load_env_file()
+        load_config_with_env_vars._env_loaded = True
 
     # 读取配置文件内容
     with open(config_file, 'r', encoding='utf-8') as f:
@@ -237,7 +251,15 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
     if refresh_interval is not None:
         if 'settings' not in config:
             config['settings'] = {}
-        config['settings']['balance_refresh_interval_seconds'] = refresh_interval
+        try:
+            config['settings']['balance_refresh_interval_seconds'] = int(refresh_interval)
+        except (ValueError, TypeError):
+            logger.warning(f"BALANCE_REFRESH_INTERVAL 值无效: {refresh_interval}，忽略")
+
+    # 打印配置版本号
+    config_version = config.get('version')
+    if config_version:
+        logger.info(f"[Config] 配置版本: {config_version}")
 
     # 验证配置
     if validate:

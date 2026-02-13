@@ -614,6 +614,12 @@
     <script>
         let isRefreshing = false;
 
+        // ETag 缓存（用于条件请求，避免重复渲染）
+        const etagCache = {
+            credits: null,
+            subscriptions: null
+        };
+
         // 页面加载时获取数据
         window.addEventListener('DOMContentLoaded', () => {
             fetchData();
@@ -623,22 +629,47 @@
 
         async function fetchData() {
             try {
-                // 获取余额/积分数据
-                const response = await fetch('/api/credits');
-                const data = await response.json();
-                
-                // 获取订阅数据
-                const subResponse = await fetch('/api/subscriptions');
-                const subData = await subResponse.json();
-                
-                // 渲染数据（合并统计）
-                renderData(data, subData);
-                renderSubscriptions(subData);
+                // 构造条件请求头
+                const creditsHeaders = {};
+                const subHeaders = {};
+                if (etagCache.credits) creditsHeaders['If-None-Match'] = etagCache.credits;
+                if (etagCache.subscriptions) subHeaders['If-None-Match'] = etagCache.subscriptions;
+
+                // 并行获取余额和订阅数据
+                const [creditsResp, subResp] = await Promise.all([
+                    fetch('/api/credits', { headers: creditsHeaders }),
+                    fetch('/api/subscriptions', { headers: subHeaders })
+                ]);
+
+                // 保存 ETag
+                const newCreditsEtag = creditsResp.headers.get('ETag');
+                const newSubEtag = subResp.headers.get('ETag');
+                if (newCreditsEtag) etagCache.credits = newCreditsEtag;
+                if (newSubEtag) etagCache.subscriptions = newSubEtag;
+
+                // 304 表示数据未变化，跳过渲染
+                if (creditsResp.status === 304 && subResp.status === 304) return;
+
+                // 解析有变化的数据，未变化的保留上次缓存
+                const data = creditsResp.status === 200 ? await creditsResp.json() : lastCreditsData;
+                const subData = subResp.status === 200 ? await subResp.json() : lastSubData;
+
+                if (data) lastCreditsData = data;
+                if (subData) lastSubData = subData;
+
+                if (lastCreditsData && lastSubData) {
+                    renderData(lastCreditsData, lastSubData);
+                    renderSubscriptions(lastSubData);
+                }
             } catch (error) {
                 console.error('获取数据失败:', error);
                 showError('获取数据失败，请稍后重试');
             }
         }
+
+        // 上次成功获取的数据缓存（用于部分 304 时保留旧数据）
+        let lastCreditsData = null;
+        let lastSubData = null;
 
         async function refreshData() {
             if (isRefreshing) return;
@@ -651,12 +682,22 @@
             try {
                 const response = await fetch('/api/refresh');
                 const result = await response.json();
-                
+
                 if (result.status === 'success') {
+                    // 刷新后数据已变化，清除 ETag 缓存
+                    etagCache.credits = null;
+                    etagCache.subscriptions = null;
+
                     // 获取订阅数据
                     const subResponse = await fetch('/api/subscriptions');
                     const subData = await subResponse.json();
-                    
+
+                    // 保存 ETag 和数据缓存
+                    const newSubEtag = subResponse.headers.get('ETag');
+                    if (newSubEtag) etagCache.subscriptions = newSubEtag;
+                    lastCreditsData = result.data;
+                    lastSubData = subData;
+
                     // 渲染数据（合并统计）
                     renderData(result.data, subData);
                     renderSubscriptions(subData);

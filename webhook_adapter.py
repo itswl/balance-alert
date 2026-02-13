@@ -5,53 +5,35 @@ Webhook 适配器
 """
 import json
 import os
+import time
 import requests
 import requests.adapters
 from typing import Dict, Any, List, Optional, Tuple
-from contextlib import contextmanager
 from datetime import datetime
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from logger import get_logger
 
 # 创建 logger
 logger = get_logger('webhook_adapter')
 
+# HTTP 连接默认常量
+DEFAULT_POOL_CONNECTIONS = 10
+DEFAULT_POOL_MAXSIZE = 100
+DEFAULT_MAX_RETRIES = 3
+
 # 从环境变量读取超时时间，默认 10 秒
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
 
 
-@contextmanager
-def get_session():
-    """
-    获取 HTTP Session 上下文管理器
-
-    使用后自动关闭连接池
-    """
-    session = requests.Session()
-    # 配置连接池
-    adapter = requests.adapters.HTTPAdapter(
-        pool_connections=10,
-        pool_maxsize=100,
-        max_retries=3
-    )
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-
-    try:
-        yield session
-    finally:
-        session.close()
-        logger.debug("HTTP Session 已关闭")
-
-
 class WebhookAdapter:
     """Webhook 发送适配器"""
-    
+
     SUPPORTED_TYPES = ['feishu', 'custom', 'dingtalk', 'wecom']
-    
+
     def __init__(self, webhook_url, webhook_type='custom', source='credit-monitor'):
         """
         初始化 Webhook 适配器
-        
+
         Args:
             webhook_url: Webhook URL
             webhook_type: Webhook 类型 (feishu/custom/dingtalk/wecom)
@@ -60,10 +42,30 @@ class WebhookAdapter:
         self.webhook_url = webhook_url
         self.webhook_type = webhook_type.lower()
         self.source = source
-        
+        self._session = None
+
         if self.webhook_type not in self.SUPPORTED_TYPES:
             logger.warning(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
             self.webhook_type = 'custom'
+
+    def _get_session(self):
+        """获取或创建复用的 HTTP Session"""
+        if self._session is None:
+            self._session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=DEFAULT_POOL_CONNECTIONS,
+                pool_maxsize=DEFAULT_POOL_MAXSIZE,
+                max_retries=DEFAULT_MAX_RETRIES
+            )
+            self._session.mount('http://', adapter)
+            self._session.mount('https://', adapter)
+        return self._session
+
+    def close(self):
+        """关闭 HTTP Session"""
+        if self._session:
+            self._session.close()
+            self._session = None
     
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
                           threshold: float, unit: str = '') -> bool:
@@ -308,48 +310,62 @@ class WebhookAdapter:
     
     def _send_request(self, payload):
         """
-        发送 HTTP 请求
-        
+        发送 HTTP 请求（带自动重试）
+
         Args:
             payload: 请求体
-        
+
         Returns:
             bool: 是否发送成功
         """
         logger.info(f"准备发送 Webhook | URL: {self.webhook_url} | 类型: {self.webhook_type}")
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:500]}")
-        
+
         try:
-            import time
-            start_time = time.time()
-
-            with get_session() as session:
-                response = session.post(
-                    self.webhook_url,
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                    timeout=REQUEST_TIMEOUT
-                )
-
-            elapsed_time = time.time() - start_time
-            
-            logger.debug(f"响应状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
-
-            if 200 <= response.status_code < 300:
-                logger.info(f"告警发送成功 ({self.webhook_type})")
-                return True
-            else:
-                logger.error(f"告警发送失败: HTTP {response.status_code} | 响应: {response.text[:500]}")
-                return False
-                
+            return self._send_request_with_retry(payload)
         except requests.exceptions.Timeout as e:
-            logger.error(f"请求超时: {e}")
+            logger.error(f"请求超时（重试耗尽）: {e}")
             return False
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"连接错误: {e} | 请检查网络连接、Webhook URL 和防火墙设置")
+            logger.error(f"连接错误（重试耗尽）: {e} | 请检查网络连接、Webhook URL 和防火墙设置")
             return False
         except Exception as e:
             logger.error(f"发送失败: {type(e).__name__}: {e}", exc_info=True)
+            return False
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError)),
+        reraise=True
+    )
+    def _send_request_with_retry(self, payload):
+        """发送 HTTP 请求的内层方法（可重试）"""
+        start_time = time.time()
+
+        session = self._get_session()
+        response = session.post(
+            self.webhook_url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=REQUEST_TIMEOUT
+        )
+
+        elapsed_time = time.time() - start_time
+        logger.debug(f"响应状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
+
+        if 200 <= response.status_code < 300:
+            logger.info(f"告警发送成功 ({self.webhook_type})")
+            return True
+        elif 500 <= response.status_code < 600:
+            # 5xx 服务端错误，抛出异常以触发重试
+            logger.warning(f"服务端错误 HTTP {response.status_code}，将重试")
+            raise requests.exceptions.ConnectionError(
+                f"Server error: HTTP {response.status_code}"
+            )
+        else:
+            # 4xx 等客户端错误，不重试
+            logger.error(f"告警发送失败: HTTP {response.status_code} | 响应: {response.text[:500]}")
             return False
     
     def send_custom_alert(self, title, content):

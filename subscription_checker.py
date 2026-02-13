@@ -3,6 +3,7 @@
 订阅续费提醒检查器
 """
 import json
+import sys
 from datetime import datetime, timedelta
 from webhook_adapter import WebhookAdapter
 from logger import get_logger
@@ -41,9 +42,9 @@ class SubscriptionChecker:
         # 过滤启用的订阅
         enabled_subs = [s for s in subscriptions if s.get('enabled', True)]
         
-        print(f"\n📅 开始检查 {len(enabled_subs)} 个订阅...")
+        logger.info(f"📅 开始检查 {len(enabled_subs)} 个订阅...")
         if dry_run:
-            print("🔍 [测试模式] 不会发送实际告警\n")
+            logger.info("🔍 [测试模式] 不会发送实际告警")
         
         today = datetime.now()
         current_day = today.day
@@ -64,21 +65,21 @@ class SubscriptionChecker:
         last_renewed_date = sub.get('last_renewed_date')  # 上次续费日期
         cycle_type = sub.get('cycle_type', 'monthly')  # 续费周期类型: weekly, monthly, yearly
         
-        print(f"{'='*60}")
-        print(f"📦 订阅: {name}")
-        
+        logger.info(f"{'='*60}")
+        logger.info(f"📦 订阅: {name}")
+
         # 根据周期类型显示不同的续费信息
         cycle_text = self._get_cycle_text(cycle_type, renewal_day)
-        print(f"   续费周期: {cycle_text}")
-        print(f"   金额: {currency} {amount}")
-        print(f"{'='*60}")
+        logger.info(f"   续费周期: {cycle_text}")
+        logger.info(f"   金额: {currency} {amount}")
+        logger.info(f"{'='*60}")
         
         # 计算距离续费日的天数
         days_until_renewal, next_renewal_date = self._calculate_days_until_renewal(
             cycle_type, renewal_day, today, last_renewed_date
         )
         
-        print(f"📍 距离续费还有: {days_until_renewal} 天 (下次续费: {next_renewal_date.strftime('%Y-%m-%d')})")
+        logger.info(f"📍 距离续费还有: {days_until_renewal} 天 (下次续费: {next_renewal_date.strftime('%Y-%m-%d')})")
         
         # 检查是否在本续费周期内已经续费
         already_renewed = False
@@ -91,9 +92,9 @@ class SubscriptionChecker:
                 # 如果上次续费日期在当前周期之后，说明已经续费了
                 if last_renewed >= cycle_start:
                     already_renewed = True
-                    print(f"✅ 本周期已续费 (续费日期: {last_renewed_date})")
+                    logger.info(f"✅ 本周期已续费 (续费日期: {last_renewed_date})")
             except ValueError:
-                print(f"⚠️  续费日期格式错误: {last_renewed_date}")
+                logger.warning(f"⚠️  续费日期格式错误: {last_renewed_date}")
         
         # 判断是否需要告警（如果已续费则不告警）
         need_alert = (days_until_renewal <= alert_days_before and 
@@ -102,16 +103,16 @@ class SubscriptionChecker:
         alert_sent = False
         
         if already_renewed:
-            print(f"✅ 本周期已续费，无需提醒")
+            logger.info(f"✅ 本周期已续费，无需提醒")
         elif need_alert:
-            print(f"⚠️  需要提醒续费! (提前 {alert_days_before} 天)")
-            
+            logger.warning(f"⚠️  需要提醒续费! (提前 {alert_days_before} 天)")
+
             if not dry_run:
                 alert_sent = self._send_alert(sub, days_until_renewal)
             else:
-                print("🔍 [测试模式] 跳过发送告警")
+                logger.info("🔍 [测试模式] 跳过发送告警")
         else:
-            print(f"✅ 无需提醒")
+            logger.info(f"✅ 无需提醒")
         
         return {
             'name': name,
@@ -139,6 +140,15 @@ class SubscriptionChecker:
         else:  # monthly
             return f"每月 {renewal_day} 号"
     
+    @staticmethod
+    def _safe_replace_year(dt, new_year):
+        """安全地替换日期的年份，处理闰年2/29的情况"""
+        try:
+            return dt.replace(year=new_year)
+        except ValueError:
+            # 闰年2/29 → 非闰年回退到2/28
+            return datetime(new_year, dt.month, 28)
+
     def _calculate_cycle_start(self, cycle_type, renewal_day, today, next_renewal_date):
         """计算当前续费周期的起始日期"""
         if cycle_type == 'weekly':
@@ -146,7 +156,7 @@ class SubscriptionChecker:
             return next_renewal_date - timedelta(days=7)
         elif cycle_type == 'yearly':
             # 年周期：从去年的同日期开始
-            return next_renewal_date.replace(year=next_renewal_date.year - 1)
+            return self._safe_replace_year(next_renewal_date, next_renewal_date.year - 1)
         else:  # monthly
             # 月周期：从上个月的续费日开始
             if today.day < renewal_day:
@@ -176,7 +186,7 @@ class SubscriptionChecker:
             current_weekday = today.weekday() + 1  # Python的weekday: 0=周一, 6=周日
             days_ahead = renewal_day - current_weekday
             
-            if days_ahead <= 0:  # 本周已过或就是今天
+            if days_ahead < 0:  # 本周已过
                 days_ahead += 7
             
             next_renewal_date = today + timedelta(days=days_ahead)
@@ -188,11 +198,11 @@ class SubscriptionChecker:
                 try:
                     last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
                     # 下次续费日期是去年续费日期+1年
-                    next_renewal_date = last_renewed.replace(year=last_renewed.year + 1)
-                    
+                    next_renewal_date = self._safe_replace_year(last_renewed, last_renewed.year + 1)
+
                     # 如果下次续费日期已经过了，再加一年
                     while next_renewal_date <= today:
-                        next_renewal_date = next_renewal_date.replace(year=next_renewal_date.year + 1)
+                        next_renewal_date = self._safe_replace_year(next_renewal_date, next_renewal_date.year + 1)
                     
                     delta = next_renewal_date - today
                     return delta.days, next_renewal_date
@@ -200,7 +210,7 @@ class SubscriptionChecker:
                     pass
             
             # 如果没有上次续费日期，使用今年的今天作为续费日
-            next_renewal_date = datetime(today.year + 1, today.month, today.day)
+            next_renewal_date = self._safe_replace_year(today, today.year + 1)
             delta = next_renewal_date - today
             return delta.days, next_renewal_date
             
@@ -269,26 +279,26 @@ class SubscriptionChecker:
     
     def _print_summary(self):
         """打印检查汇总"""
-        print(f"\n\n{'='*60}")
-        print("📊 订阅检查汇总")
-        print(f"{'='*60}")
-        
+        logger.info(f"{'='*60}")
+        logger.info("📊 订阅检查汇总")
+        logger.info(f"{'='*60}")
+
         total = len(self.results)
         need_alert = sum(1 for r in self.results if r.get('need_alert', False))
         alert_sent = sum(1 for r in self.results if r.get('alert_sent', False))
-        
-        print(f"总订阅数: {total}")
-        print(f"需要提醒: {need_alert}")
-        print(f"已发送提醒: {alert_sent}")
-        
+
+        logger.info(f"总订阅数: {total}")
+        logger.info(f"需要提醒: {need_alert}")
+        logger.info(f"已发送提醒: {alert_sent}")
+
         if self.results:
-            print(f"\n详细结果:")
+            logger.info(f"详细结果:")
             for r in self.results:
                 status = "⚠️需提醒" if r.get('need_alert') else "✅正常"
                 days = r['days_until_renewal']
-                print(f"  {status} {r['name']}: 还有 {days} 天续费")
-        
-        print(f"{'='*60}\n")
+                logger.info(f"  {status} {r['name']}: 还有 {days} 天续费")
+
+        logger.info(f"{'='*60}")
 
 
 def main():
@@ -305,8 +315,8 @@ def main():
         checker = SubscriptionChecker(args.config)
         checker.check_subscriptions(dry_run=args.dry_run)
     except Exception as e:
-        print(f"❌ 错误: {e}")
-        exit(1)
+        logger.error(f"❌ 错误: {e}")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

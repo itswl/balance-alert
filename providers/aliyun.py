@@ -115,7 +115,7 @@ class AliyunProvider(BaseProvider):
             'Version': self.version,
             'AccessKeyId': self.access_key_id,
             'SignatureMethod': 'HMAC-SHA1',
-            'Timestamp': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'Timestamp': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'SignatureVersion': '1.0',
             'SignatureNonce': str(uuid.uuid4()),
             'Format': 'JSON'

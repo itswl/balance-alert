@@ -6,8 +6,10 @@
 import json
 import sys
 import argparse
+import hashlib
 import threading
-from typing import Dict, Any, List, Optional
+import time
+from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
@@ -19,6 +21,15 @@ from config_loader import load_config_with_env_vars
 
 # 创建 logger
 logger = get_logger('monitor')
+
+# 并发检查常量
+DEFAULT_MAX_CONCURRENT = 5
+MAX_CONCURRENT_UPPER_BOUND = 20
+
+# Provider 响应缓存（TTL 缓存）
+DEFAULT_RESPONSE_CACHE_TTL = 300  # 默认缓存 5 分钟
+_response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_cache_lock = threading.Lock()
 
 
 class CreditMonitor:
@@ -57,10 +68,10 @@ class CreditMonitor:
             int: 最大并发检查数
         """
         try:
-            max_concurrent = self.config.get('settings', {}).get('max_concurrent_checks', 5)
-            return max(1, min(max_concurrent, 20))  # 限制在1-20之间
+            max_concurrent = self.config.get('settings', {}).get('max_concurrent_checks', DEFAULT_MAX_CONCURRENT)
+            return max(1, min(max_concurrent, MAX_CONCURRENT_UPPER_BOUND))
         except (TypeError, ValueError):
-            return 5
+            return DEFAULT_MAX_CONCURRENT
     
     def check_project(self, project_config: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """
@@ -94,6 +105,32 @@ class CreditMonitor:
                 'alarm_sent': False
             }
         
+        # 检查 TTL 缓存
+        cache_ttl = self.config.get('settings', {}).get('response_cache_ttl', DEFAULT_RESPONSE_CACHE_TTL)
+        cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
+
+        if cache_ttl > 0:
+            with _cache_lock:
+                if cache_key in _response_cache:
+                    cached_time, cached_result = _response_cache[cache_key]
+                    if time.time() - cached_time < cache_ttl:
+                        logger.info(f"[{project_name}] 使用缓存结果 (TTL: {cache_ttl}s)")
+                        result = cached_result
+                        credits = result['credits']
+                        need_alarm = credits < threshold
+                        return {
+                            'project': project_name,
+                            'provider': provider_name,
+                            'type': project_config.get('type'),
+                            'success': True,
+                            'credits': credits,
+                            'threshold': threshold,
+                            'need_alarm': need_alarm,
+                            'alarm_sent': False,
+                            'error': None,
+                            'cached': True
+                        }
+
         # 获取余额
         result = provider.get_credits()
         
@@ -108,7 +145,12 @@ class CreditMonitor:
         
         credits = result['credits']
         logger.info(f"[{project_name}] 当前余额: {credits}")
-        
+
+        # 缓存成功的结果
+        if cache_ttl > 0:
+            with _cache_lock:
+                _response_cache[cache_key] = (time.time(), result)
+
         # 检查是否需要告警
         need_alarm = credits < threshold
         alarm_sent = False

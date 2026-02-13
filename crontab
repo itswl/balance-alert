@@ -1,8 +1,11 @@
+# supercronic 自带日志输出，无需手动重定向 stdout/stderr
+# 失败时写入 cron_failures.log 供健康检查读取
+
 # 每天早上 9 点运行余额检查
-# 0 9 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 monitor.py >> /app/logs/cron.log 2>&1
+0 9 * * * cd /app && python3 monitor.py || echo "FAILED monitor $(date)" >> /app/logs/cron_failures.log
 
 # 每天下午 3 点再运行一次
-0 15 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 monitor.py >> /app/logs/cron.log 2>&1
+0 15 * * * cd /app && python3 monitor.py || echo "FAILED monitor $(date)" >> /app/logs/cron_failures.log
 
 # 每天早上 10 点扫描邮箱（最近1天）
-0 10 * * * date >> /app/logs/cron.log 2>&1 && cd /app && /usr/local/bin/python3 email_scanner.py --days 1 >> /app/logs/cron.log 2>&1
+0 10 * * * cd /app && python3 email_scanner.py --days 1 || echo "FAILED email_scanner $(date)" >> /app/logs/cron_failures.log

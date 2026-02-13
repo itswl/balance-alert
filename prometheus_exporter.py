@@ -8,6 +8,9 @@ import json
 import os
 import time
 from datetime import datetime
+from logger import get_logger
+
+logger = get_logger('prometheus_exporter')
 
 
 class MetricsCollector:
@@ -252,8 +255,24 @@ class MetricsCollector:
         return generate_latest()
 
 
-# 全局指标收集器实例
-metrics_collector = MetricsCollector()
+# 全局指标收集器实例（延迟初始化，避免重复注册）
+_metrics_collector = None
+
+
+def _get_metrics_collector():
+    global _metrics_collector
+    if _metrics_collector is None:
+        _metrics_collector = MetricsCollector()
+    return _metrics_collector
+
+
+class _MetricsProxy:
+    """延迟代理，首次访问属性时才创建 MetricsCollector"""
+    def __getattr__(self, name):
+        return getattr(_get_metrics_collector(), name)
+
+
+metrics_collector = _MetricsProxy()
 
 
 def metrics_endpoint():
@@ -286,5 +305,5 @@ def load_cached_metrics():
     except FileNotFoundError:
         return False
     except Exception as e:
-        print(f"加载缓存失败: {e}")
+        logger.error(f"加载缓存失败: {e}")
         return False

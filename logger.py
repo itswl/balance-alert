@@ -55,8 +55,8 @@ def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -
     return logger
 
 
-# 全局 logger 实例
-logger = setup_logging()
+# 全局 logger 实例（支持 LOG_FILE 环境变量指定日志文件）
+logger = setup_logging(log_file=os.environ.get('LOG_FILE'))
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
