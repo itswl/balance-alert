@@ -170,6 +170,57 @@
     <!-- Toast 通知 -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>系统设置</h2>
+                <button class="modal-close" onclick="closeSettingsModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>外观设置</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-dark-mode">
+                            <span>深色模式</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>数据更新</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-auto-refresh" checked>
+                            <span>启用自动刷新（每5分钟）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>关于</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.6;">
+                        <strong>Balance Alert</strong><br>
+                        余额监控与订阅管理系统<br>
+                        <br>
+                        <a href="https://github.com/anthropics/claude-code" target="_blank" style="color: var(--primary);">
+                            🤖 Powered by Claude Code
+                        </a>
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-primary" onclick="closeSettingsModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 编辑项目阈值模态框 -->
     <div id="threshold-modal" class="modal">
         <div class="modal-content">
@@ -281,5 +332,6 @@
     <script src="/static/js/app.js"></script>
     <script src="/static/js/subscription-manager.js"></script>
     <script src="/static/js/threshold-manager.js"></script>
+    <script src="/static/js/settings-manager.js"></script>
 </body>
 </html>
