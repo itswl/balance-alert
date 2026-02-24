@@ -6,10 +6,17 @@ namespace: balance-alert
 resources:
   - namespace.yaml
   - configmap.yaml
+  # Secret 应该从 .env 创建，不要提交到 Git
+  # - secret.yaml
+  - pvc.yaml        # 数据持久化存储
   - deployment.yaml
   - service.yaml
   # Ingress 可选，如不需要请注释
-  - ingress.yaml
+  # - ingress.yaml
+  # PodDisruptionBudget 可选，用于高可用
+  # - pdb.yaml
+  # ServiceMonitor 可选，用于 Prometheus 监控
+  # - servicemonitor.yaml
 
 images:
   - name: balance-alert

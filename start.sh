@@ -20,7 +20,7 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGQUIT
 
 echo "🌐 Starting Web Server on port 8080..."
-python /app/web_server.py &
+python /app/web_server_modular.py &
 WEB_PID=$!
 echo "Web Server started with PID: $WEB_PID"
 echo ""
