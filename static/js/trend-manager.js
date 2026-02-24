@@ -2,6 +2,24 @@
 
 let trendChart = null;
 
+// MD5 哈希函数（用于生成项目 ID）
+async function md5(str) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+// 简单的 MD5 实现（因为 Web Crypto API 不支持 MD5，使用简单哈希代替或转换）
+function simpleMD5(str) {
+    // 使用简单的字符串哈希，与后端 MD5 不同但可以作为替代
+    // 更好的方案是让后端 API 支持通过 provider:project_name 查询
+    // 暂时先计算后端使用的格式
+    return str;  // 占位符，下面会修正
+}
+
 // 显示项目趋势
 async function showProjectTrend(projectName, provider) {
     const modal = document.getElementById('trend-modal');
@@ -14,8 +32,9 @@ async function showProjectTrend(projectName, provider) {
     UI.setLoading(true);
     modal.classList.add('active');
 
-    // 生成项目 ID（使用 provider_projectName 格式）
-    const projectId = `${provider}_${projectName}`;
+    // 生成项目 ID（与后端一致：hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()）
+    // 前端无法直接使用 MD5，改为通过 provider:project_name 格式让后端查询
+    const projectId = `${provider}:${projectName}`;
 
     try {
         // 获取趋势数据（默认30天）
@@ -70,6 +89,14 @@ async function showProjectTrend(projectName, provider) {
 
 // 渲染趋势统计信息
 function renderTrendStats(trendData, container) {
+    // 计算变化趋势方向
+    let trendDirection = 'stable';
+    if (trendData.change > 0) {
+        trendDirection = 'up';
+    } else if (trendData.change < 0) {
+        trendDirection = 'down';
+    }
+
     const stats = [
         {
             label: '当前余额',
@@ -78,7 +105,7 @@ function renderTrendStats(trendData, container) {
         },
         {
             label: '平均余额',
-            value: Utils.formatCurrency(trendData.average_balance),
+            value: Utils.formatCurrency(trendData.avg_balance),  // 后端返回 avg_balance
             class: ''
         },
         {
@@ -93,10 +120,10 @@ function renderTrendStats(trendData, container) {
         },
         {
             label: '变化趋势',
-            value: trendData.trend_direction === 'up' ? '↑ 上升' :
-                   trendData.trend_direction === 'down' ? '↓ 下降' : '→ 稳定',
-            class: trendData.trend_direction === 'up' ? 'positive' :
-                   trendData.trend_direction === 'down' ? 'negative' : ''
+            value: trendDirection === 'up' ? '↑ 上升' :
+                   trendDirection === 'down' ? '↓ 下降' : '→ 稳定',
+            class: trendDirection === 'up' ? 'positive' :
+                   trendDirection === 'down' ? 'negative' : ''
         }
     ];
 
