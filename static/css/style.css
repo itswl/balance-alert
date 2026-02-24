@@ -1046,3 +1046,75 @@ body {
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--border-color);
 }
+
+/* ==================== 项目操作 ==================== */
+.project-actions {
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    transition: var(--transition-fast);
+}
+
+.btn-link:hover {
+    color: var(--primary-dark, #4f46e5);
+    text-decoration: underline;
+}
+
+.btn-link svg {
+    stroke-width: 2;
+}
+
+/* ==================== 趋势图表模态框 ==================== */
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+}
+
+.trend-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.trend-stat-card {
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.trend-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.trend-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.trend-stat-value.positive {
+    color: var(--success);
+}
+
+.trend-stat-value.negative {
+    color: var(--danger);
+}
