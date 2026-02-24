@@ -21,7 +21,7 @@ def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateMan
         results: 订阅检查结果列表
         state_mgr: 状态管理器实例
     """
-    state_mgr.update_subscription(results)
+    state_mgr.update_subscription_state(results)
 
 
 def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> None:
