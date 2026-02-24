@@ -398,10 +398,11 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
                 if env_api_key:
                     project['api_key'] = env_api_key
 
-        # 环境变量覆盖订阅配置
+        # 环境变量订阅配置（仅在配置文件没有订阅时使用，避免覆盖 Web API 添加的订阅）
         env_subscriptions = load_subscriptions_from_env()
-        if env_subscriptions:
+        if env_subscriptions and not config.get('subscriptions'):
             config['subscriptions'] = env_subscriptions
+            logger.info(f"[Config] 从环境变量加载 {len(env_subscriptions)} 个订阅")
 
         # 环境变量覆盖系统设置
         if 'settings' not in config:
