@@ -19,6 +19,18 @@ from prometheus_exporter import metrics_endpoint, metrics_collector
 from logger import get_logger
 from config_loader import get_config, start_config_watcher, stop_config_watcher
 from state_manager import StateManager
+
+# 数据库持久化（可选）
+try:
+    from database import init_database
+    from database.repository import BalanceRepository, AlertRepository, SubscriptionRepository
+    DB_AVAILABLE = True
+    # 初始化数据库
+    if init_database():
+        logger.info("✅ 数据库已初始化")
+except (ImportError, Exception) as e:
+    DB_AVAILABLE = False
+    logger.warning(f"数据库模块不可用: {e}")
 import signal
 import threading
 from datetime import datetime
@@ -963,6 +975,239 @@ def update_threshold():
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==================== 历史数据与趋势分析 API ====================
+
+@app.route('/api/history/balance', methods=['GET'])
+@require_api_key
+def get_balance_history():
+    """
+    获取余额历史记录
+
+    查询参数:
+        - project_id: 项目ID（可选）
+        - provider: Provider类型（可选）
+        - days: 查询天数（默认7天）
+        - limit: 返回记录数限制（默认100）
+    """
+    if not DB_AVAILABLE:
+        return jsonify({
+            'status': 'error',
+            'message': '数据库功能未启用'
+        }), 503
+
+    try:
+        project_id = request.args.get('project_id')
+        provider = request.args.get('provider')
+        days = int(request.args.get('days', 7))
+        limit = int(request.args.get('limit', 100))
+
+        # 参数验证
+        if days < 1 or days > 365:
+            return jsonify({
+                'status': 'error',
+                'message': 'days 必须在 1-365 之间'
+            }), 400
+
+        if limit < 1 or limit > 1000:
+            return jsonify({
+                'status': 'error',
+                'message': 'limit 必须在 1-1000 之间'
+            }), 400
+
+        history = BalanceRepository.get_balance_history(
+            project_id=project_id,
+            provider=provider,
+            days=days,
+            limit=limit
+        )
+
+        return jsonify({
+            'status': 'success',
+            'count': len(history),
+            'data': history
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
+    except Exception as e:
+        logger.error(f"查询余额历史失败: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/history/trend/<project_id>', methods=['GET'])
+@require_api_key
+def get_balance_trend(project_id: str):
+    """
+    获取项目余额趋势分析
+
+    路径参数:
+        - project_id: 项目唯一标识
+
+    查询参数:
+        - days: 分析天数（默认30天）
+    """
+    if not DB_AVAILABLE:
+        return jsonify({
+            'status': 'error',
+            'message': '数据库功能未启用'
+        }), 503
+
+    try:
+        days = int(request.args.get('days', 30))
+
+        if days < 1 or days > 365:
+            return jsonify({
+                'status': 'error',
+                'message': 'days 必须在 1-365 之间'
+            }), 400
+
+        trend = BalanceRepository.get_balance_trend(project_id, days)
+
+        if 'error' in trend:
+            return jsonify({
+                'status': 'error',
+                'message': trend['error']
+            }), 404 if trend['error'] == 'No data found' else 500
+
+        return jsonify({
+            'status': 'success',
+            'data': trend
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
+    except Exception as e:
+        logger.error(f"获取余额趋势失败: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/history/alerts', methods=['GET'])
+@require_api_key
+def get_alert_history():
+    """
+    获取告警历史记录
+
+    查询参数:
+        - project_id: 项目ID（可选）
+        - alert_type: 告警类型（可选）
+        - days: 查询天数（默认7天）
+        - limit: 返回记录数限制（默认50）
+    """
+    if not DB_AVAILABLE:
+        return jsonify({
+            'status': 'error',
+            'message': '数据库功能未启用'
+        }), 503
+
+    try:
+        project_id = request.args.get('project_id')
+        alert_type = request.args.get('alert_type')
+        days = int(request.args.get('days', 7))
+        limit = int(request.args.get('limit', 50))
+
+        if days < 1 or days > 365:
+            return jsonify({
+                'status': 'error',
+                'message': 'days 必须在 1-365 之间'
+            }), 400
+
+        if limit < 1 or limit > 1000:
+            return jsonify({
+                'status': 'error',
+                'message': 'limit 必须在 1-1000 之间'
+            }), 400
+
+        alerts = AlertRepository.get_recent_alerts(
+            project_id=project_id,
+            alert_type=alert_type,
+            days=days,
+            limit=limit
+        )
+
+        return jsonify({
+            'status': 'success',
+            'count': len(alerts),
+            'data': alerts
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
+    except Exception as e:
+        logger.error(f"查询告警历史失败: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/history/stats', methods=['GET'])
+@require_api_key
+def get_alert_statistics():
+    """
+    获取告警统计信息
+
+    查询参数:
+        - days: 统计天数（默认30天）
+    """
+    if not DB_AVAILABLE:
+        return jsonify({
+            'status': 'error',
+            'message': '数据库功能未启用'
+        }), 503
+
+    try:
+        days = int(request.args.get('days', 30))
+
+        if days < 1 or days > 365:
+            return jsonify({
+                'status': 'error',
+                'message': 'days 必须在 1-365 之间'
+            }), 400
+
+        stats = AlertRepository.get_alert_statistics(days)
+
+        if 'error' in stats:
+            return jsonify({
+                'status': 'error',
+                'message': stats['error']
+            }), 500
+
+        return jsonify({
+            'status': 'success',
+            'data': stats
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
+    except Exception as e:
+        logger.error(f"获取告警统计失败: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/history/projects', methods=['GET'])
+@require_api_key
+def get_all_projects_summary():
+    """
+    获取所有项目的最新状态摘要
+    """
+    if not DB_AVAILABLE:
+        return jsonify({
+            'status': 'error',
+            'message': '数据库功能未启用'
+        }), 503
+
+    try:
+        summary = BalanceRepository.get_all_projects_summary()
+
+        return jsonify({
+            'status': 'success',
+            'count': len(summary),
+            'data': summary
+        })
+
+    except Exception as e:
+        logger.error(f"获取项目摘要失败: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 if __name__ == '__main__':
     # 从环境变量读取端口配置

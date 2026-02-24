@@ -19,6 +19,14 @@ from webhook_adapter import WebhookAdapter
 from logger import get_logger
 from config_loader import load_config_with_env_vars
 
+# 数据持久化（可选）
+try:
+    from database.repository import BalanceRepository, AlertRepository
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    logger.warning("数据库模块不可用，历史数据不会被保存")
+
 # 创建 logger
 logger = get_logger('monitor')
 
@@ -180,12 +188,46 @@ class CreditMonitor:
         # 检查是否需要告警
         need_alarm = credits < threshold
         alarm_sent = False
+
+        # 保存余额历史到数据库
+        if DB_AVAILABLE:
+            try:
+                project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+                BalanceRepository.save_balance_record(
+                    project_id=project_id,
+                    project_name=project_name,
+                    provider=provider_name,
+                    balance=credits,
+                    threshold=threshold,
+                    currency=result.get('currency', 'USD'),
+                    balance_type=project_config.get('type', 'credits'),
+                    need_alarm=need_alarm
+                )
+            except Exception as e:
+                logger.error(f"保存余额历史失败: {e}")
         
         if need_alarm:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
 
             if not dry_run:
                 alarm_sent = self._send_alarm(project_config, credits)
+
+                # 保存告警历史到数据库
+                if DB_AVAILABLE and alarm_sent:
+                    try:
+                        project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+                        balance_type = '余额' if project_config.get('type') == 'balance' else '积分'
+                        AlertRepository.save_alert_record(
+                            project_id=project_id,
+                            project_name=project_name,
+                            alert_type='low_balance',
+                            message=f"{balance_type}不足: {credits} < {threshold}",
+                            balance_value=credits,
+                            threshold_value=threshold,
+                            status='sent'
+                        )
+                    except Exception as e:
+                        logger.error(f"保存告警历史失败: {e}")
             else:
                 logger.info(f"[{project_name}] [测试模式] 跳过发送告警")
         else:
