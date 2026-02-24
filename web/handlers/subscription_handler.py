@@ -34,7 +34,7 @@ def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> Non
     """
     try:
         checker = SubscriptionChecker(config_path)
-        results = checker.check_all_subscriptions()
+        results = checker.check_subscriptions()
         update_subscription_cache(results, state_mgr)
     except Exception as e:
         logger.error(f"刷新订阅缓存失败: {e}", exc_info=True)
