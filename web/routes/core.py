@@ -65,19 +65,23 @@ def health():
     from ..utils import get_refresh_interval
 
     # 获取状态
-    balance_state = _state_manager.get_all_balance()
-    last_update = _state_manager.get_last_update()
+    balance_state = _state_manager.get_balance_state()
+    last_update = balance_state.get('last_update')
 
     # 检查是否有数据
-    has_data = bool(balance_state)
+    has_data = bool(balance_state.get('projects'))
 
     # 检查数据是否过期
     is_stale = False
     if last_update:
-        refresh_interval = get_refresh_interval()
-        stale_threshold = timedelta(seconds=refresh_interval * STALENESS_MULTIPLIER)
-        time_since_update = datetime.now() - last_update
-        is_stale = time_since_update > stale_threshold
+        try:
+            last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00')) if isinstance(last_update, str) else last_update
+            refresh_interval = get_refresh_interval()
+            stale_threshold = timedelta(seconds=refresh_interval * STALENESS_MULTIPLIER)
+            time_since_update = datetime.now() - last_update_dt
+            is_stale = time_since_update > stale_threshold
+        except Exception:
+            is_stale = False
 
     # 检查 cron 是否失败
     cron_healthy = True
@@ -98,7 +102,7 @@ def health():
         'has_data': has_data,
         'is_stale': is_stale,
         'cron_healthy': cron_healthy,
-        'last_update': last_update.isoformat() if last_update else None,
+        'last_update': last_update if isinstance(last_update, str) else (last_update.isoformat() if last_update else None),
         'uptime_seconds': uptime_seconds,
         'version': os.environ.get('APP_VERSION', '1.0.0')
     }
@@ -111,37 +115,16 @@ def health():
 @require_api_key
 def get_credits():
     """获取所有项目的余额信息"""
-    balance_state = _state_manager.get_all_balance()
-    last_update = _state_manager.get_last_update()
+    balance_state = _state_manager.get_balance_state()
 
-    if not balance_state:
+    if not balance_state or not balance_state.get('projects'):
         return jsonify({
             'status': 'error',
             'message': '余额数据未初始化，请稍后重试'
         }), 503
 
-    # 转换为前端格式
-    projects = []
-    for project_name, data in balance_state.items():
-        projects.append({
-            'name': project_name,
-            'provider': data.get('provider'),
-            'balance': data.get('credits'),
-            'threshold': data.get('threshold'),
-            'currency': data.get('currency', 'USD'),
-            'type': data.get('type', 'credits'),
-            'need_alarm': data.get('need_alarm', False),
-            'last_update': last_update.isoformat() if last_update else None
-        })
-
-    response_data = {
-        'projects': projects,
-        'last_update': last_update.isoformat() if last_update else None,
-        'next_refresh': None  # 可以计算下次刷新时间
-    }
-
     # 使用 ETag 支持缓存
-    return make_etag_response(response_data)
+    return make_etag_response(balance_state)
 
 
 @core_bp.route('/api/refresh', methods=['GET', 'POST'])
