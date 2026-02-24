@@ -4,19 +4,28 @@ services:
   # 余额监控 Web 服务
   web:
     build: .
-    container_name: balance-alert-web
+    image: credit-monitor:latest
+    container_name: credit-monitor
+    restart: unless-stopped
     ports:
-      - "8080:8080"  # Web 界面
-      - "9100:9100"  # Prometheus Metrics
+      - "8080:8080"  # Web 服务端口
+      - "9100:9100"  # Prometheus Metrics 端口
     volumes:
+      # 挂载配置文件（可以在宿主机修改配置）
       - ./config.json:/app/config.json
+      # 挂载日志目录
       - ./logs:/app/logs
+      # 挂载数据目录（数据库持久化）
+      - ./data:/app/data
+    env_file:
+      - .env  # 从 .env 文件加载环境变量（如果文件存在）
     environment:
       - TZ=Asia/Shanghai
-      - ENABLE_WEB_ALARM=false
-    restart: unless-stopped
+    # 启动 Web 服务器 + Cron 定时任务
+    command: /app/start.sh
     networks:
       - monitoring
+
 
   # Prometheus
   prometheus:
@@ -48,12 +57,14 @@ services:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123  # 请修改默认密码
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_INSTALL_PLUGINS=
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/balance-alert-dashboard.json
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:
