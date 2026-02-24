@@ -170,8 +170,85 @@
     <!-- Toast 通知 -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- 订阅管理模态框 -->
+    <div id="subscription-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">添加订阅</h2>
+                <button class="modal-close" onclick="closeSubscriptionModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="subscription-form" class="modal-body">
+                <input type="hidden" id="edit-mode" value="false">
+                <input type="hidden" id="original-name" value="">
+
+                <div class="form-group">
+                    <label for="sub-name">订阅名称 *</label>
+                    <input type="text" id="sub-name" required placeholder="例如：Netflix、云服务器">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sub-amount">金额 *</label>
+                        <input type="number" id="sub-amount" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="sub-currency">货币</label>
+                        <select id="sub-currency">
+                            <option value="CNY">CNY (¥)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sub-cycle">订阅周期 *</label>
+                        <select id="sub-cycle" required>
+                            <option value="monthly">每月</option>
+                            <option value="yearly">每年</option>
+                            <option value="weekly">每周</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sub-renewal-day">续费日 *</label>
+                        <input type="number" id="sub-renewal-day" min="1" max="31" required placeholder="1-31">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-alert-days">提前提醒天数 *</label>
+                    <input type="number" id="sub-alert-days" min="1" max="90" value="7" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-last-renewed">最后续费日期（可选）</label>
+                    <input type="date" id="sub-last-renewed">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="sub-enabled" checked>
+                        <span>启用此订阅提醒</span>
+                    </label>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeSubscriptionModal()">取消</button>
+                <button type="submit" class="btn-primary" onclick="saveSubscription(event)">保存</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 添加 Chart.js 用于数据可视化 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/subscription-manager.js"></script>
 </body>
 </html>
