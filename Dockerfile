@@ -39,11 +39,10 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# 从 builder 复制已安装的 Python 包
-COPY --from=builder /root/.local /root/.local
-
-# 确保 pip 安装的脚本在 PATH 中
-ENV PATH=/root/.local/bin:$PATH
+# 从 builder 复制已安装的 Python 包到系统 site-packages
+# 这样所有用户都可以访问
+COPY --from=builder /root/.local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /root/.local/bin /usr/local/bin
 
 # 复制项目文件（分层复制，优化缓存）
 COPY *.py ./
