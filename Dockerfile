@@ -48,8 +48,12 @@ COPY --from=builder /root/.local/bin /usr/local/bin
 COPY *.py ./
 COPY providers ./providers
 COPY models ./models
+COPY database ./database
+COPY web ./web
 COPY templates ./templates
 COPY static ./static
+COPY alembic ./alembic
+COPY alembic.ini ./
 COPY start.sh crontab ./
 
 # 创建非 root 用户

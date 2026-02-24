@@ -19,6 +19,9 @@ from webhook_adapter import WebhookAdapter
 from logger import get_logger
 from config_loader import load_config_with_env_vars
 
+# 创建 logger（必须在使用前定义）
+logger = get_logger('monitor')
+
 # 数据持久化（可选）
 try:
     from database.repository import BalanceRepository, AlertRepository
@@ -26,9 +29,6 @@ try:
 except ImportError:
     DB_AVAILABLE = False
     logger.warning("数据库模块不可用，历史数据不会被保存")
-
-# 创建 logger
-logger = get_logger('monitor')
 
 # 并发检查常量
 DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
