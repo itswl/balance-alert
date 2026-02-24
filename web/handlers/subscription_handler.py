@@ -35,7 +35,8 @@ def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> Non
     try:
         checker = SubscriptionChecker(config_path)
         results = checker.check_subscriptions()
-        update_subscription_cache(results, state_mgr)
+        # 确保 results 不为 None
+        update_subscription_cache(results or [], state_mgr)
     except Exception as e:
         logger.error(f"刷新订阅缓存失败: {e}", exc_info=True)
 
