@@ -43,23 +43,46 @@ spec:
               mountPath: /app/logs
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "256Mi"  # 提升内存请求（原 128Mi）
+              cpu: "250m"      # 提升 CPU 请求（原 100m）
             limits:
               memory: "512Mi"
               cpu: "500m"
+          # 存活探针：检测容器是否需要重启
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: web
             initialDelaySeconds: 30
-            periodSeconds: 10
+            periodSeconds: 30  # 30秒检查一次
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3  # 连续失败3次才重启
+          # 就绪探针：检测容器是否准备好接收流量
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: web
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 5   # 5秒检查一次
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 2  # 连续失败2次就移除流量
+          # 启动探针：检测容器是否已启动（避免慢启动被 kill）
+          startupProbe:
+            httpGet:
+              path: /health
+              port: web
+            initialDelaySeconds: 0
             periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 12  # 最多等待 60 秒（12 * 5s）
+          # 优雅关闭配置
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 15"]  # 等待15秒让请求完成
       volumes:
         # 方式1: 使用 ConfigMap
         - name: config

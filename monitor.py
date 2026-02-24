@@ -23,8 +23,8 @@ from config_loader import load_config_with_env_vars
 logger = get_logger('monitor')
 
 # 并发检查常量
-DEFAULT_MAX_CONCURRENT = 5
-MAX_CONCURRENT_UPPER_BOUND = 20
+DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
+MAX_CONCURRENT_UPPER_BOUND = 50  # 提升上限 from 20 to 50
 
 # Provider 响应缓存（TTL 缓存）
 DEFAULT_RESPONSE_CACHE_TTL = 300  # 默认缓存 5 分钟
@@ -251,12 +251,15 @@ class CreditMonitor:
             project_name: 指定项目名称，None 表示检查所有启用的项目
             dry_run: 测试模式，不发送告警
         """
+        # 记录开始时间（用于 Prometheus 指标）
+        start_time = time.time()
+
         projects = self.config.get('projects', [])
-        
+
         if not projects:
             logger.warning("⚠️  配置文件中没有项目")
             return
-        
+
         # 过滤项目
         if project_name:
             projects = [p for p in projects if p.get('name') == project_name]
@@ -265,11 +268,18 @@ class CreditMonitor:
                 return
         else:
             projects = [p for p in projects if p.get('enabled', True)]
-        
+
         logger.info(f"开始监控 {len(projects)} 个项目...")
         if dry_run:
             logger.info("[测试模式] 不会发送实际告警")
-        
+
+        # 记录活跃项目数（Prometheus 指标）
+        try:
+            from prometheus_exporter import set_active_projects_count
+            set_active_projects_count(len(projects))
+        except Exception:
+            pass  # 容错，不影响主流程
+
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
         actual_workers = min(max_workers, len(projects))
@@ -302,6 +312,15 @@ class CreditMonitor:
         
         # 输出汇总
         self._print_summary()
+
+        # 记录执行时间（Prometheus 指标）
+        execution_time = time.time() - start_time
+        try:
+            from prometheus_exporter import record_monitor_execution
+            record_monitor_execution(execution_time)
+            logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
+        except Exception:
+            pass  # 容错
     
     def _print_summary(self) -> None:
         """打印检查汇总"""

@@ -2,12 +2,21 @@
 """
 日志配置模块
 统一日志格式和输出
+支持结构化日志（JSON 格式）
 """
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
 from typing import Optional
 from datetime import datetime
+
+# 尝试导入 JSON 日志格式器
+try:
+    from pythonjsonlogger import jsonlogger
+    JSON_LOGGING_AVAILABLE = True
+except ImportError:
+    JSON_LOGGING_AVAILABLE = False
 
 
 def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -> logging.Logger:
@@ -35,11 +44,24 @@ def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -
     if logger.handlers:
         return logger
     
-    # 创建 formatter
-    formatter = logging.Formatter(
-        fmt='%(asctime)s [%(levelname)-8s] %(name)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # 创建 formatter（支持 JSON 格式）
+    log_format = os.environ.get('LOG_FORMAT', 'text').lower()
+
+    if log_format == 'json' and JSON_LOGGING_AVAILABLE:
+        # JSON 格式（结构化日志）
+        formatter = jsonlogger.JsonFormatter(
+            '%(asctime)s %(name)s %(levelname)s %(message)s',
+            timestamp=True
+        )
+    else:
+        # 文本格式（传统日志）
+        if log_format == 'json' and not JSON_LOGGING_AVAILABLE:
+            print("Warning: python-json-logger not installed, falling back to text format", file=sys.stderr)
+
+        formatter = logging.Formatter(
+            fmt='%(asctime)s [%(levelname)-8s] %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
     
     # 控制台 handler
     console_handler = logging.StreamHandler()

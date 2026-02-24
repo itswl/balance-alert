@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: balance-alert-pdb
+  namespace: balance-alert
+spec:
+  minAvailable: 1  # 滚动更新时至少保持1个Pod可用
+  selector:
+    matchLabels:
+      app: balance-alert

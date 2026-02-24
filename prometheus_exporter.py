@@ -2,7 +2,7 @@
 """
 Prometheus Exporter - 暴露监控指标
 """
-from prometheus_client import Gauge, Counter, Info, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Gauge, Counter, Info, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from flask import Response
 import json
 import os
@@ -91,6 +91,91 @@ class MetricsCollector:
         self.project_info = Info(
             'balance_alert_project',
             'Project information'
+        )
+
+        # ========== 新增关键指标 ==========
+
+        # 1. 执行时间分布（最重要的性能指标）
+        self.monitor_execution_time = Histogram(
+            'balance_alert_monitor_execution_time_seconds',
+            'Monitor execution time distribution',
+            buckets=(0.5, 1, 2, 5, 10, 30, 60, 120)
+        )
+
+        # 2. Provider API 延迟
+        self.provider_api_latency = Histogram(
+            'balance_alert_provider_api_latency_seconds',
+            'Provider API call latency',
+            ['provider', 'status'],
+            buckets=(0.1, 0.5, 1, 2, 5, 10, 15, 30)
+        )
+
+        # 3. Provider API 调用计数
+        self.provider_api_calls = Counter(
+            'balance_alert_provider_api_calls_total',
+            'Total provider API calls',
+            ['provider', 'status']  # status: success/timeout/error
+        )
+
+        # 4. 邮箱扫描耗时
+        self.email_scan_duration = Histogram(
+            'balance_alert_email_scan_duration_seconds',
+            'Email scan duration',
+            ['mailbox'],
+            buckets=(0.5, 1, 2, 5, 10, 30, 60)
+        )
+
+        # 5. Webhook 发送耗时
+        self.webhook_delivery_time = Histogram(
+            'balance_alert_webhook_delivery_time_seconds',
+            'Webhook delivery time',
+            ['webhook_type', 'status'],
+            buckets=(0.1, 0.5, 1, 2, 5, 10)
+        )
+
+        # 6. 缓存命中率
+        self.cache_hits = Counter(
+            'balance_alert_cache_hits_total',
+            'Cache hits',
+            ['cache_type']  # response_cache/provider_instance_cache
+        )
+
+        self.cache_misses = Counter(
+            'balance_alert_cache_misses_total',
+            'Cache misses',
+            ['cache_type']
+        )
+
+        # 7. 配置重载计数
+        self.config_reload_count = Counter(
+            'balance_alert_config_reload_total',
+            'Total config reloads'
+        )
+
+        # 8. 活跃项目数
+        self.active_projects_count = Gauge(
+            'balance_alert_active_projects_count',
+            'Number of active projects being monitored'
+        )
+
+        # 9. 失败检查计数
+        self.failed_checks = Counter(
+            'balance_alert_failed_checks_total',
+            'Total failed checks',
+            ['project', 'provider', 'error_type']
+        )
+
+        # 10. 熔断器状态
+        self.circuit_breaker_state = Gauge(
+            'balance_alert_circuit_breaker_state',
+            'Circuit breaker state (0=closed, 1=open)',
+            ['provider']
+        )
+
+        # 11. 后台任务延迟
+        self.background_task_lag = Gauge(
+            'balance_alert_background_task_lag_seconds',
+            'Background task lag from scheduled time'
         )
     
     def update_balance_metrics(self, results):
@@ -307,3 +392,116 @@ def load_cached_metrics():
     except Exception as e:
         logger.error(f"加载缓存失败: {e}")
         return False
+
+
+# ========== 新增指标使用的便捷函数 ==========
+
+def record_monitor_execution(duration_seconds):
+    """记录监控执行时间"""
+    metrics_collector.monitor_execution_time.observe(duration_seconds)
+
+
+def record_provider_api_call(provider, status, latency_seconds):
+    """
+    记录 Provider API 调用
+    
+    Args:
+        provider: Provider 名称 (openrouter, aliyun, volc, etc.)
+        status: 调用状态 (success, timeout, error)
+        latency_seconds: 延迟时间（秒）
+    """
+    metrics_collector.provider_api_calls.labels(provider=provider, status=status).inc()
+    metrics_collector.provider_api_latency.labels(provider=provider, status=status).observe(latency_seconds)
+
+
+def record_email_scan(mailbox, duration_seconds):
+    """记录邮箱扫描耗时"""
+    metrics_collector.email_scan_duration.labels(mailbox=mailbox).observe(duration_seconds)
+
+
+def record_webhook_delivery(webhook_type, status, duration_seconds):
+    """
+    记录 Webhook 发送
+    
+    Args:
+        webhook_type: webhook 类型 (feishu, dingtalk, wecom, custom)
+        status: 发送状态 (success, timeout, error)
+        duration_seconds: 耗时（秒）
+    """
+    metrics_collector.webhook_delivery_time.labels(
+        webhook_type=webhook_type,
+        status=status
+    ).observe(duration_seconds)
+
+
+def record_cache_access(cache_type, hit):
+    """
+    记录缓存访问
+    
+    Args:
+        cache_type: 缓存类型 (response_cache, provider_instance_cache)
+        hit: 是否命中 (True/False)
+    """
+    if hit:
+        metrics_collector.cache_hits.labels(cache_type=cache_type).inc()
+    else:
+        metrics_collector.cache_misses.labels(cache_type=cache_type).inc()
+
+
+def record_config_reload():
+    """记录配置重载"""
+    metrics_collector.config_reload_count.inc()
+
+
+def set_active_projects_count(count):
+    """设置活跃项目数"""
+    metrics_collector.active_projects_count.set(count)
+
+
+def record_failed_check(project, provider, error_type):
+    """
+    记录失败的检查
+    
+    Args:
+        project: 项目名称
+        provider: Provider 名称
+        error_type: 错误类型 (timeout, api_error, network_error, etc.)
+    """
+    metrics_collector.failed_checks.labels(
+        project=project,
+        provider=provider,
+        error_type=error_type
+    ).inc()
+
+
+def set_circuit_breaker_state(provider, is_open):
+    """
+    设置熔断器状态
+    
+    Args:
+        provider: Provider 名称
+        is_open: 是否打开 (True=打开, False=关闭)
+    """
+    metrics_collector.circuit_breaker_state.labels(provider=provider).set(1 if is_open else 0)
+
+
+def set_background_task_lag(lag_seconds):
+    """设置后台任务延迟（秒）"""
+    metrics_collector.background_task_lag.set(lag_seconds)
+
+
+# 导出所有新增的函数
+__all__ = [
+    'metrics_endpoint',
+    'metrics_collector',
+    'record_monitor_execution',
+    'record_provider_api_call',
+    'record_email_scan',
+    'record_webhook_delivery',
+    'record_cache_access',
+    'record_config_reload',
+    'set_active_projects_count',
+    'record_failed_check',
+    'set_circuit_breaker_state',
+    'set_background_task_lag',
+]
