@@ -1,6 +1,6 @@
 {
   "balance": {
-    "last_update": "2026-02-24 21:11:43",
+    "last_update": "2026-02-24 21:16:12",
     "projects": [
       {
         "project": "WxRank-微信公众号",
@@ -18,7 +18,7 @@
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 231572.25,
+        "credits": 231571.85,
         "threshold": 10000.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -29,7 +29,7 @@
         "provider": "volc",
         "type": "balance",
         "success": true,
-        "credits": 868500.1,
+        "credits": 868495.17,
         "threshold": 7000.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -51,7 +51,7 @@
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 234349.56,
+        "credits": 234071.15,
         "threshold": 1000.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -62,7 +62,7 @@
         "provider": "openrouter",
         "type": "credits",
         "success": true,
-        "credits": 6086.2387984585075,
+        "credits": 6084.1021088725975,
         "threshold": 100.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -88,7 +88,7 @@
     }
   },
   "subscription": {
-    "last_update": "2026-02-24 21:11:43",
+    "last_update": "2026-02-24 21:16:12",
     "subscriptions": [
       {
         "name": "emqx - mqtt - 授权",
@@ -114,26 +114,13 @@
         "amount": 3500.0,
         "currency": "CNY",
         "already_renewed": false,
-        "last_renewed_date": "2026-02-13"
-      },
-      {
-        "name": "测试订阅_1771938577528",
-        "renewal_day": 1,
-        "cycle_type": "monthly",
-        "days_until_renewal": 4,
-        "next_renewal_date": "2026-03-01",
-        "need_alert": true,
-        "alert_sent": false,
-        "amount": 99.0,
-        "currency": "CNY",
-        "already_renewed": false,
         "last_renewed_date": null
       }
     ],
     "summary": {
-      "total": 3,
-      "need_alert": 1
+      "total": 2,
+      "need_alert": 0
     }
   },
-  "last_update": "2026-02-24 21:11:43"
+  "last_update": "2026-02-24 21:16:12"
 }
