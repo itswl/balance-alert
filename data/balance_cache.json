@@ -1,6 +1,6 @@
 {
   "balance": {
-    "last_update": "2026-02-24 21:16:12",
+    "last_update": "2026-02-24 21:20:45",
     "projects": [
       {
         "project": "WxRank-微信公众号",
@@ -18,19 +18,8 @@
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 231571.85,
+        "credits": 231571.35,
         "threshold": 10000.0,
-        "need_alarm": false,
-        "alarm_sent": false,
-        "error": null
-      },
-      {
-        "project": "Volc-火山引擎-自然选择",
-        "provider": "volc",
-        "type": "balance",
-        "success": true,
-        "credits": 868495.17,
-        "threshold": 7000.0,
         "need_alarm": false,
         "alarm_sent": false,
         "error": null
@@ -47,11 +36,22 @@
         "error": null
       },
       {
+        "project": "Volc-火山引擎-自然选择",
+        "provider": "volc",
+        "type": "balance",
+        "success": true,
+        "credits": 868493.6,
+        "threshold": 7000.0,
+        "need_alarm": false,
+        "alarm_sent": false,
+        "error": null
+      },
+      {
         "project": "Aliyun-阿里云-2",
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 234071.15,
+        "credits": 234070.5,
         "threshold": 1000.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -62,7 +62,7 @@
         "provider": "openrouter",
         "type": "credits",
         "success": true,
-        "credits": 6084.1021088725975,
+        "credits": 6082.670110862964,
         "threshold": 100.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -88,7 +88,7 @@
     }
   },
   "subscription": {
-    "last_update": "2026-02-24 21:16:12",
+    "last_update": "2026-02-24 21:20:45",
     "subscriptions": [
       {
         "name": "emqx - mqtt - 授权",
@@ -122,5 +122,5 @@
       "need_alert": 0
     }
   },
-  "last_update": "2026-02-24 21:16:12"
+  "last_update": "2026-02-24 21:20:45"
 }

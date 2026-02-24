@@ -65,10 +65,11 @@ const Utils = {
         return this.formatDate(dateString);
     },
 
-    // 计算余额百分比
+    // 计算余额百分比（相对于阈值）
     getBalancePercentage(balance, threshold) {
         if (threshold === 0) return 100;
-        return Math.min(100, (balance / threshold) * 100);
+        // 不限制上限，允许超过 100%（表示余额充足）
+        return (balance / threshold) * 100;
     },
 
     // 获取余额状态
@@ -227,7 +228,7 @@ const UI = {
                     <div class="balance-label">${project.type === 'balance' ? '当前余额' : '当前积分'}</div>
                     <div class="balance-value">${Utils.formatCurrency(balance, currency)}</div>
                     <div class="balance-progress">
-                        <div class="balance-progress-bar ${status}" style="width: ${percentage}%"></div>
+                        <div class="balance-progress-bar ${status}" style="width: ${Math.min(100, percentage)}%"></div>
                     </div>
                 </div>
                 <div class="project-details">
@@ -240,8 +241,8 @@ const UI = {
                         <span class="detail-value">${project.type === 'balance' ? '余额' : '积分'}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">使用率</span>
-                        <span class="detail-value">${percentage.toFixed(1)}%</span>
+                        <span class="detail-label">充足度</span>
+                        <span class="detail-value">${percentage.toFixed(0)}%</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">状态</span>
