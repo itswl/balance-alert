@@ -20,7 +20,7 @@ def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManager)
         results: 监控结果列表
         state_mgr: 状态管理器实例
     """
-    state_mgr.update_balance(results)
+    state_mgr.update_balance_state(results)
 
 
 def refresh_credits(config_path: str, project_name: str = None, dry_run: bool = True) -> Dict[str, Any]:
