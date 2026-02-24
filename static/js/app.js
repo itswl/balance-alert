@@ -249,6 +249,14 @@ const UI = {
                         <span class="detail-value">${projectStatus === 'normal' ? '✅ 正常' : '⚠️ 告警'}</span>
                     </div>
                 </div>
+                <div class="project-actions">
+                    <button class="btn-link" onclick="showProjectTrend('${project.project}', '${project.provider}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 4px;">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        查看趋势
+                    </button>
+                </div>
             </div>
         `;
     },

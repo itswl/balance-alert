@@ -170,6 +170,32 @@
     <!-- Toast 通知 -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- 余额趋势模态框 -->
+    <div id="trend-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 id="trend-modal-title">余额趋势</h2>
+                <button class="modal-close" onclick="closeTrendModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="trend-stats-container" class="trend-stats">
+                    <!-- 统计卡片将动态生成 -->
+                </div>
+                <div class="chart-container">
+                    <canvas id="trend-chart"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeTrendModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 设置模态框 -->
     <div id="settings-modal" class="modal">
         <div class="modal-content">
@@ -333,5 +359,6 @@
     <script src="/static/js/subscription-manager.js"></script>
     <script src="/static/js/threshold-manager.js"></script>
     <script src="/static/js/settings-manager.js"></script>
+    <script src="/static/js/trend-manager.js"></script>
 </body>
 </html>
