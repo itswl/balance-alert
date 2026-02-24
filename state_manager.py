@@ -95,8 +95,12 @@ class StateManager:
 
             logger.info(f"余额状态已更新: {self._balance_state.summary}")
     
-    def update_subscription_state(self, subscriptions: List[Dict[str, Any]]) -> None:
+    def update_subscription_state(self, subscriptions: Optional[List[Dict[str, Any]]]) -> None:
         """更新订阅状态（线程安全）"""
+        # 处理 None 情况
+        if subscriptions is None:
+            subscriptions = []
+
         with self._lock:
             self._subscription_state.last_update = time.strftime('%Y-%m-%d %H:%M:%S')
             self._subscription_state.subscriptions = subscriptions.copy()

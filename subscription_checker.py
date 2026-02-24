@@ -29,15 +29,18 @@ class SubscriptionChecker:
     def check_subscriptions(self, dry_run=False):
         """
         检查所有订阅
-        
+
         Args:
             dry_run: 测试模式，不发送告警
+
+        Returns:
+            订阅检查结果列表（即使为空也返回空列表而非 None）
         """
         subscriptions = self.config.get('subscriptions', [])
-        
+
         if not subscriptions:
             logger.info("📋 没有配置订阅项目")
-            return
+            return []
         
         # 过滤启用的订阅
         enabled_subs = [s for s in subscriptions if s.get('enabled', True)]
@@ -52,8 +55,9 @@ class SubscriptionChecker:
         for sub in enabled_subs:
             result = self._check_subscription(sub, today, current_day, dry_run)
             self.results.append(result)
-        
+
         self._print_summary()
+        return self.results
     
     def _check_subscription(self, sub, today, current_day, dry_run):
         """检查单个订阅"""

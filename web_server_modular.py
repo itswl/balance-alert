@@ -112,19 +112,19 @@ def update_credits(state_mgr: StateManager = global_state_manager, detector: Dat
 
             # 更新订阅数据
             subscription_checker = SubscriptionChecker('config.json')
-            subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+            subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
 
             # 检测订阅数据变化（智能刷新）
             subscription_changed = False
-            if smart_refresh_enabled:
-                subscription_changed = detector.detect_changes(subscription_checker.results, 'subscription')
+            if smart_refresh_enabled and subscription_results:
+                subscription_changed = detector.detect_changes(subscription_results, 'subscription')
 
             # 更新缓存
-            update_subscription_cache(subscription_checker.results, state_mgr)
+            update_subscription_cache(subscription_results or [], state_mgr)
 
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
-            metrics_collector.update_subscription_metrics(subscription_checker.results)
+            metrics_collector.update_subscription_metrics(subscription_results or [])
 
             # 保存缓存到文件
             save_cache_file(state_mgr)
@@ -217,7 +217,7 @@ if __name__ == '__main__':
         try:
             from waitress import serve
             logger.info("使用 waitress 生产服务器")
-            serve(app, host='0.0.0.0', port=web_port)
+            serve(app, host='0.0.0.0', port=web_port, debug=True)
         except ImportError:
             logger.warning("waitress 未安装，使用 Flask 开发服务器")
             app.run(host='0.0.0.0', port=web_port, debug=False)
