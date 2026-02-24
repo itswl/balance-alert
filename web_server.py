@@ -23,6 +23,16 @@ import signal
 import threading
 from datetime import datetime
 import time
+from pydantic import ValidationError
+from models.api_models import (
+    AddSubscriptionRequest,
+    UpdateSubscriptionRequest,
+    DeleteSubscriptionRequest,
+    RefreshRequest,
+    AddEmailRequest,
+    UpdateEmailRequest,
+    DeleteEmailRequest,
+)
 
 # 创建 logger
 logger = get_logger('web_server')
@@ -67,6 +77,59 @@ def require_api_key(f):
             return jsonify({'status': 'error', 'message': '未授权访问'}), 401
         return f(*args, **kwargs)
     return decorated
+
+
+def validate_request(model_class):
+    """
+    请求验证装饰器，使用 Pydantic 模型验证请求体
+
+    用法：
+        @validate_request(AddSubscriptionRequest)
+        def my_endpoint(validated_data: AddSubscriptionRequest):
+            # validated_data 是已验证的 Pydantic 模型实例
+            ...
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            try:
+                # 获取请求数据
+                data = request.get_json()
+                if data is None:
+                    return jsonify({
+                        'status': 'error',
+                        'message': '请求体为空或格式不正确'
+                    }), 400
+
+                # 使用 Pydantic 验证
+                validated_data = model_class(**data)
+
+                # 将验证后的数据传递给路由函数
+                return f(validated_data=validated_data, *args, **kwargs)
+
+            except ValidationError as e:
+                # Pydantic 验证错误
+                errors = []
+                for error in e.errors():
+                    field = ' -> '.join(str(loc) for loc in error['loc'])
+                    message = error['msg']
+                    errors.append(f"{field}: {message}")
+
+                return jsonify({
+                    'status': 'error',
+                    'message': '请求参数验证失败',
+                    'errors': errors
+                }), 400
+
+            except Exception as e:
+                logger.error(f"请求验证异常: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'message': f'请求处理失败: {str(e)}'
+                }), 500
+
+        return decorated
+    return decorator
 
 
 # 配置：是否在 Web 模式下发送真实告警（默认不发送，避免重复告警）
@@ -487,7 +550,7 @@ def load_config_safe(config_path='config.json'):
     """安全加载配置文件"""
     try:
         from config_loader import load_config_with_env_vars
-        return load_config_with_env_vars(config_path)
+        return load_config_with_env_vars(config_path, validate=False)
     except Exception as e:
         logger.error(f"配置加载失败: {e}")
         return {}
@@ -531,202 +594,131 @@ def get_subscriptions_config():
 
 @app.route('/api/config/subscription', methods=['POST'])
 @require_api_key
-def update_subscription():
-    """更新订阅配置"""
+@validate_request(UpdateSubscriptionRequest)
+def update_subscription(validated_data: UpdateSubscriptionRequest):
+    """更新订阅配置（使用 Pydantic 验证）"""
     try:
-        data = request.get_json()
-        subscription_name = data.get('name')
-        
-        if not subscription_name:
-            return jsonify({
-                'status': 'error',
-                'message': '缺少订阅名称'
-            }), 400
-        
         # 读取配置文件
         config = load_config_safe()
-        
+
         # 查找订阅
         subscription_found = False
+        updated_fields = []
+
         for sub in config.get('subscriptions', []):
-            if sub.get('name') == subscription_name:
+            if sub.get('name') == validated_data.name:
+                # 更新名称
+                if validated_data.new_name is not None:
+                    sub['name'] = validated_data.new_name
+                    updated_fields.append('name')
+
                 # 更新周期类型
-                if 'cycle_type' in data:
-                    cycle_type = data['cycle_type']
-                    if cycle_type not in ['weekly', 'monthly', 'yearly']:
-                        return jsonify({
-                            'status': 'error',
-                            'message': '周期类型必须是 weekly、monthly 或 yearly'
-                        }), 400
-                    sub['cycle_type'] = cycle_type
-                
-                # 更新字段
-                if 'renewal_day' in data:
-                    renewal_day = int(data['renewal_day'])
-                    cycle_type = sub.get('cycle_type', 'monthly')
+                if validated_data.cycle_type is not None:
+                    sub['cycle_type'] = validated_data.cycle_type
+                    updated_fields.append('cycle_type')
 
-                    # 根据周期类型验证
-                    error_msg = _validate_renewal_day(renewal_day, cycle_type)
-                    if error_msg:
-                        return jsonify({
-                            'status': 'error',
-                            'message': error_msg
-                        }), 400
+                # 更新续费日
+                if validated_data.renewal_day is not None:
+                    sub['renewal_day'] = validated_data.renewal_day
+                    updated_fields.append('renewal_day')
 
-                    sub['renewal_day'] = renewal_day
-                
-                # 如果是年周期且提供了月份，更新 last_renewed_date
-                if 'renewal_month' in data and sub.get('cycle_type') == 'yearly':
-                    renewal_month = int(data['renewal_month'])
-                    renewal_day = sub.get('renewal_day', 1)
-                    date_str, error_msg = _calculate_yearly_renewed_date(renewal_month, renewal_day)
-                    if error_msg:
-                        return jsonify({
-                            'status': 'error',
-                            'message': error_msg
-                        }), 400
-                    sub['last_renewed_date'] = date_str
-                
-                if 'alert_days_before' in data:
-                    alert_days = int(data['alert_days_before'])
-                    if alert_days < 0:
-                        return jsonify({
-                            'status': 'error',
-                            'message': '提醒天数不能为负数'
-                        }), 400
-                    sub['alert_days_before'] = alert_days
-                
-                if 'amount' in data:
-                    amount = float(data['amount'])
-                    if amount < 0:
-                        return jsonify({
-                            'status': 'error',
-                            'message': '金额不能为负数'
-                        }), 400
-                    sub['amount'] = amount
-                
-                if 'currency' in data:
-                    sub['currency'] = data['currency']
-                
+                # 更新提醒天数
+                if validated_data.alert_days_before is not None:
+                    sub['alert_days_before'] = validated_data.alert_days_before
+                    updated_fields.append('alert_days_before')
+
+                # 更新金额
+                if validated_data.amount is not None:
+                    sub['amount'] = validated_data.amount
+                    updated_fields.append('amount')
+
+                # 更新货币
+                if validated_data.currency is not None:
+                    sub['currency'] = validated_data.currency
+                    updated_fields.append('currency')
+
+                # 更新启用状态
+                if validated_data.enabled is not None:
+                    sub['enabled'] = validated_data.enabled
+                    updated_fields.append('enabled')
+
+                # 更新最后续费日期
+                if validated_data.last_renewed_date is not None:
+                    sub['last_renewed_date'] = validated_data.last_renewed_date
+                    updated_fields.append('last_renewed_date')
+
                 subscription_found = True
                 break
-        
+
         if not subscription_found:
             return jsonify({
                 'status': 'error',
-                'message': f'未找到订阅: {subscription_name}'
+                'message': f'未找到订阅: {validated_data.name}'
             }), 404
 
         # 保存配置文件
         _write_config(config)
-        _audit_log('update_subscription', {'subscription': subscription_name, 'fields': list(data.keys())})
+        _audit_log('update_subscription', {
+            'subscription': validated_data.name,
+            'fields': updated_fields
+        })
 
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
         return jsonify({
             'status': 'success',
-            'message': f'订阅 [{subscription_name}] 配置已更新'
+            'message': f'订阅 [{validated_data.name}] 配置已更新',
+            'updated_fields': updated_fields
         })
-        
+
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/subscription/add', methods=['POST'])
 @require_api_key
-def add_subscription():
-    """添加新订阅"""
+@validate_request(AddSubscriptionRequest)
+def add_subscription(validated_data: AddSubscriptionRequest):
+    """添加新订阅（使用 Pydantic 验证）"""
     try:
-        data = request.get_json()
-        
-        # 验证必填字段
-        required_fields = ['name', 'renewal_day', 'alert_days_before', 'amount', 'currency']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'缺少必填字段: {field}'
-                }), 400
-        
-        # 验证数据有效性
-        name = data['name'].strip()
-        if not name:
-            return jsonify({
-                'status': 'error',
-                'message': '订阅名称不能为空'
-            }), 400
-        
-        cycle_type = data.get('cycle_type', 'monthly')
-        if cycle_type not in ['weekly', 'monthly', 'yearly']:
-            return jsonify({
-                'status': 'error',
-                'message': '周期类型必须是 weekly、monthly 或 yearly'
-            }), 400
-        
-        renewal_day = int(data['renewal_day'])
-        # 根据周期类型验证续费日
-        error_msg = _validate_renewal_day(renewal_day, cycle_type)
-        if error_msg:
-            return jsonify({
-                'status': 'error',
-                'message': error_msg
-            }), 400
-        
-        alert_days = int(data['alert_days_before'])
-        if alert_days < 0:
-            return jsonify({
-                'status': 'error',
-                'message': '提醒天数不能为负数'
-            }), 400
-        
-        amount = float(data['amount'])
-        if amount < 0:
-            return jsonify({
-                'status': 'error',
-                'message': '金额不能为负数'
-            }), 400
-        
         # 读取配置文件
         config = load_config_safe()
-        
+
         # 检查订阅名称是否已存在
         subscriptions = config.get('subscriptions', [])
         for sub in subscriptions:
-            if sub.get('name') == name:
+            if sub.get('name') == validated_data.name:
                 return jsonify({
                     'status': 'error',
-                    'message': f'订阅名称 [{name}] 已存在'
+                    'message': f'订阅名称 [{validated_data.name}] 已存在'
                 }), 400
-        
-        # 创建新订阅
+
+        # 创建新订阅（从验证后的数据）
         new_subscription = {
-            'name': name,
-            'cycle_type': cycle_type,
-            'renewal_day': renewal_day,
-            'alert_days_before': alert_days,
-            'amount': amount,
-            'currency': data['currency'],
-            'enabled': data.get('enabled', True)
+            'name': validated_data.name,
+            'cycle_type': validated_data.cycle_type,
+            'renewal_day': validated_data.renewal_day,
+            'alert_days_before': validated_data.alert_days_before,
+            'amount': validated_data.amount,
+            'currency': validated_data.currency,
+            'enabled': validated_data.enabled
         }
-        
-        # 如果是年周期且提供了月份，设置 last_renewed_date
-        if cycle_type == 'yearly' and 'renewal_month' in data:
-            renewal_month = int(data['renewal_month'])
-            date_str, error_msg = _calculate_yearly_renewed_date(renewal_month, renewal_day)
-            if error_msg:
-                return jsonify({
-                    'status': 'error',
-                    'message': error_msg
-                }), 400
-            new_subscription['last_renewed_date'] = date_str
-        
+
+        # 可选字段
+        if validated_data.last_renewed_date:
+            new_subscription['last_renewed_date'] = validated_data.last_renewed_date
+
         # 添加到配置
         subscriptions.append(new_subscription)
         config['subscriptions'] = subscriptions
 
         # 保存配置文件
         _write_config(config)
-        _audit_log('add_subscription', {'subscription': name, 'cycle_type': cycle_type, 'amount': amount})
+        _audit_log('add_subscription', {
+            'subscription': validated_data.name,
+            'cycle_type': validated_data.cycle_type,
+            'amount': validated_data.amount
+        })
 
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
@@ -746,54 +738,46 @@ def add_subscription():
 
 @app.route('/api/subscription/delete', methods=['POST', 'DELETE'])
 @require_api_key
-def delete_subscription():
-    """删除订阅"""
+@validate_request(DeleteSubscriptionRequest)
+def delete_subscription(validated_data: DeleteSubscriptionRequest):
+    """删除订阅（使用 Pydantic 验证）"""
     try:
-        data = request.get_json()
-        subscription_name = data.get('name')
-        
-        if not subscription_name:
-            return jsonify({
-                'status': 'error',
-                'message': '缺少订阅名称'
-            }), 400
-        
         # 读取配置文件
         config = load_config_safe()
-        
+
         # 查找并删除订阅
         subscriptions = config.get('subscriptions', [])
         subscription_found = False
         new_subscriptions = []
-        
+
         for sub in subscriptions:
-            if sub.get('name') == subscription_name:
+            if sub.get('name') == validated_data.name:
                 subscription_found = True
                 # 跳过该订阅，不添加到新列表中
                 continue
             new_subscriptions.append(sub)
-        
+
         if not subscription_found:
             return jsonify({
                 'status': 'error',
-                'message': f'未找到订阅: {subscription_name}'
+                'message': f'未找到订阅: {validated_data.name}'
             }), 404
-        
+
         # 更新配置
         config['subscriptions'] = new_subscriptions
 
         # 保存配置文件
         _write_config(config)
-        _audit_log('delete_subscription', {'subscription': subscription_name})
+        _audit_log('delete_subscription', {'subscription': validated_data.name})
 
         # 立即重新检查一次，更新缓存
         refresh_subscription_cache(global_state_manager)
 
         return jsonify({
             'status': 'success',
-            'message': f'订阅 [{subscription_name}] 已成功删除'
+            'message': f'订阅 [{validated_data.name}] 已成功删除'
         })
-        
+
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

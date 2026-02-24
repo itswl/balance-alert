@@ -53,7 +53,7 @@ def get_email_password_from_env(email_name: str) -> Optional[str]:
     password = get_env(specific_key)
     if password:
         return password
-    
+
     # 尝试通用环境变量
     return get_env('EMAIL_PASSWORD')
 
@@ -65,9 +65,100 @@ def get_api_key_from_env(project_name: str) -> Optional[str]:
     api_key = get_env(specific_key)
     if api_key:
         return api_key
-    
+
     # 尝试通用环境变量
     return get_env('API_KEY')
+
+
+def load_emails_from_env() -> List[Dict[str, Any]]:
+    """从环境变量加载邮箱配置（支持 EMAIL_1_*, EMAIL_2_* 格式）"""
+    emails = []
+    idx = 1
+
+    while True:
+        prefix = f'EMAIL_{idx}_'
+        username = get_env(f'{prefix}USERNAME')
+
+        # 如果没有找到 username，说明没有更多邮箱配置
+        if not username:
+            break
+
+        email_config = {
+            'name': get_env(f'{prefix}NAME', f'Email {idx}'),
+            'host': get_env(f'{prefix}HOST', 'imap.gmail.com'),
+            'port': int(get_env(f'{prefix}PORT', '993')),
+            'username': username,
+            'password': get_env(f'{prefix}PASSWORD', ''),
+            'use_ssl': get_env(f'{prefix}USE_SSL', 'true').lower() == 'true',
+            'enabled': get_env(f'{prefix}ENABLED', 'true').lower() == 'true',
+        }
+
+        emails.append(email_config)
+        idx += 1
+
+    return emails
+
+
+def load_projects_from_env() -> List[Dict[str, Any]]:
+    """从环境变量加载项目配置（支持 PROJECT_1_*, PROJECT_2_* 格式）"""
+    projects = []
+    idx = 1
+
+    while True:
+        prefix = f'PROJECT_{idx}_'
+        name = get_env(f'{prefix}NAME')
+
+        # 如果没有找到 name，说明没有更多项目配置
+        if not name:
+            break
+
+        project_config = {
+            'name': name,
+            'provider': get_env(f'{prefix}PROVIDER', 'openrouter'),
+            'api_key': get_env(f'{prefix}API_KEY', ''),
+            'threshold': float(get_env(f'{prefix}THRESHOLD', '100.0')),
+            'type': get_env(f'{prefix}TYPE', 'credits'),
+            'enabled': get_env(f'{prefix}ENABLED', 'true').lower() == 'true',
+        }
+
+        projects.append(project_config)
+        idx += 1
+
+    return projects
+
+
+def load_subscriptions_from_env() -> List[Dict[str, Any]]:
+    """从环境变量加载订阅配置（支持 SUBSCRIPTION_1_*, SUBSCRIPTION_2_* 格式）"""
+    subscriptions = []
+    idx = 1
+
+    while True:
+        prefix = f'SUBSCRIPTION_{idx}_'
+        name = get_env(f'{prefix}NAME')
+
+        # 如果没有找到 name，说明没有更多订阅配置
+        if not name:
+            break
+
+        sub_config = {
+            'name': name,
+            'cycle_type': get_env(f'{prefix}CYCLE_TYPE', 'monthly'),
+            'renewal_day': int(get_env(f'{prefix}RENEWAL_DAY', '1')),
+            'alert_days_before': int(get_env(f'{prefix}ALERT_DAYS_BEFORE', '3')),
+            'amount': float(get_env(f'{prefix}AMOUNT', '0')),
+            'currency': get_env(f'{prefix}CURRENCY', 'CNY'),
+            'enabled': get_env(f'{prefix}ENABLED', 'true').lower() == 'true',
+        }
+
+        # 可选字段
+        last_renewed = get_env(f'{prefix}LAST_RENEWED_DATE')
+        if last_renewed:
+            sub_config['last_renewed_date'] = last_renewed
+
+        subscriptions.append(sub_config)
+        idx += 1
+
+    return subscriptions
 
 
 # 全局配置缓存和锁
@@ -191,7 +282,10 @@ def clear_config_cache() -> None:
 def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
 
-    支持 ${VAR_NAME} 格式的环境变量替换
+    支持三种模式：
+    1. 完全从环境变量加载（如果设置了 USE_ENV_CONFIG=true）
+    2. 从配置文件加载，但使用环境变量覆盖敏感信息
+    3. 支持 ${VAR_NAME} 格式的环境变量替换
 
     Args:
         config_file: 配置文件路径
@@ -208,53 +302,124 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         load_env_file()
         load_config_with_env_vars._env_loaded = True
 
-    # 读取配置文件内容
-    with open(config_file, 'r', encoding='utf-8') as f:
-        content = f.read()
+    # 模式 1: 完全从环境变量加载（如果设置了 USE_ENV_CONFIG=true）
+    use_env_config = get_env('USE_ENV_CONFIG', 'false').lower() == 'true'
 
-    # 替换 ${VAR_NAME} 格式的环境变量
-    pattern = r'\$\{([^}]+)\}'
+    if use_env_config:
+        logger.info("[Config] 使用完全环境变量配置模式")
+        config = {
+            'settings': {
+                'balance_refresh_interval_seconds': int(get_env('BALANCE_REFRESH_INTERVAL_SECONDS', '3600')),
+                'max_concurrent_checks': int(get_env('MAX_CONCURRENT_CHECKS', '5')),
+                'min_refresh_interval_seconds': int(get_env('MIN_REFRESH_INTERVAL_SECONDS', '60')),
+                'enable_smart_refresh': get_env('ENABLE_SMART_REFRESH', 'false').lower() == 'true',
+                'smart_refresh_threshold_percent': int(get_env('SMART_REFRESH_THRESHOLD_PERCENT', '5')),
+            },
+            'webhook': {
+                'url': get_env('WEBHOOK_URL', ''),
+                'source': get_env('WEBHOOK_SOURCE', 'credit-monitor'),
+                'type': get_env('WEBHOOK_TYPE', 'feishu'),
+            },
+            'email': load_emails_from_env(),
+            'projects': load_projects_from_env(),
+            'subscriptions': load_subscriptions_from_env(),
+        }
+    elif not os.path.exists(config_file):
+        # 如果配置文件不存在，尝试从环境变量加载
+        logger.warning(f"[Config] 配置文件不存在: {config_file}，尝试从环境变量加载")
+        config = {
+            'settings': {
+                'balance_refresh_interval_seconds': int(get_env('BALANCE_REFRESH_INTERVAL_SECONDS', '3600')),
+                'max_concurrent_checks': int(get_env('MAX_CONCURRENT_CHECKS', '5')),
+                'min_refresh_interval_seconds': int(get_env('MIN_REFRESH_INTERVAL_SECONDS', '60')),
+                'enable_smart_refresh': get_env('ENABLE_SMART_REFRESH', 'false').lower() == 'true',
+                'smart_refresh_threshold_percent': int(get_env('SMART_REFRESH_THRESHOLD_PERCENT', '5')),
+            },
+            'webhook': {
+                'url': get_env('WEBHOOK_URL', ''),
+                'source': get_env('WEBHOOK_SOURCE', 'credit-monitor'),
+                'type': get_env('WEBHOOK_TYPE', 'feishu'),
+            },
+            'email': load_emails_from_env(),
+            'projects': load_projects_from_env(),
+            'subscriptions': load_subscriptions_from_env(),
+        }
+    else:
+        # 模式 2: 从配置文件加载，但使用环境变量覆盖
+        # 读取配置文件内容
+        with open(config_file, 'r', encoding='utf-8') as f:
+            content = f.read()
 
-    def replace_env(match):
-        var_name = match.group(1)
-        # 从环境变量读取，如果不存在则保持原样
-        return os.environ.get(var_name, match.group(0))
+        # 替换 ${VAR_NAME} 格式的环境变量
+        pattern = r'\$\{([^}]+)\}'
 
-    content = re.sub(pattern, replace_env, content)
+        def replace_env(match):
+            var_name = match.group(1)
+            # 从环境变量读取，如果不存在则保持原样
+            return os.environ.get(var_name, match.group(0))
 
-    # 解析JSON
-    config = json.loads(content)
+        content = re.sub(pattern, replace_env, content)
 
-    # 环境变量覆盖 webhook 配置
-    webhook_env = get_webhook_from_env()
-    if webhook_env:
-        config['webhook'] = webhook_env
+        # 解析JSON
+        config = json.loads(content)
 
-    # 环境变量覆盖邮箱密码
-    if 'email' in config:
-        for email in config['email']:
-            email_name = email.get('name', '')
-            env_password = get_email_password_from_env(email_name)
-            if env_password:
-                email['password'] = env_password
+        # 环境变量覆盖 webhook 配置
+        webhook_url = get_env('WEBHOOK_URL')
+        if webhook_url:
+            if 'webhook' not in config:
+                config['webhook'] = {}
+            config['webhook']['url'] = webhook_url
+            config['webhook']['source'] = get_env('WEBHOOK_SOURCE', config['webhook'].get('source', 'credit-monitor'))
+            config['webhook']['type'] = get_env('WEBHOOK_TYPE', config['webhook'].get('type', 'feishu'))
 
-    # 环境变量覆盖 API Key
-    if 'projects' in config:
-        for project in config['projects']:
-            project_name = project.get('name', '')
-            env_api_key = get_api_key_from_env(project_name)
-            if env_api_key:
-                project['api_key'] = env_api_key
+        # 环境变量覆盖邮箱配置（支持两种方式）
+        # 方式 1: 从环境变量完全加载邮箱（如果存在 EMAIL_1_USERNAME）
+        env_emails = load_emails_from_env()
+        if env_emails:
+            config['email'] = env_emails
+        # 方式 2: 覆盖配置文件中的邮箱密码
+        elif 'email' in config:
+            for email in config['email']:
+                email_name = email.get('name', '')
+                env_password = get_email_password_from_env(email_name)
+                if env_password:
+                    email['password'] = env_password
 
-    # 环境变量覆盖刷新间隔
-    refresh_interval = get_env('BALANCE_REFRESH_INTERVAL', None)
-    if refresh_interval is not None:
+        # 环境变量覆盖项目配置（支持两种方式）
+        # 方式 1: 从环境变量完全加载项目（如果存在 PROJECT_1_NAME）
+        env_projects = load_projects_from_env()
+        if env_projects:
+            config['projects'] = env_projects
+        # 方式 2: 覆盖配置文件中的 API Key
+        elif 'projects' in config:
+            for project in config['projects']:
+                project_name = project.get('name', '')
+                env_api_key = get_api_key_from_env(project_name)
+                if env_api_key:
+                    project['api_key'] = env_api_key
+
+        # 环境变量覆盖订阅配置
+        env_subscriptions = load_subscriptions_from_env()
+        if env_subscriptions:
+            config['subscriptions'] = env_subscriptions
+
+        # 环境变量覆盖系统设置
         if 'settings' not in config:
             config['settings'] = {}
-        try:
-            config['settings']['balance_refresh_interval_seconds'] = int(refresh_interval)
-        except (ValueError, TypeError):
-            logger.warning(f"BALANCE_REFRESH_INTERVAL 值无效: {refresh_interval}，忽略")
+
+        refresh_interval = get_env('BALANCE_REFRESH_INTERVAL_SECONDS')
+        if refresh_interval:
+            try:
+                config['settings']['balance_refresh_interval_seconds'] = int(refresh_interval)
+            except (ValueError, TypeError):
+                logger.warning(f"BALANCE_REFRESH_INTERVAL_SECONDS 值无效: {refresh_interval}，忽略")
+
+        max_concurrent = get_env('MAX_CONCURRENT_CHECKS')
+        if max_concurrent:
+            try:
+                config['settings']['max_concurrent_checks'] = int(max_concurrent)
+            except (ValueError, TypeError):
+                logger.warning(f"MAX_CONCURRENT_CHECKS 值无效: {max_concurrent}，忽略")
 
     # 打印配置版本号
     config_version = config.get('version')

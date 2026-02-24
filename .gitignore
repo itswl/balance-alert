@@ -46,5 +46,11 @@ logs/
 # Config with sensitive data
 config.json
 
+# Environment variables (contains sensitive data)
+.env
+.env.local
+.env.*.local
+*.env.backup_*
+
 # Test files
 test_*.py
