@@ -20,6 +20,9 @@ from logger import get_logger
 from config_loader import get_config, start_config_watcher, stop_config_watcher
 from state_manager import StateManager
 
+# 创建 logger（必须在使用前定义）
+logger = get_logger('web_server')
+
 # 数据库持久化（可选）
 try:
     from database import init_database
@@ -45,9 +48,6 @@ from models.api_models import (
     UpdateEmailRequest,
     DeleteEmailRequest,
 )
-
-# 创建 logger
-logger = get_logger('web_server')
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
