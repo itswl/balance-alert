@@ -170,6 +170,36 @@
     <!-- Toast 通知 -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- 编辑项目阈值模态框 -->
+    <div id="threshold-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="threshold-modal-title">编辑告警阈值</h2>
+                <button class="modal-close" onclick="closeThresholdModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="threshold-form" class="modal-body">
+                <input type="hidden" id="threshold-project-name" value="">
+
+                <div class="form-group">
+                    <label for="threshold-value">告警阈值 *</label>
+                    <input type="number" id="threshold-value" step="0.01" min="0" required placeholder="0.00">
+                    <p style="margin-top: 8px; font-size: 0.875rem; color: var(--text-secondary);">
+                        当余额低于此值时将触发告警通知
+                    </p>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeThresholdModal()">取消</button>
+                <button type="submit" class="btn-primary" onclick="saveThreshold(event)">保存</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 订阅管理模态框 -->
     <div id="subscription-modal" class="modal">
         <div class="modal-content">
@@ -250,5 +280,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/subscription-manager.js"></script>
+    <script src="/static/js/threshold-manager.js"></script>
 </body>
 </html>
