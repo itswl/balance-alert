@@ -1,6 +1,6 @@
 {
   "balance": {
-    "last_update": "2026-02-24 21:02:49",
+    "last_update": "2026-02-24 21:06:06",
     "projects": [
       {
         "project": "WxRank-微信公众号",
@@ -18,7 +18,7 @@
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 231573.11,
+        "credits": 231572.66,
         "threshold": 10000.0,
         "need_alarm": false,
         "alarm_sent": false,
@@ -40,19 +40,8 @@
         "provider": "volc",
         "type": "balance",
         "success": true,
-        "credits": 868555.81,
+        "credits": 868553.99,
         "threshold": 7000.0,
-        "need_alarm": false,
-        "alarm_sent": false,
-        "error": null
-      },
-      {
-        "project": "OpenRouter",
-        "provider": "openrouter",
-        "type": "credits",
-        "success": true,
-        "credits": 6089.199860455366,
-        "threshold": 100.0,
         "need_alarm": false,
         "alarm_sent": false,
         "error": null
@@ -62,8 +51,19 @@
         "provider": "aliyun",
         "type": "balance",
         "success": true,
-        "credits": 234462.9,
+        "credits": 234349.56,
         "threshold": 1000.0,
+        "need_alarm": false,
+        "alarm_sent": false,
+        "error": null
+      },
+      {
+        "project": "OpenRouter",
+        "provider": "openrouter",
+        "type": "credits",
+        "success": true,
+        "credits": 6088.153068679676,
+        "threshold": 100.0,
         "need_alarm": false,
         "alarm_sent": false,
         "error": null
@@ -88,7 +88,7 @@
     }
   },
   "subscription": {
-    "last_update": "2026-02-24 21:02:49",
+    "last_update": "2026-02-24 21:06:06",
     "subscriptions": [
       {
         "name": "emqx - mqtt - 授权",
@@ -122,5 +122,5 @@
       "need_alert": 0
     }
   },
-  "last_update": "2026-02-24 21:02:49"
+  "last_update": "2026-02-24 21:06:06"
 }
