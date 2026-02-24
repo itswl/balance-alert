@@ -50,7 +50,10 @@ config.json
 .env
 .env.local
 .env.*.local
-*.env.backup_*
+*.env.backup*
 
 # Test files
 test_*.py
+
+# db
+*.db
