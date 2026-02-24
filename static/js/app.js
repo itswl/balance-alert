@@ -107,11 +107,15 @@ const API = {
                 ...options,
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // 如果响应包含错误消息，抛出带消息的错误
+                const errorMsg = data.message || data.error || response.statusText;
+                throw new Error(errorMsg);
             }
 
-            return await response.json();
+            return data;
         } catch (error) {
             console.error('API 请求失败:', error);
             throw error;
@@ -130,7 +134,10 @@ const API = {
 
     // 刷新数据
     async refresh() {
-        return this.request('/api/refresh', { method: 'POST' });
+        return this.request('/api/refresh', {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
     },
 
     // 获取健康状态
@@ -486,30 +493,15 @@ const App = {
 
             const result = await API.refresh();
 
-            // 更新本地数据
-            AppState.balanceData = {
-                ...AppState.balanceData,
-                projects: result.data.projects,
-                last_update: result.data.last_update
-            };
-            AppState.subscriptionData = {
-                ...AppState.subscriptionData,
-                subscriptions: result.data.subscriptions
-            };
-
-            // 更新 UI
-            UI.updateStats(AppState.balanceData);
-            if (AppState.currentView === 'subscriptions') {
-                UI.renderSubscriptions(AppState.subscriptionData);
-            } else {
-                UI.renderProjects(AppState.balanceData);
-            }
+            // 刷新成功后重新加载所有数据
+            await this.loadData();
 
             UI.showToast('✨ 数据刷新成功！', 'success');
 
         } catch (error) {
             console.error('刷新失败:', error);
-            UI.showToast('刷新失败，请稍后重试', 'error');
+            const errorMsg = error.message || '刷新失败，请稍后重试';
+            UI.showToast(`❌ ${errorMsg}`, 'error');
         } finally {
             btn.classList.remove('rotating');
         }
