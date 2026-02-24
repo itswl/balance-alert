@@ -93,8 +93,8 @@ async function saveSubscription(event) {
             UI.showToast(isEdit ? '✅ 订阅已更新' : '✅ 订阅已添加', 'success');
             closeSubscriptionModal();
 
-            // 重新加载订阅数据
-            const subscriptionData = await API.getSubscriptions();
+            // 重新加载订阅数据（强制不使用缓存）
+            const subscriptionData = await API.getSubscriptions(true);
             AppState.subscriptionData = subscriptionData;
             UI.renderSubscriptions(subscriptionData);
         } else {
@@ -150,8 +150,8 @@ async function deleteSubscription(name) {
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 订阅已删除', 'success');
 
-            // 重新加载订阅数据
-            const subscriptionData = await API.getSubscriptions();
+            // 重新加载订阅数据（强制不使用缓存）
+            const subscriptionData = await API.getSubscriptions(true);
             AppState.subscriptionData = subscriptionData;
             UI.renderSubscriptions(subscriptionData);
         } else {
@@ -183,8 +183,8 @@ async function markSubscriptionRenewed(name) {
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 已标记为已续费', 'success');
 
-            // 重新加载订阅数据
-            const subscriptionData = await API.getSubscriptions();
+            // 重新加载订阅数据（强制不使用缓存）
+            const subscriptionData = await API.getSubscriptions(true);
             AppState.subscriptionData = subscriptionData;
             UI.renderSubscriptions(subscriptionData);
         } else {
@@ -216,8 +216,8 @@ async function clearSubscriptionRenewed(name) {
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 已取消续费标记', 'success');
 
-            // 重新加载订阅数据
-            const subscriptionData = await API.getSubscriptions();
+            // 重新加载订阅数据（强制不使用缓存）
+            const subscriptionData = await API.getSubscriptions(true);
             AppState.subscriptionData = subscriptionData;
             UI.renderSubscriptions(subscriptionData);
         } else {
