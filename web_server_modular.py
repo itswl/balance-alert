@@ -68,10 +68,11 @@ def save_cache_file(state_mgr: StateManager = global_state_manager) -> None:
 
         import json
         with open(cache_file, 'w') as f:
+            balance_state = state_mgr.get_balance_state()
             cache_data = {
-                'balance': state_mgr.get_balance_state(),
+                'balance': balance_state,
                 'subscription': state_mgr.get_subscription_state(),
-                'last_update': state_mgr.get_last_update().isoformat() if state_mgr.get_last_update() else None
+                'last_update': balance_state.get('last_update')
             }
             json.dump(cache_data, f, indent=2, ensure_ascii=False)
     except Exception as e:
