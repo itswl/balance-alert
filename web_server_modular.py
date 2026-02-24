@@ -217,7 +217,7 @@ if __name__ == '__main__':
         try:
             from waitress import serve
             logger.info("使用 waitress 生产服务器")
-            serve(app, host='0.0.0.0', port=web_port, debug=True)
+            serve(app, host='0.0.0.0', port=web_port)
         except ImportError:
             logger.warning("waitress 未安装，使用 Flask 开发服务器")
             app.run(host='0.0.0.0', port=web_port, debug=False)

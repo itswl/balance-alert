@@ -128,8 +128,14 @@ const API = {
     },
 
     // 获取订阅数据
-    async getSubscriptions() {
-        return this.request('/api/subscriptions');
+    async getSubscriptions(noCache = false) {
+        const headers = {};
+        if (noCache) {
+            // 禁用缓存，强制获取最新数据
+            headers['Cache-Control'] = 'no-cache';
+            headers['Pragma'] = 'no-cache';
+        }
+        return this.request('/api/subscriptions', { headers });
     },
 
     // 刷新数据
