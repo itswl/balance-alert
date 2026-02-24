@@ -94,9 +94,13 @@ async function saveSubscription(event) {
             closeSubscriptionModal();
 
             // 重新加载订阅数据（强制不使用缓存）
+            console.log('重新加载订阅数据...');
             const subscriptionData = await API.getSubscriptions(true);
+            console.log('获取到订阅数据:', subscriptionData);
             AppState.subscriptionData = subscriptionData;
+            console.log('开始渲染订阅列表...');
             UI.renderSubscriptions(subscriptionData);
+            console.log('渲染完成');
         } else {
             UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
         }

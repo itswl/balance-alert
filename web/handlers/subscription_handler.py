@@ -21,7 +21,11 @@ def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateMan
         results: 订阅检查结果列表
         state_mgr: 状态管理器实例
     """
+    logger.info(f"更新订阅缓存: 收到 {len(results) if results else 0} 个订阅结果")
+    if results:
+        logger.debug(f"订阅列表: {[r.get('name') for r in results]}")
     state_mgr.update_subscription_state(results)
+    logger.info("订阅缓存更新完成")
 
 
 def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> None:
@@ -33,10 +37,14 @@ def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> Non
         state_mgr: 状态管理器实例
     """
     try:
+        # 创建新的 checker 实例会重新加载配置
         checker = SubscriptionChecker(config_path)
+        # 强制重新加载配置（确保获取最新数据）
+        checker.config = checker._load_config()
         results = checker.check_subscriptions()
         # 确保 results 不为 None
         update_subscription_cache(results or [], state_mgr)
+        logger.info(f"订阅缓存已刷新，共 {len(results or [])} 个订阅")
     except Exception as e:
         logger.error(f"刷新订阅缓存失败: {e}", exc_info=True)
 

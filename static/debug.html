@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>订阅调试页面</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>订阅管理调试工具</h1>
+
+    <div>
+        <button onclick="getSubscriptions()">1. 获取订阅（正常）</button>
+        <button onclick="getSubscriptionsNoCache()">2. 获取订阅（禁用缓存）</button>
+        <button onclick="addTestSubscription()">3. 添加测试订阅</button>
+        <button onclick="clearResult()">清空结果</button>
+    </div>
+
+    <h2>请求结果：</h2>
+    <pre id="result">点击按钮开始测试...</pre>
+
+    <h2>控制台日志：</h2>
+    <pre id="console"></pre>
+
+    <script>
+        const resultEl = document.getElementById('result');
+        const consoleEl = document.getElementById('console');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            consoleEl.textContent += `${timestamp} ${prefix} ${message}\n`;
+            console.log(message);
+        }
+
+        function clearResult() {
+            resultEl.textContent = '';
+            consoleEl.textContent = '';
+        }
+
+        async function getSubscriptions() {
+            try {
+                log('发送请求: GET /api/subscriptions');
+                const response = await fetch('/api/subscriptions');
+                log(`响应状态: ${response.status} ${response.statusText}`);
+
+                const data = await response.json();
+                log(`订阅数量: ${data.subscriptions?.length || 0}`, 'success');
+
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                log(`错误: ${error.message}`, 'error');
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function getSubscriptionsNoCache() {
+            try {
+                log('发送请求: GET /api/subscriptions (禁用缓存)');
+                const response = await fetch('/api/subscriptions', {
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                log(`响应状态: ${response.status} ${response.statusText}`);
+                log(`ETag: ${response.headers.get('ETag') || '无'}`);
+
+                const data = await response.json();
+                log(`订阅数量: ${data.subscriptions?.length || 0}`, 'success');
+
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                log(`错误: ${error.message}`, 'error');
+                resultEl.textContent = error.stack;
+            }
+        }
+
+        async function addTestSubscription() {
+            try {
+                const testName = `测试订阅_${Date.now()}`;
+                log(`添加测试订阅: ${testName}`);
+
+                const response = await fetch('/api/subscription/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: testName,
+                        cycle_type: 'monthly',
+                        renewal_day: 1,
+                        alert_days_before: 7,
+                        amount: 99.0,
+                        currency: 'CNY',
+                        enabled: true
+                    })
+                });
+
+                const result = await response.json();
+                log(`响应: ${result.status} - ${result.message}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    log('等待 1 秒后重新获取...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await getSubscriptionsNoCache();
+                } else {
+                    resultEl.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                log(`错误: ${error.message}`, 'error');
+                resultEl.textContent = error.stack;
+            }
+        }
+    </script>
+</body>
+</html>
