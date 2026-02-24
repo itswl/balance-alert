@@ -6,7 +6,9 @@ metadata:
   labels:
     app: balance-alert
 spec:
-  replicas: 1
+  replicas: 1  # SQLite 只支持单副本，如需高可用请使用 PostgreSQL
+  strategy:
+    type: Recreate  # SQLite 需要使用 Recreate 策略，避免多个 Pod 同时访问数据库
   selector:
     matchLabels:
       app: balance-alert
@@ -30,44 +32,87 @@ spec:
             - name: metrics
               containerPort: 9100
               protocol: TCP
+
+          # ========================================
+          # 环境变量配置
+          # ========================================
           env:
+            # 基础配置
             - name: TZ
               value: "Asia/Shanghai"
             - name: ENABLE_WEB_ALARM
               value: "false"
+
+            # 系统设置
+            - name: BALANCE_REFRESH_INTERVAL_SECONDS
+              value: "3600"
+            - name: MAX_CONCURRENT_CHECKS
+              value: "5"
+            - name: MIN_REFRESH_INTERVAL_SECONDS
+              value: "60"
+            - name: ENABLE_SMART_REFRESH
+              value: "false"
+
+          # 从 Secret 加载敏感环境变量
+          envFrom:
+            - secretRef:
+                name: balance-alert-secret
+                optional: false  # Secret 必须存在
+
+          # ========================================
+          # 卷挂载
+          # ========================================
           volumeMounts:
+            # 配置文件挂载（可选，如果使用环境变量配置则不需要）
             - name: config
               mountPath: /app/config.json
               subPath: config.json
+              readOnly: true
+
+            # SQLite 数据库目录挂载（持久化）
+            - name: data
+              mountPath: /app/data
+
+            # 日志目录挂载（临时）
             - name: logs
               mountPath: /app/logs
+
+          # ========================================
+          # 资源限制
+          # ========================================
           resources:
             requests:
-              memory: "256Mi"  # 提升内存请求（原 128Mi）
-              cpu: "250m"      # 提升 CPU 请求（原 100m）
+              memory: "256Mi"
+              cpu: "250m"
             limits:
               memory: "512Mi"
               cpu: "500m"
+
+          # ========================================
+          # 健康检查
+          # ========================================
           # 存活探针：检测容器是否需要重启
           livenessProbe:
             httpGet:
               path: /health
               port: web
             initialDelaySeconds: 30
-            periodSeconds: 30  # 30秒检查一次
+            periodSeconds: 30
             timeoutSeconds: 5
             successThreshold: 1
-            failureThreshold: 3  # 连续失败3次才重启
+            failureThreshold: 3
+
           # 就绪探针：检测容器是否准备好接收流量
           readinessProbe:
             httpGet:
               path: /health
               port: web
             initialDelaySeconds: 10
-            periodSeconds: 5   # 5秒检查一次
+            periodSeconds: 5
             timeoutSeconds: 3
             successThreshold: 1
-            failureThreshold: 2  # 连续失败2次就移除流量
+            failureThreshold: 2
+
           # 启动探针：检测容器是否已启动（避免慢启动被 kill）
           startupProbe:
             httpGet:
@@ -77,21 +122,43 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             successThreshold: 1
-            failureThreshold: 12  # 最多等待 60 秒（12 * 5s）
-          # 优雅关闭配置
+            failureThreshold: 12  # 最多等待 60 秒
+
+          # ========================================
+          # 生命周期管理
+          # ========================================
           lifecycle:
             preStop:
               exec:
-                command: ["sh", "-c", "sleep 15"]  # 等待15秒让请求完成
+                command: ["sh", "-c", "sleep 15"]  # 优雅关闭：等待15秒让请求完成
+
+      # ========================================
+      # 卷定义
+      # ========================================
       volumes:
-        # 方式1: 使用 ConfigMap
+        # 配置文件（从 ConfigMap）
         - name: config
           configMap:
             name: balance-alert-config
-        # 方式2: 使用本地配置文件（开发测试）
-        # - name: config
-        #   hostPath:
-        #     path: /path/to/config.json
-        #     type: File
+            optional: true  # 如果使用环境变量配置，ConfigMap 可选
+
+        # SQLite 数据库持久化存储
+        - name: data
+          persistentVolumeClaim:
+            claimName: balance-alert-data
+
+        # 日志临时存储（重启后清空）
         - name: logs
           emptyDir: {}
+
+      # ========================================
+      # 其他配置
+      # ========================================
+      # 优雅关闭等待时间（与 preStop 配合）
+      terminationGracePeriodSeconds: 30
+
+      # 安全上下文（可选，提高安全性）
+      # securityContext:
+      #   runAsNonRoot: true
+      #   runAsUser: 1000
+      #   fsGroup: 1000

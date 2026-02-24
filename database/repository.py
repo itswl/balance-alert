@@ -171,6 +171,7 @@ class BalanceRepository:
                 'min_balance': min(balances) if balances else 0,
                 'max_balance': max(balances) if balances else 0,
                 'avg_balance': sum(balances) / len(balances) if balances else 0,
+                'threshold': records[-1].threshold if records[-1].threshold is not None else 0,  # 最新阈值
                 'first_timestamp': records[0].timestamp.isoformat(),
                 'last_timestamp': records[-1].timestamp.isoformat(),
                 'history': [

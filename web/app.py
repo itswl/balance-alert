@@ -153,7 +153,14 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             if days < 1 or days > 365:
                 return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
 
-            trend = BalanceRepository.get_balance_trend(project_id, days)
+            # 如果 project_id 包含冒号，说明是 provider:project_name 格式，需要转换为 MD5
+            import hashlib
+            if ':' in project_id:
+                actual_project_id = hashlib.md5(project_id.encode()).hexdigest()
+            else:
+                actual_project_id = project_id
+
+            trend = BalanceRepository.get_balance_trend(actual_project_id, days)
             if 'error' in trend:
                 return jsonify({'status': 'error', 'message': trend['error']}), 404
 

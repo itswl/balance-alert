@@ -57,3 +57,8 @@ test_*.py
 
 # db
 *.db
+data/
+
+# Kubernetes secrets (contains sensitive information)
+k8s/secret.yaml
+k8s/*-secret.yaml

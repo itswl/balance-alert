@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: balance-alert-data
+  namespace: balance-alert
+  labels:
+    app: balance-alert
+spec:
+  accessModes:
+    - ReadWriteOnce  # 单节点读写（SQLite 不支持多节点并发写入）
+  resources:
+    requests:
+      storage: 5Gi   # 数据库文件大小，根据实际需求调整
+  # 存储类名称（根据你的 k8s 集群配置）
+  # 如果使用默认存储类，可以注释掉此行
+  # storageClassName: standard
+  #
+  # 常见存储类：
+  # - standard (GCP, AWS)
+  # - gp2 / gp3 (AWS EBS)
+  # - managed-premium (Azure)
+  # - local-path (K3s, local development)
+  # - nfs-client (NFS provisioner)
+  #
+  # 查看可用存储类:
+  # kubectl get storageclass
