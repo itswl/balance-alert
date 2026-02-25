@@ -10,6 +10,7 @@ import json
 import os
 import fcntl
 import tempfile
+import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import hashlib
@@ -144,6 +145,11 @@ def validate_request(model_class):
     return decorator
 
 
+# 配置缓存（避免频繁读取和日志打印）
+_refresh_interval_cache = None
+_refresh_interval_cache_time = 0
+_CACHE_TTL = 60  # 缓存60秒
+
 # 配置：是否在 Web 模式下发送真实告警（默认不发送，避免重复告警）
 # 如果需要 Web 也发送告警，设置环境变量 ENABLE_WEB_ALARM=true
 def get_enable_web_alarm() -> bool:
@@ -151,11 +157,18 @@ def get_enable_web_alarm() -> bool:
     return os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
 
 def get_refresh_interval() -> int:
-    """从配置文件读取刷新间隔"""
+    """从配置文件读取刷新间隔（带缓存）"""
+    global _refresh_interval_cache, _refresh_interval_cache_time
+
+    # 检查缓存是否有效
+    current_time = time.time()
+    if _refresh_interval_cache is not None and (current_time - _refresh_interval_cache_time) < _CACHE_TTL:
+        return _refresh_interval_cache
+
     try:
         config = get_config('config.json')
         settings = config.get('settings', {})
-        
+
         # 获取配置值
         interval = settings.get('balance_refresh_interval_seconds', DEFAULT_REFRESH_INTERVAL)
         min_interval = settings.get('min_refresh_interval_seconds', DEFAULT_MIN_REFRESH_INTERVAL)
@@ -168,13 +181,20 @@ def get_refresh_interval() -> int:
         if not isinstance(min_interval, (int, float)) or min_interval <= 0:
             logger.warning(f"最小刷新间隔配置无效 ({min_interval})，使用默认值{DEFAULT_MIN_REFRESH_INTERVAL}秒")
             min_interval = DEFAULT_MIN_REFRESH_INTERVAL
-        
+
         # 确保刷新间隔不小于最小值
         final_interval = max(min_interval, int(interval))
-        
-        logger.info(f"刷新间隔配置: 设置值={interval}s, 最小值={min_interval}s, 实际值={final_interval}s")
+
+        # 只在首次加载或缓存过期时打印日志
+        if _refresh_interval_cache is None or final_interval != _refresh_interval_cache:
+            logger.info(f"刷新间隔配置: 设置值={interval}s, 最小值={min_interval}s, 实际值={final_interval}s")
+
+        # 更新缓存
+        _refresh_interval_cache = final_interval
+        _refresh_interval_cache_time = current_time
+
         return final_interval
-        
+
     except (KeyError, TypeError, ValueError) as e:
         logger.warning(f"读取刷新间隔配置失败，使用默认值{DEFAULT_REFRESH_INTERVAL}秒: {e}")
         return DEFAULT_REFRESH_INTERVAL
