@@ -15,6 +15,9 @@ build
 *.md
 logs/
 tests/
+data/
 .DS_Store
 .env
 config.json
+*.db
+*.db-journal
