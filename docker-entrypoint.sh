@@ -8,9 +8,16 @@ echo "🚀 Balance Alert - Docker 容器启动"
 echo "=================================="
 echo ""
 
-# 1. 创建必要的目录
-echo "📁 创建必要目录..."
-mkdir -p /app/logs /app/data
+# 1. 创建必要的目录（如果不存在）
+if [ ! -d /app/logs ]; then
+    echo "📁 创建日志目录..."
+    mkdir -p /app/logs
+fi
+
+if [ ! -d /app/data ]; then
+    echo "📁 创建数据目录..."
+    mkdir -p /app/data
+fi
 
 # 2. 初始化 config.json（如果不存在或为空）
 if [ ! -s /app/config.json ]; then
@@ -37,18 +44,17 @@ EOF
     echo "✅ 默认配置文件已创建"
 fi
 
-# 3. 确保文件权限正确
-echo "🔐 设置文件权限..."
-chmod 644 /app/config.json
-chmod 755 /app/logs /app/data
+# 3. 权限已在 Dockerfile 中设置，跳过 chmod
 
 # 4. 显示配置信息
 echo ""
-echo "📋 配置信息:"
-echo "  - 配置文件: /app/config.json ($(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json) bytes)"
+echo "📋 环境信息:"
+CONFIG_SIZE=$(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json 2>/dev/null || echo "unknown")
+echo "  - 配置文件: /app/config.json (${CONFIG_SIZE} bytes)"
 echo "  - 日志目录: /app/logs"
 echo "  - 数据目录: /app/data"
-echo "  - 用户: $(whoami)"
+echo "  - 运行用户: $(whoami)"
+echo "  - 工作目录: $(pwd)"
 echo ""
 
 # 5. 检查环境变量
