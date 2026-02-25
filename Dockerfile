@@ -54,13 +54,14 @@ COPY templates ./templates
 COPY static ./static
 COPY alembic ./alembic
 COPY alembic.ini ./
-COPY start.sh crontab ./
+COPY start.sh crontab docker-entrypoint.sh ./
 
-# 创建非 root 用户
+# 创建非 root 用户和必要的目录/文件
 RUN groupadd -r appuser && \
     useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
-    mkdir -p /app/logs && \
-    chmod +x /app/start.sh && \
+    mkdir -p /app/logs /app/data && \
+    touch /app/config.json && \
+    chmod +x /app/start.sh /app/docker-entrypoint.sh && \
     chown -R appuser:appuser /app
 
 # 以非 root 用户运行
@@ -73,4 +74,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # 暴露端口（文档用途）
 EXPOSE 8080 9100
 
-CMD ["/app/start.sh"]
+# 使用入口脚本初始化环境
+CMD ["/app/docker-entrypoint.sh"]
