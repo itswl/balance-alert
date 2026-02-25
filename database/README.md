@@ -23,11 +23,11 @@ ENABLE_DATABASE=true
 # SQLite（默认，无需额外配置）
 DATABASE_URL=sqlite:///./data/balance_alert.db
 
-# PostgreSQL
+# PostgreSQL（推荐用于生产环境）
 # DATABASE_URL=postgresql://username:password@localhost:5432/balance_alert
 
-# MySQL
-# DATABASE_URL=mysql://username:password@localhost:3306/balance_alert
+# MySQL（注意：使用 mysql+pymysql 前缀）
+# DATABASE_URL=mysql+pymysql://username:password@localhost:3306/balance_alert?charset=utf8mb4
 ```
 
 ### 2. 初始化数据库
