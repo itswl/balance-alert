@@ -20,21 +20,9 @@ case "$1" in
     echo "查看定时任务日志: docker exec credit-monitor cat /app/logs/cron.log"
     ;;
   
-  start-web)
-    echo "启动 Web 服务器和定时任务..."
-    docker compose -f docker compose.web.yml up -d
-    echo "容器已启动！"
-    echo "🌐 Web 界面: http://localhost:8080"
-    echo "📊 实时查看余额: http://localhost:8080"
-    echo ""
-    echo "查看 Web 日志: docker logs -f credit-monitor-web"
-    echo "查看 Cron 日志: docker logs -f credit-monitor-cron"
-    ;;
-  
   stop)
     echo "停止容器..."
     docker compose down
-    docker compose -f docker compose.web.yml down 2>/dev/null
     ;;
   
   web)
