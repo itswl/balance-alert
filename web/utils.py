@@ -124,48 +124,6 @@ def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any
         return None
 
 
-def write_config(config: Dict[str, Any], config_path: str = 'config.json') -> None:
-    """
-    写入配置文件（带文件锁）
-
-    Args:
-        config: 配置字典
-        config_path: 配置文件路径
-    """
-    # 使用临时文件 + 原子替换，避免写入过程中损坏
-    config_file = Path(config_path)
-    temp_file = tempfile.NamedTemporaryFile(
-        mode='w',
-        delete=False,
-        dir=config_file.parent,
-        prefix='.config_',
-        suffix='.json'
-    )
-
-    try:
-        with open(config_path, 'r+') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            temp_file.write(json.dumps(config, indent=2, ensure_ascii=False))
-            temp_file.flush()
-            temp_file.close()
-
-            # 原子替换
-            Path(temp_file.name).replace(config_path)
-
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-        # 清除配置缓存，确保下次加载时获取最新配置
-        from core.config_loader import clear_config_cache
-        clear_config_cache()
-        logger.debug(f"配置文件已更新并清除缓存: {config_path}")
-
-    except Exception as e:
-        # 清理临时文件
-        try:
-            Path(temp_file.name).unlink()
-        except Exception:
-            pass
-        raise e
 
 
 def validate_renewal_day(renewal_day: int, cycle_type: str) -> Optional[str]:

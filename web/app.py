@@ -100,7 +100,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
     """
     from flask import jsonify, request
     from .middleware import require_api_key
-    from .utils import load_config_safe, write_config, audit_log
+    from .utils import load_config_safe, audit_log
     from .handlers import update_balance_cache, refresh_credits
 
     # ==========推历史数据 API ==========
