@@ -79,16 +79,10 @@ async function saveSubscription(event) {
             method = 'POST';
         }
 
-        const response = await fetch(endpoint, {
+        const { response, data: result } = await API.fetchJson(endpoint, {
             method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                ...API.getAuthHeaders(),
-            },
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
         });
-
-        const result = await response.json();
 
         if (response.ok && result.status === 'success') {
             UI.showToast(isEdit ? '✅ 订阅已更新' : '✅ 订阅已添加', 'success');
@@ -120,8 +114,7 @@ async function editSubscription(name) {
         const subscription = AppState.subscriptionData.subscriptions.find(s => s.name === name);
         if (subscription) {
             // 需要获取完整配置（包括 alert_days_before）
-            const response = await fetch('/api/config/subscriptions', { headers: { ...API.getAuthHeaders() } });
-            const result = await response.json();
+            const result = await API.request('/api/config/subscriptions');
             const fullSub = result.subscriptions.find(s => s.name === name);
             openSubscriptionModal(fullSub || subscription);
         } else {
@@ -142,16 +135,10 @@ async function deleteSubscription(name) {
     try {
         UI.setLoading(true);
 
-        const response = await fetch('/api/subscription/delete', {
+        const { response, data: result } = await API.fetchJson('/api/subscription/delete', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...API.getAuthHeaders(),
-            },
             body: JSON.stringify({ name })
         });
-
-        const result = await response.json();
 
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 订阅已删除', 'success');
@@ -176,16 +163,10 @@ async function markSubscriptionRenewed(name) {
     try {
         UI.setLoading(true);
 
-        const response = await fetch('/api/subscription/mark_renewed', {
+        const { response, data: result } = await API.fetchJson('/api/subscription/mark_renewed', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...API.getAuthHeaders(),
-            },
             body: JSON.stringify({ name })
         });
-
-        const result = await response.json();
 
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 已标记为已续费', 'success');
@@ -210,16 +191,10 @@ async function clearSubscriptionRenewed(name) {
     try {
         UI.setLoading(true);
 
-        const response = await fetch('/api/subscription/clear_renewed', {
+        const { response, data: result } = await API.fetchJson('/api/subscription/clear_renewed', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...API.getAuthHeaders(),
-            },
             body: JSON.stringify({ name })
         });
-
-        const result = await response.json();
 
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 已取消续费标记', 'success');

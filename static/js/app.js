@@ -97,6 +97,7 @@ const Utils = {
 // ==================== API 服务 ====================
 const API = {
     baseURL: window.location.origin,
+    _apiKeyPromptPromise: null,
 
     getApiKey() {
         return (localStorage.getItem('apiKey') || '').trim();
@@ -116,25 +117,64 @@ const API = {
         return apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {};
     },
 
+    async promptForApiKey() {
+        if (this._apiKeyPromptPromise) {
+            return this._apiKeyPromptPromise;
+        }
+        this._apiKeyPromptPromise = (async () => {
+            const current = this.getApiKey();
+            const value = window.prompt('需要 API Key 才能继续访问，请输入 API Key：', current);
+            if (value === null) {
+                return null;
+            }
+            this.setApiKey(value);
+            return this.getApiKey() || null;
+        })();
+        const key = await this._apiKeyPromptPromise;
+        this._apiKeyPromptPromise = null;
+        return key;
+    },
+
+    async fetchJson(endpoint, options = {}, retried = false) {
+        const authHeaders = this.getAuthHeaders();
+        const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+            ...(options.headers || {}),
+        };
+        const response = await fetch(url, {
+            ...options,
+            headers,
+        });
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = null;
+        }
+        if (response.status === 401) {
+            if (retried) {
+                this.setApiKey('');
+            } else {
+                const key = await this.promptForApiKey();
+                if (key) {
+                    return this.fetchJson(endpoint, options, true);
+                }
+            }
+        }
+        return { response, data };
+    },
+
     async request(endpoint, options = {}) {
         try {
-            const authHeaders = this.getAuthHeaders();
-            const response = await fetch(`${this.baseURL}${endpoint}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...authHeaders,
-                    ...options.headers,
-                },
-                ...options,
-            });
-
-            const data = await response.json();
+            const { response, data } = await this.fetchJson(endpoint, options);
 
             if (!response.ok) {
                 // 如果响应包含错误消息，抛出带消息的错误
                 let errorMsg = data.message || data.error || response.statusText;
                 if (response.status === 401) {
-                    errorMsg = '未授权访问，请在设置中填写 API Key';
+                    errorMsg = '未授权访问，API Key 无效或未提供';
                 }
                 throw new Error(errorMsg);
             }
