@@ -2,6 +2,7 @@
 const AppState = {
     currentTheme: localStorage.getItem('theme') || 'light',
     currentView: 'all', // 'all', 'alerts', 'subscriptions'
+    projectViewStyle: localStorage.getItem('projectViewStyle') || 'grid', // 'grid', 'list'
     currentFilter: 'all',
     searchQuery: '',
     balanceData: null,
@@ -372,6 +373,18 @@ const UI = {
     // 渲染项目列表
     renderProjects(data) {
         const container = document.getElementById('projects-container');
+        
+        // 应用视图样式类
+        if (AppState.projectViewStyle === 'list') {
+            container.className = 'projects-list';
+            document.getElementById('view-list-btn').classList.add('active');
+            document.getElementById('view-grid-btn').classList.remove('active');
+        } else {
+            container.className = 'projects-grid';
+            document.getElementById('view-grid-btn').classList.add('active');
+            document.getElementById('view-list-btn').classList.remove('active');
+        }
+
         const projects = data.projects || [];
 
         // 应用筛选
@@ -510,6 +523,23 @@ const App = {
 
         document.getElementById('view-subscriptions-btn').addEventListener('click', () => {
             this.switchView('subscriptions');
+        });
+
+        // 视图切换 (网格/列表)
+        document.getElementById('view-grid-btn').addEventListener('click', () => {
+            AppState.projectViewStyle = 'grid';
+            localStorage.setItem('projectViewStyle', 'grid');
+            if (AppState.balanceData) {
+                UI.renderProjects(AppState.balanceData);
+            }
+        });
+
+        document.getElementById('view-list-btn').addEventListener('click', () => {
+            AppState.projectViewStyle = 'list';
+            localStorage.setItem('projectViewStyle', 'list');
+            if (AppState.balanceData) {
+                UI.renderProjects(AppState.balanceData);
+            }
         });
 
         // 搜索
