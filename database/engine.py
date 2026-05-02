@@ -7,7 +7,7 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
-from logger import get_logger
+from core.logger import get_logger
 from .models import Base
 
 logger = get_logger('database')

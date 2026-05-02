@@ -132,7 +132,7 @@ if [ $? -eq 0 ]; then
     echo "  SSL: ${USE_SSL}"
     echo ""
     echo "📋 下一步："
-    echo "  1. 运行 python3 web_server_modular.py 启动服务"
+    echo "  1. 运行 python3 main.py 启动服务"
     echo "  2. 系统会自动创建所需的数据库表"
     echo ""
     echo "📖 详细文档: docs/POSTGRESQL_SETUP.md"

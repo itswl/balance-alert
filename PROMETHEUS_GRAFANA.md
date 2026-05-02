@@ -50,7 +50,7 @@ docker-compose -f docker-compose.monitoring.yml down
 
 ```bash
 # 本地运行
-python web_server.py
+python main.py
 
 # 或使用 Docker
 docker-compose up -d
@@ -123,7 +123,7 @@ docker-compose up -d
 **方式 B: 本地启动**
 
 ```bash
-python3 web_server.py
+python3 main.py
 ```
 
 Metrics 端点: `http://localhost:9100/metrics`

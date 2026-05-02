@@ -55,7 +55,12 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
 # API 认证
-API_KEY = os.environ.get('API_KEY', '')
+def _get_api_key() -> str:
+    return os.environ.get('API_KEY') or os.environ.get('WEB_API_KEY') or ''
+
+
+def _get_allow_paths_raw() -> str:
+    return os.environ.get('API_KEY_ALLOW_PATHS', '/health')
 
 # 请求体大小限制 (1MB)
 MAX_CONTENT_LENGTH = 1 * 1024 * 1024
@@ -79,6 +84,15 @@ STALENESS_MULTIPLIER = 3  # last_update 超过 refresh_interval * 此倍数视�
 
 
 def _extract_api_key() -> str:
+    token = (request.headers.get('X-API-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('X-Api-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('Api-Key', '') or '').strip()
+    if token:
+        return token
     auth = (request.headers.get('Authorization', '') or '').strip()
     lower = auth.lower()
     token = ''
@@ -110,23 +124,52 @@ def require_api_key(f):
     """API 认证装饰器"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not API_KEY:
+        api_key = _get_api_key()
+        if not api_key:
+            return f(*args, **kwargs)
+        if _is_allowed_path(request.path or ''):
             return f(*args, **kwargs)
         token = _extract_api_key()
-        if request.method != 'OPTIONS' and token != API_KEY:
+        if request.method != 'OPTIONS' and token != api_key:
             return _unauthorized()
         return f(*args, **kwargs)
     return decorated
 
 
+def _is_allowed_path(path: str) -> bool:
+    if not path:
+        return False
+    raw = (_get_allow_paths_raw() or '').strip()
+    if not raw:
+        return False
+    for item in raw.split(','):
+        rule = (item or '').strip()
+        if not rule:
+            continue
+        if rule.endswith('*'):
+            prefix = rule[:-1]
+            if prefix and path.startswith(prefix):
+                return True
+            continue
+        if path == rule:
+            return True
+    return False
+
+
 @app.before_request
 def _api_key_guard():
-    if not API_KEY:
+    api_key = _get_api_key()
+    if not api_key:
         return None
     if request.method == 'OPTIONS':
         return None
+    path = request.path or ''
+    if not path.startswith('/api/'):
+        return None
+    if _is_allowed_path(request.path or ''):
+        return None
     token = _extract_api_key()
-    if token != API_KEY:
+    if token != api_key:
         return _unauthorized()
     return None
 

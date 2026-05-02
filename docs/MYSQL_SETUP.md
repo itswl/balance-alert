@@ -126,7 +126,7 @@ python3 scripts/test_database.py
 ### 5. 启动服务
 
 ```bash
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ## 🔐 常见配置参数

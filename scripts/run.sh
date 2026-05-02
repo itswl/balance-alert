@@ -40,7 +40,7 @@ case "$1" in
   web)
     echo "本地运行 Web 服务器（不用 Docker）..."
     echo "🌐 访问地址: http://localhost:8080"
-    python3 web_server.py
+    python3 main.py
     ;;
   
   restart)
@@ -60,7 +60,7 @@ case "$1" in
   
   run-now)
     echo "立即执行一次检查..."
-    docker exec credit-monitor python /app/monitor.py
+    docker exec credit-monitor python -m services.monitor
     ;;
   
   shell)

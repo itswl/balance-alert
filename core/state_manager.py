@@ -11,7 +11,7 @@ import os
 import copy
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, asdict
-from logger import get_logger
+from core.logger import get_logger
 
 logger = get_logger('state_manager')
 

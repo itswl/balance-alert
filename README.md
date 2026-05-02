@@ -89,7 +89,7 @@ export WEBHOOK_URL="https://your-webhook-url"
 export PROJECT_1_API_KEY="your-api-key"
 
 # 3. 运行 Web 服务
-python web_server.py
+python main.py
 
 # 或执行一次检查
 python monitor.py
@@ -179,7 +179,7 @@ docker-compose restart        # 重启
 docker-compose down           # 停止
 
 # 本地运行
-python web_server.py          # 启动 Web 服务
+python main.py          # 启动 Web 服务
 python monitor.py             # 执行检查
 python monitor.py --dry-run   # 测试模式（不发送告警）
 ```

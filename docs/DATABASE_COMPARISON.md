@@ -157,7 +157,7 @@ PostgreSQL（推荐）
 sqlite3 data/balance_alert.db .dump > backup.sql
 
 # 3. 启动应用（自动创建表）
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ### SQLite → PostgreSQL
@@ -166,7 +166,7 @@ python3 web_server_modular.py
 ./scripts/setup_postgresql.sh
 
 # 2. 启动应用
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ### MySQL → PostgreSQL

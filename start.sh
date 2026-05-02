@@ -20,7 +20,7 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGQUIT
 
 echo "🌐 Starting Web Server on port 8080..."
-python /app/web_server_modular.py &
+python /app/main.py &
 WEB_PID=$!
 echo "Web Server started with PID: $WEB_PID"
 echo ""
@@ -30,7 +30,7 @@ CRON_PID=$!
 echo "Cron service started with PID: $CRON_PID"
 echo ""
 echo "🚀 Running initial balance check..."
-python /app/monitor.py
+python -m services.monitor
 echo ""
 echo "✅ All services started successfully!"
 echo ""

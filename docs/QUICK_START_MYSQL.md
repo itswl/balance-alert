@@ -12,7 +12,7 @@ pip install pymysql cryptography
 ./scripts/setup_mysql.sh
 
 # 3. 启动服务
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ### 方法二：手动配置
@@ -29,7 +29,7 @@ ENABLE_DATABASE=true
 DATABASE_URL=mysql+pymysql://username:password@host:port/database?charset=utf8mb4
 
 # 3. 启动服务
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ## 📝 常见场景配置
@@ -243,7 +243,7 @@ DATABASE_URL=mysql+pymysql://user:pass@host:3306/dbname?charset=utf8mb4&pool_siz
 ./scripts/setup_mysql.sh
 
 # 2. 启动服务（会自动创建表）
-python3 web_server_modular.py
+python3 main.py
 
 # 3. (可选) 导入历史数据
 # 如果需要保留历史数据，需要手动迁移或使用迁移脚本

@@ -13,11 +13,11 @@ from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
-from subscription_checker import SubscriptionChecker
-from email_scanner import EmailScanner
-from webhook_adapter import WebhookAdapter
-from logger import get_logger
-from config_loader import load_config_with_env_vars
+from services.subscription_checker import SubscriptionChecker
+from services.email_scanner import EmailScanner
+from services.webhook_adapter import WebhookAdapter
+from core.logger import get_logger
+from core.config_loader import load_config_with_env_vars
 
 # 创建 logger（必须在使用前定义）
 logger = get_logger('monitor')

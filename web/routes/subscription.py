@@ -8,13 +8,13 @@ from flask import Blueprint, jsonify, request
 from ..middleware import require_api_key, validate_request
 from ..utils import load_config_safe, write_config, audit_log
 from ..handlers import update_subscription_cache, refresh_subscription_cache
-from state_manager import StateManager
+from core.state_manager import StateManager
 from models.api_models import (
     AddSubscriptionRequest,
     UpdateSubscriptionRequest,
     DeleteSubscriptionRequest
 )
-from logger import get_logger
+from core.logger import get_logger
 
 logger = get_logger('web.routes.subscription')
 

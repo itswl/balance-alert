@@ -6,9 +6,9 @@
 """
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
-from subscription_checker import SubscriptionChecker
-from state_manager import StateManager
-from logger import get_logger
+from services.subscription_checker import SubscriptionChecker
+from core.state_manager import StateManager
+from core.logger import get_logger
 
 logger = get_logger('web.handlers.subscription')
 

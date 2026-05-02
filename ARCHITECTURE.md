@@ -76,7 +76,7 @@ class BaseProvider:
         """
 ```
 
-### 3. Web Server (`web_server.py`)
+### 3. Web Server (`main.py`)
 
 **框架**：Flask + Waitress
 

@@ -8,8 +8,8 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from pathlib import Path
-from state_manager import StateManager
-from logger import get_logger
+from core.state_manager import StateManager
+from core.logger import get_logger
 
 logger = get_logger('web.app')
 
@@ -47,8 +47,8 @@ def create_app(state_manager: StateManager = None) -> Flask:
     # 启用 CORS
     CORS(app)
 
-    from .middleware import protect_all_endpoints
-    protect_all_endpoints(app)
+    from .middleware import protect_api_endpoints
+    protect_api_endpoints(app)
 
     # 初始化状态管理器
     if state_manager is None:
