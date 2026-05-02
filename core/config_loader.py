@@ -19,6 +19,29 @@ from core.logger import get_logger
 
 logger = get_logger('config_loader')
 
+DYNAMIC_CONFIG_FILE = os.path.join(os.environ.get('DATA_DIR', 'data'), 'dynamic_config.json')
+
+def load_dynamic_config() -> Dict[str, Any]:
+    """加载动态配置 (Web UI 修改的订阅和阈值)"""
+    try:
+        if os.path.exists(DYNAMIC_CONFIG_FILE):
+            with open(DYNAMIC_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"加载动态配置失败: {e}")
+    return {'projects': {}, 'subscriptions': []}
+
+def save_dynamic_config(config: Dict[str, Any]) -> None:
+    """保存动态配置"""
+    try:
+        os.makedirs(os.path.dirname(DYNAMIC_CONFIG_FILE), exist_ok=True)
+        with open(DYNAMIC_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        clear_config_cache()
+    except Exception as e:
+        logger.error(f"保存动态配置失败: {e}")
+        raise e
+
 
 def load_env_file(env_file: str = '.env') -> None:
     """加载 .env 文件"""
@@ -427,6 +450,28 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         logger.info(f"[Config] 配置版本: {config_version}")
 
     # 验证配置
+    # 合并动态配置 (dynamic_config.json)
+    dynamic_config = load_dynamic_config()
+    
+    # 覆盖 project 阈值和 enabled 状态
+    dynamic_projects = dynamic_config.get('projects', {})
+    for project in config.get('projects', []):
+        p_name = project['name']
+        if p_name in dynamic_projects:
+            project.update(dynamic_projects[p_name])
+            
+    # 追加或覆盖 subscriptions
+    dynamic_subs = dynamic_config.get('subscriptions', [])
+    deleted_subs = dynamic_config.get('_deleted_subscriptions', [])
+    
+    static_subs = {s['name']: s for s in config.get('subscriptions', []) if s['name'] not in deleted_subs}
+    
+    if dynamic_subs:
+        for dyn_sub in dynamic_subs:
+            static_subs[dyn_sub['name']] = dyn_sub
+            
+    config['subscriptions'] = list(static_subs.values())
+
     if validate:
         app_config = AppConfig.from_dict(config)
         errors = app_config.validate()
