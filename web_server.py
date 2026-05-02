@@ -81,10 +81,12 @@ def require_api_key(f):
     """API 认证装饰器"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if not API_KEY:
+            return f(*args, **kwargs)
         token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
         if not token:
             token = request.args.get('api_key', '')
-        if request.method != 'OPTIONS' and (not API_KEY or token != API_KEY):
+        if request.method != 'OPTIONS' and token != API_KEY:
             return jsonify({'status': 'error', 'message': '未授权访问'}), 401
         return f(*args, **kwargs)
     return decorated
@@ -95,12 +97,14 @@ def _api_key_guard():
     path = request.path or ''
     if not path.startswith('/api/'):
         return None
+    if not API_KEY:
+        return None
     if request.method == 'OPTIONS':
         return None
     token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
     if not token:
         token = request.args.get('api_key', '')
-    if not API_KEY or token != API_KEY:
+    if token != API_KEY:
         return jsonify({'status': 'error', 'message': '未授权访问'}), 401
     return None
 
