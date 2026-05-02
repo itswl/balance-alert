@@ -38,7 +38,9 @@ async function showProjectTrend(projectName, provider) {
 
     try {
         // 获取趋势数据（默认30天）
-        const response = await fetch(`/api/history/trend/${encodeURIComponent(projectId)}?days=30`);
+        const response = await fetch(`/api/history/trend/${encodeURIComponent(projectId)}?days=30`, {
+            headers: { ...API.getAuthHeaders() }
+        });
         const result = await response.json();
 
         if (!response.ok || result.status === 'error') {
