@@ -35,7 +35,7 @@ curl http://localhost:9090/api/v1/targets
 
 a. **网络问题** - web 服务未加入正确的 Docker 网络
 ```bash
-# 检查 docker-compose.monitoring.yml
+# 检查 docker-compose.yml
 # 确保 web 服务有以下配置：
 networks:
   - monitoring
@@ -50,16 +50,16 @@ docker ps | grep credit-monitor
 c. **服务未启动** - balance-alert 服务未运行
 ```bash
 # 重启服务
-docker-compose -f docker-compose.monitoring.yml restart web
+docker compose --profile monitoring restart web
 ```
 
 **解决方案**：
 ```bash
 # 1. 停止所有服务
-docker-compose -f docker-compose.monitoring.yml down
+docker compose --profile monitoring down
 
 # 2. 重新启动
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose --profile monitoring up -d
 
 # 3. 等待 30 秒让服务完全启动
 sleep 30
@@ -183,7 +183,7 @@ sleep 30
 
 ```bash
 # 检查所有容器
-docker-compose -f docker-compose.monitoring.yml ps
+docker compose --profile monitoring ps
 
 # 应该看到 3 个容器都是 Up 状态：
 # - credit-monitor
@@ -265,13 +265,13 @@ curl -u admin:admin123 http://localhost:3000/api/datasources | python3 -m json.t
 
 ```bash
 # 1. 停止并删除所有容器和卷
-docker-compose -f docker-compose.monitoring.yml down -v
+docker compose --profile monitoring down -v
 
 # 2. 删除 Grafana 数据
 rm -rf grafana/grafana-data
 
 # 3. 重新启动
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose --profile monitoring up -d
 
 # 4. 等待服务启动
 sleep 30
@@ -317,7 +317,7 @@ rm grafana/datasources/prometheus.yml
 
 **解决**：
 ```yaml
-# docker-compose.monitoring.yml
+# docker-compose.yml
 services:
   web:
     networks:
@@ -342,7 +342,7 @@ services:
 ```bash
 # 收集诊断信息
 echo "=== Container Status ===" > grafana-debug.log
-docker-compose -f docker-compose.monitoring.yml ps >> grafana-debug.log
+docker compose --profile monitoring ps >> grafana-debug.log
 
 echo "\n=== Prometheus Targets ===" >> grafana-debug.log
 curl -s http://localhost:9090/api/v1/targets >> grafana-debug.log

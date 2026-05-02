@@ -207,7 +207,7 @@ python monitor.py --dry-run   # 测试模式（不发送告警）
 
 ```bash
 # 启动监控栈
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose --profile monitoring up -d
 
 # 访问
 # Grafana: http://localhost:3000 (admin/admin123)
@@ -215,13 +215,13 @@ docker-compose -f docker-compose.monitoring.yml up -d
 # Metrics: http://localhost:9100/metrics
 ```
 
-详见 [PROMETHEUS_GRAFANA.md](PROMETHEUS_GRAFANA.md)
+详见 [PROMETHEUS_GRAFANA.md](docs/PROMETHEUS_GRAFANA.md)
 
 ## 📚 文档
 
-- [API 文档](API.md) - REST API 使用指南
-- [架构文档](ARCHITECTURE.md) - 系统架构设计
-- [贡献指南](CONTRIBUTING.md) - 开发和贡献指南
+- [API 文档](docs/API.md) - REST API 使用指南
+- [架构文档](docs/ARCHITECTURE.md) - 系统架构设计
+- [贡献指南](docs/CONTRIBUTING.md) - 开发和贡献指南
 
 ## 📄 许可证
 

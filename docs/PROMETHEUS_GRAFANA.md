@@ -29,16 +29,16 @@
 
 ```bash
 # 启动所有服务（Web + Prometheus + Grafana）
-docker-compose -f docker-compose.monitoring.yml up -d
+```bash
+# 启动所有服务（包括监控栈）
+docker compose --profile monitoring up -d
 
 # 查看日志
-docker-compose -f docker-compose.monitoring.yml logs -f
+docker compose --profile monitoring logs -f
 
 # 停止服务
-docker-compose -f docker-compose.monitoring.yml down
+docker compose --profile monitoring down
 ```
-
-启动后访问：
 - **Grafana**: http://localhost:3000 （默认账号：admin/admin123）
 - **Prometheus**: http://localhost:9090
 - **监控服务**: http://localhost:8080
