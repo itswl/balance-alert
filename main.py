@@ -25,7 +25,62 @@ logger = get_logger('web_server')
 _stop_event = threading.Event()
 
 # 全局状态管理器和数据检测器
+from database.repository import BalanceRepository, SubscriptionRepository
+from sqlalchemy import desc, func
+from database.models import BalanceHistory, SubscriptionHistory
+from database.engine import get_session
+
+# ======= State Init =======
+def init_state_from_db(state_mgr: StateManager):
+    """从数据库加载最近的状态，以便重启后 UI 立即可用"""
+    try:
+        session = get_session()
+        if not session:
+            return
+            
+        # 1. 恢复 Balance 状态
+        # 每个项目取最新的一条记录
+        latest_balances = session.query(BalanceHistory).group_by(BalanceHistory.project_id).having(func.max(BalanceHistory.timestamp)).all()
+        if latest_balances:
+            projects_state = []
+            for b in latest_balances:
+                projects_state.append({
+                    'project': b.project_name,
+                    'provider': b.provider,
+                    'type': b.balance_type,
+                    'success': True, # 假设查到的都是最后成功的，如果不准确也没关系，马上会刷新
+                    'credits': b.balance,
+                    'threshold': b.threshold,
+                    'need_alarm': b.need_alarm,
+                    'alarm_sent': False,
+                    'error': None
+                })
+            state_mgr.update_balance_state(projects_state)
+            
+        # 2. 恢复 Subscription 状态
+        latest_subs = session.query(SubscriptionHistory).group_by(SubscriptionHistory.subscription_id).having(func.max(SubscriptionHistory.timestamp)).all()
+        if latest_subs:
+            subs_state = []
+            for s in latest_subs:
+                subs_state.append({
+                    'name': s.subscription_name,
+                    'cycle_type': s.cycle_type,
+                    'days_until_renewal': s.days_until_renewal,
+                    'amount': s.amount,
+                    'need_alert': s.need_renewal,
+                    'alert_sent': False,
+                    'already_renewed': False,
+                    'last_renewed_date': None
+                })
+            state_mgr.update_subscription_state(subs_state)
+            
+        session.close()
+        logger.info("已从数据库恢复初始状态")
+    except Exception as e:
+        logger.error(f"从数据库恢复状态失败: {e}")
+
 global_state_manager = StateManager()
+init_state_from_db(global_state_manager)
 
 
 class DataChangeDetector:
@@ -59,24 +114,7 @@ class DataChangeDetector:
 data_detector = DataChangeDetector()
 
 
-def save_cache_file(state_mgr: StateManager = global_state_manager) -> None:
-    """保存缓存到文件"""
-    try:
-        cache_file = os.environ.get('BALANCE_CACHE_FILE', './data/balance_cache.json')
-        cache_dir = Path(cache_file).parent
-        cache_dir.mkdir(parents=True, exist_ok=True)
 
-        import json
-        with open(cache_file, 'w') as f:
-            balance_state = state_mgr.get_balance_state()
-            cache_data = {
-                'balance': balance_state,
-                'subscription': state_mgr.get_subscription_state(),
-                'last_update': balance_state.get('last_update')
-            }
-            json.dump(cache_data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"保存缓存文件失败: {e}")
 
 
 def update_credits(state_mgr: StateManager = global_state_manager, detector: DataChangeDetector = None):
@@ -125,9 +163,6 @@ def update_credits(state_mgr: StateManager = global_state_manager, detector: Dat
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
             metrics_collector.update_subscription_metrics(subscription_results or [])
-
-            # 保存缓存到文件
-            save_cache_file(state_mgr)
 
             # 智能刷新日志
             if smart_refresh_enabled:

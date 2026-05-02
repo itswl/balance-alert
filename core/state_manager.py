@@ -135,58 +135,6 @@ class StateManager:
         with self._lock:
             return self._balance_state.last_update is not None
     
-    def save_to_cache(self) -> bool:
-        """保存状态到缓存文件"""
-        try:
-            with self._lock:
-                cache_data = {
-                    'projects': copy.deepcopy(self._balance_state.projects),
-                    'subscriptions': copy.deepcopy(self._subscription_state.subscriptions),
-                    'metadata': {
-                        'balance_last_update': self._balance_state.last_update,
-                        'subscription_last_update': self._subscription_state.last_update,
-                        'saved_at': time.strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                }
-
-            with open(self._cache_file, 'w', encoding='utf-8') as f:
-                json.dump(cache_data, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"状态已保存到缓存文件: {self._cache_file}")
-            return True
-
-        except (OSError, IOError, json.JSONEncodeError) as e:
-            logger.error(f"保存缓存文件失败: {e}")
-            return False
-    
-    def load_from_cache(self) -> bool:
-        """从缓存文件加载状态"""
-        try:
-            if not os.path.exists(self._cache_file):
-                logger.info(f"缓存文件不存在: {self._cache_file}")
-                return False
-            
-            with open(self._cache_file, 'r', encoding='utf-8') as f:
-                cache_data = json.load(f)
-            
-            with self._lock:
-                self._balance_state.projects = cache_data.get('projects', [])
-                self._subscription_state.subscriptions = cache_data.get('subscriptions', [])
-                
-                metadata = cache_data.get('metadata', {})
-                self._balance_state.last_update = metadata.get('balance_last_update')
-                self._subscription_state.last_update = metadata.get('subscription_last_update')
-                
-                # 重建摘要信息
-                self._rebuild_summaries()
-            
-            logger.info(f"状态已从缓存文件加载: {self._cache_file}")
-            return True
-            
-        except (OSError, IOError, json.JSONDecodeError) as e:
-            logger.error(f"加载缓存文件失败: {e}")
-            return False
-    
     def _rebuild_summaries(self) -> None:
         """重建状态摘要信息"""
         # 重建余额摘要
