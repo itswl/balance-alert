@@ -430,12 +430,12 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         from database.repository import ConfigRepository
         db_projects = ConfigRepository.get_all_projects()
         db_subscriptions = ConfigRepository.get_all_subscriptions()
+        db_emails = ConfigRepository.get_all_emails()
 
         # 数据库的配置优先级最高，与文件配置进行合并 (同名覆盖，新增追加)
         if db_projects:
             static_projs = {p['name']: p for p in config.get('projects', [])}
             for dp in db_projects:
-                # 排除 DB 里的 id 等多余字段影响核心逻辑，仅保留关键配置
                 clean_dp = {k: v for k, v in dp.items() if k not in ['id', 'created_at', 'updated_at']}
                 if clean_dp['name'] in static_projs:
                     static_projs[clean_dp['name']].update(clean_dp)
@@ -452,6 +452,16 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
                 else:
                     static_subs[clean_ds['name']] = clean_ds
             config['subscriptions'] = list(static_subs.values())
+
+        if db_emails:
+            static_emails = {e['name']: e for e in config.get('email', [])}
+            for de in db_emails:
+                clean_de = {k: v for k, v in de.items() if k not in ['id', 'created_at', 'updated_at']}
+                if clean_de['name'] in static_emails:
+                    static_emails[clean_de['name']].update(clean_de)
+                else:
+                    static_emails[clean_de['name']] = clean_de
+            config['email'] = list(static_emails.values())
     except Exception as e:
         logger.warning(f"从数据库合并配置失败: {e}")
 

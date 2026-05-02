@@ -44,20 +44,20 @@ def get_projects_config():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@project_bp.route('/project/update_threshold', methods=['POST'])
+@project_bp.route('/config/threshold', methods=['POST'])
 @require_api_key
 def update_project_threshold():
     """更新项目阈值"""
     try:
         data = request.get_json()
-        if not data or 'name' not in data or 'threshold' not in data:
+        if not data or 'project_name' not in data or 'new_threshold' not in data:
             return jsonify({
                 'status': 'error',
-                'message': '缺少必要参数: name 和 threshold'
+                'message': '缺少必要参数: project_name 和 new_threshold'
             }), 400
 
-        project_name = data['name']
-        new_threshold = float(data['threshold'])
+        project_name = data['project_name']
+        new_threshold = float(data['new_threshold'])
 
         if new_threshold < 0:
             return jsonify({

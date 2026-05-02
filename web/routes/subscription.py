@@ -245,27 +245,19 @@ def mark_subscription_renewed():
         subscription_name = data['name']
         renewed_date = data.get('renewed_date')  # 可选，默认今天
 
-        # 读取配置
-        config = load_config_safe()
-        subscription_found = False
+        # 查找订阅并更新数据库
+        success = ConfigRepository.upsert_subscription({
+            'name': subscription_name,
+            'last_renewed_date': renewed_date or __import__('datetime').date.today().isoformat()
+        })
 
-        for sub in config.get('subscriptions', []):
-            if sub.get('name') == subscription_name:
-                # 更新最后续费日期
-                from datetime import date
-                sub['last_renewed_date'] = renewed_date or date.today().isoformat()
-
-                subscription_found = True
-                break
-
-        if not subscription_found:
+        if not success:
             return jsonify({
                 'status': 'error',
-                'message': f'未找到订阅: {subscription_name}'
-            }), 404
+                'message': f'更新订阅失败'
+            }), 500
 
-        # 保存配置
-        write_config(config)
+        clear_config_cache()
         audit_log('mark_renewed', {'subscription': subscription_name})
 
         # 刷新缓存
@@ -306,27 +298,20 @@ def clear_subscription_renewed():
 
         subscription_name = data['name']
 
-        # 读取配置
-        config = load_config_safe()
-        subscription_found = False
+        # 取消标记续费日期
+        success = ConfigRepository.upsert_subscription({
+            'name': subscription_name,
+            'last_renewed_date': None
+        })
 
-        for sub in config.get('subscriptions', []):
-            if sub.get('name') == subscription_name:
-                # 删除最后续费日期字段
-                if 'last_renewed_date' in sub:
-                    del sub['last_renewed_date']
-                subscription_found = True
-                break
-
-        if not subscription_found:
+        if not success:
             return jsonify({
                 'status': 'error',
-                'message': f'未找到订阅: {subscription_name}'
-            }), 404
+                'message': f'更新订阅失败'
+            }), 500
 
-        # 保存配置
-        write_config(config)
-        audit_log('clear_renewed', {'subscription': subscription_name})
+        clear_config_cache()
+        audit_log('unmark_renewed', {'subscription': subscription_name})
 
        # 刷新缓存
         refresh_subscription_cache('config.json', _state_manager)

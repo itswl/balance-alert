@@ -8,7 +8,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
 from core.logger import get_logger
-from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig
+from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
+import json
 from .engine import get_session, ENABLE_DATABASE
 
 logger = get_logger('repository')
@@ -16,6 +17,68 @@ logger = get_logger('repository')
 class ConfigRepository:
     """配置数据访问"""
     
+    @staticmethod
+    def get_all_emails() -> List[Dict[str, Any]]:
+        """获取所有邮箱配置"""
+        if not ENABLE_DATABASE:
+            return []
+            
+        try:
+            session = get_session()
+            if session is None: return []
+            emails = session.query(EmailConfig).all()
+            result = [e.to_dict() for e in emails]
+            session.close()
+            return result
+        except Exception as e:
+            logger.error(f"获取邮箱配置失败: {e}")
+            return []
+
+    @staticmethod
+    def upsert_email(email_data: Dict[str, Any]) -> bool:
+        """添加或更新邮箱"""
+        if not ENABLE_DATABASE:
+            return False
+            
+        try:
+            session = get_session()
+            if session is None: return False
+            
+            email = session.query(EmailConfig).filter_by(name=email_data['name']).first()
+            if email:
+                for k, v in email_data.items():
+                    setattr(email, k, v)
+            else:
+                email = EmailConfig(**email_data)
+                session.add(email)
+                
+            session.commit()
+            session.close()
+            return True
+        except Exception as e:
+            logger.error(f"保存邮箱配置失败: {e}")
+            return False
+            
+    @staticmethod
+    def delete_email(name: str) -> bool:
+        """删除邮箱"""
+        if not ENABLE_DATABASE:
+            return False
+            
+        try:
+            session = get_session()
+            if session is None: return False
+            
+            email = session.query(EmailConfig).filter_by(name=name).first()
+            if email:
+                session.delete(email)
+                session.commit()
+            session.close()
+            return True
+        except Exception as e:
+            logger.error(f"删除邮箱失败: {e}")
+            return False
+            
     @staticmethod
     def get_all_projects() -> List[Dict[str, Any]]:
         """获取所有启用的项目配置"""
@@ -119,6 +182,59 @@ class ConfigRepository:
         except Exception as e:
             logger.error(f"删除订阅失败: {e}")
             return False
+
+class EmailRepository:
+    """邮件历史数据访问"""
+
+    @staticmethod
+    def save_email_alert(
+        mailbox: str,
+        sender: str,
+        subject: str,
+        date: str,
+        service_name: Optional[str] = None,
+        amount: Optional[float] = None,
+        matched_keywords: List[str] = None,
+        alert_sent: bool = False
+    ) -> Optional[int]:
+        """保存邮件告警记录"""
+        if not ENABLE_DATABASE:
+            return None
+
+        try:
+            session = get_session()
+            if session is None:
+                return None
+
+            keywords_json = json.dumps(matched_keywords or [], ensure_ascii=False)
+            
+            record = EmailAlertHistory(
+                mailbox=mailbox,
+                sender=sender,
+                subject=subject,
+                date=date,
+                service_name=service_name,
+                amount=amount,
+                matched_keywords=keywords_json,
+                alert_sent=alert_sent,
+                timestamp=datetime.utcnow()
+            )
+
+            session.add(record)
+            session.commit()
+            record_id = record.id
+            session.close()
+
+            logger.debug(f"保存邮件告警记录: {subject}")
+            return record_id
+
+        except Exception as e:
+            logger.error(f"保存邮件告警记录失败: {e}", exc_info=True)
+            if session:
+                session.rollback()
+                session.close()
+            return None
+
 
 class BalanceRepository:
     """余额历史数据访问"""
