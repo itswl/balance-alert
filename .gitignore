@@ -62,3 +62,10 @@ data/
 # Kubernetes secrets (contains sensitive information)
 k8s/secret.yaml
 k8s/*-secret.yaml
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Data directory for persistent storage
+data/
