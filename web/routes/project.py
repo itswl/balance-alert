@@ -68,12 +68,14 @@ def update_project_threshold():
         # 读取配置文件
         config = load_config_safe()
 
-        # 查找项目并应用动态配置
+        # 查找项目
         project_found = False
+        target_project = None
         for project in config.get('projects', []):
             if project.get('name') == project_name:
                 old_threshold = project.get('threshold', 0)
-                project['threshold'] = new_threshold
+                target_project = project.copy()
+                target_project['threshold'] = new_threshold
                 project_found = True
                 break
 
@@ -84,10 +86,7 @@ def update_project_threshold():
             }), 404
 
         # 保存到数据库
-        success = ConfigRepository.upsert_project({
-            'name': project_name,
-            'threshold': new_threshold
-        })
+        success = ConfigRepository.upsert_project(target_project)
         
         if success:
             clear_config_cache()
