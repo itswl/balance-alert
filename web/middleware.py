@@ -12,10 +12,44 @@ from pydantic import ValidationError
 
 
 # API 认证配置
-API_KEY = os.environ.get('API_KEY', '')
+def _get_api_key() -> str:
+    return os.environ.get('API_KEY') or os.environ.get('WEB_API_KEY') or ''
+
+
+def _get_allow_paths_raw() -> str:
+    return os.environ.get('API_KEY_ALLOW_PATHS', '/health')
+
+
+def _is_allowed_path(path: str) -> bool:
+    if not path:
+        return False
+    raw = (_get_allow_paths_raw() or '').strip()
+    if not raw:
+        return False
+    for item in raw.split(','):
+        rule = (item or '').strip()
+        if not rule:
+            continue
+        if rule.endswith('*'):
+            prefix = rule[:-1]
+            if prefix and path.startswith(prefix):
+                return True
+            continue
+        if path == rule:
+            return True
+    return False
 
 
 def _extract_api_key() -> str:
+    token = (request.headers.get('X-API-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('X-Api-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('Api-Key', '') or '').strip()
+    if token:
+        return token
     auth = (request.headers.get('Authorization', '') or '').strip()
     lower = auth.lower()
     token = ''
@@ -46,10 +80,14 @@ def _unauthorized():
 def validate_api_key_request() -> bool:
     if request.method == 'OPTIONS':
         return True
-    if not API_KEY:
+    path = request.path or ''
+    if _is_allowed_path(path):
+        return True
+    api_key = _get_api_key()
+    if not api_key:
         return True
     token = _extract_api_key()
-    return token == API_KEY
+    return token == api_key
 
 
 def protect_api_endpoints(app) -> None:

@@ -10,7 +10,7 @@ import json
 import time
 import threading
 import requests
-from logger import get_logger
+from core.logger import get_logger
 
 logger = get_logger('provider_base')
 

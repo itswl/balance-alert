@@ -12,7 +12,7 @@ pip install psycopg2-binary
 ./scripts/setup_postgresql.sh
 
 # 3. 启动服务
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ### 方法二：手动配置
@@ -29,7 +29,7 @@ ENABLE_DATABASE=true
 DATABASE_URL=postgresql://username:password@host:port/database
 
 # 3. 启动服务
-python3 web_server_modular.py
+python3 main.py
 ```
 
 ## 📝 常见场景配置

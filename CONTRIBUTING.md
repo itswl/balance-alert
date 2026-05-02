@@ -22,7 +22,7 @@ vim .env
 pytest tests/ -v
 
 # 5. 启动开发服务器
-python web_server.py
+python main.py
 ```
 
 ## 代码规范
@@ -226,7 +226,7 @@ def test_google_provider_success():
 ```bash
 # 启用详细日志
 export LOG_LEVEL=DEBUG
-python web_server.py
+python main.py
 ```
 
 ### Q: 测试时如何避免真实 API 调用？

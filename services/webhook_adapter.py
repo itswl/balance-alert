@@ -11,7 +11,7 @@ import requests.adapters
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from logger import get_logger
+from core.logger import get_logger
 
 # 创建 logger
 logger = get_logger('webhook_adapter')

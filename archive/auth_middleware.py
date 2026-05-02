@@ -23,7 +23,35 @@ JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=int(os.environ.get('JWT_ACCESS_TOKEN_
 ENABLE_JWT = os.environ.get('ENABLE_JWT', 'false').lower() == 'true'
 
 # API Key 认证（向后兼容）
-API_KEY = os.environ.get('API_KEY', '')
+def _get_api_key() -> str:
+    return os.environ.get('API_KEY') or os.environ.get('WEB_API_KEY') or ''
+
+
+def _extract_api_key() -> str:
+    token = (request.headers.get('X-API-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('X-Api-Key', '') or '').strip()
+    if token:
+        return token
+    token = (request.headers.get('Api-Key', '') or '').strip()
+    if token:
+        return token
+    auth = (request.headers.get('Authorization', '') or '').strip()
+    lower = auth.lower()
+    if lower.startswith('bearer '):
+        return auth[7:].strip()
+    if lower.startswith('basic '):
+        import base64
+        b64 = auth[6:].strip()
+        try:
+            raw = base64.b64decode(b64).decode('utf-8', errors='ignore')
+            if ':' in raw:
+                return raw.split(':', 1)[1].strip()
+            return raw.strip()
+        except Exception:
+            return ''
+    return (request.args.get('api_key', '') or '').strip()
 
 # 速率限制配置
 ENABLE_RATE_LIMIT = os.environ.get('ENABLE_RATE_LIMIT', 'true').lower() == 'true'
@@ -90,16 +118,15 @@ def require_api_key(f):
             return f(*args, **kwargs)
         
         # 使用简单 API Key 认证
-        if not API_KEY:
+        api_key = _get_api_key()
+        if not api_key:
             # 未配置 API Key，直接放行
             return f(*args, **kwargs)
         
         # 从 Header 或 Query 参数获取 token
-        token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
-        if not token:
-            token = request.args.get('api_key', '')
+        token = _extract_api_key()
         
-        if token != API_KEY:
+        if token != api_key:
             return jsonify({
                 'status': 'error',
                 'message': '未授权访问'

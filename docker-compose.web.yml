@@ -14,7 +14,7 @@ services:
       - ./logs:/app/logs
     environment:
       - TZ=Asia/Shanghai
-    command: python web_server.py
+    command: python main.py
     networks:
       - monitor-network
 

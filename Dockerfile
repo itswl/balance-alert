@@ -46,10 +46,13 @@ COPY --from=builder /root/.local/bin /usr/local/bin
 
 # 复制项目文件（分层复制，优化缓存）
 COPY *.py ./
+COPY core ./core
+COPY services ./services
 COPY providers ./providers
 COPY models ./models
 COPY database ./database
 COPY web ./web
+COPY scripts ./scripts
 COPY templates ./templates
 COPY static ./static
 COPY alembic ./alembic

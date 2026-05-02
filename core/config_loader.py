@@ -14,8 +14,8 @@ from threading import Lock, Thread
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
-from config_validator import AppConfig
-from logger import get_logger
+from core.config_validator import AppConfig
+from core.logger import get_logger
 
 logger = get_logger('config_loader')
 

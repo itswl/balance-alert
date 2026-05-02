@@ -7,7 +7,7 @@ import hashlib
 import hmac
 from urllib.parse import quote
 import json
-from logger import get_logger
+from core.logger import get_logger
 
 logger = get_logger('volc_provider')
 

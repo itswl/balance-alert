@@ -11,8 +11,9 @@ docker stop ${CONTAINER_NAME} 2>/dev/null || true
 docker rm ${CONTAINER_NAME} 2>/dev/null || true
 
 echo ""
+# docker build --no-cache 
 echo "🔨 重新构建镜像（无缓存）..."
-docker build --no-cache -t ${IMAGE_NAME}:latest . || {
+docker build  -t ${IMAGE_NAME}:latest . || {
     echo "❌ 构建失败"
     exit 1
 }

@@ -7,7 +7,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
-from logger import get_logger
+from core.logger import get_logger
 from .models import BalanceHistory, AlertHistory, SubscriptionHistory
 from .engine import get_session, ENABLE_DATABASE
 

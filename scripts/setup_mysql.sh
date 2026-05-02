@@ -165,7 +165,7 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "📋 下一步："
     echo "  1. 运行 python3 scripts/test_database.py 测试数据库"
-    echo "  2. 运行 python3 web_server_modular.py 启动服务"
+    echo "  2. 运行 python3 main.py 启动服务"
     echo "  3. 系统会自动创建所需的数据库表"
     echo ""
     echo "📖 详细文档: docs/MYSQL_SETUP.md"

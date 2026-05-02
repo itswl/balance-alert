@@ -5,8 +5,8 @@
 import json
 import sys
 from datetime import datetime, timedelta
-from webhook_adapter import WebhookAdapter
-from logger import get_logger
+from services.webhook_adapter import WebhookAdapter
+from core.logger import get_logger
 
 # 创建 logger
 logger = get_logger('subscription_checker')

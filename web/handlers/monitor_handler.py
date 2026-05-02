@@ -5,9 +5,9 @@
 处理余额监控相关的业务逻辑
 """
 from typing import Dict, Any, List
-from monitor import CreditMonitor
-from state_manager import StateManager
-from logger import get_logger
+from services.monitor import CreditMonitor
+from core.state_manager import StateManager
+from core.logger import get_logger
 
 logger = get_logger('web.handlers.monitor')
 

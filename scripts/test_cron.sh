@@ -19,7 +19,7 @@ echo ""
 echo "2. 测试监控脚本"
 echo "---"
 cd /Users/imwl/check_credits
-python3 monitor.py --dry-run | head -20
+python3 -m services.monitor --dry-run | head -20
 
 echo ""
 echo "======================================"
