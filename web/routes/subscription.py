@@ -175,6 +175,15 @@ def add_subscription(validated_data: AddSubscriptionRequest):
         dyn_config = load_dynamic_config()
         if 'subscriptions' not in dyn_config:
             dyn_config['subscriptions'] = []
+            
+        # Check if already exists in dynamic config (to prevent duplicates if someone adds it twice)
+        existing = next((s for s in dyn_config['subscriptions'] if s['name'] == validated_data.name), None)
+        if existing:
+            return jsonify({
+                'status': 'error',
+                'message': f'订阅名称 [{validated_data.name}] 已存在'
+            }), 400
+            
         dyn_config['subscriptions'].append(new_subscription)
         save_dynamic_config(dyn_config)
         audit_log('add_subscription', {

@@ -12,15 +12,23 @@ from core.logger import get_logger
 logger = get_logger('web.handlers.monitor')
 
 
-def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManager) -> None:
+def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManager, is_partial: bool = False) -> None:
     """
     更新余额状态缓存
 
     Args:
         results: 监控结果列表
         state_mgr: 状态管理器实例
+        is_partial: 是否为增量/局部更新
     """
-    state_mgr.update_balance_state(results)
+    if is_partial:
+        current_state = state_mgr.get_balance_state()
+        proj_map = {p['project']: p for p in current_state.get('projects', [])}
+        for r in results:
+            proj_map[r['project']] = r
+        state_mgr.update_balance_state(list(proj_map.values()))
+    else:
+        state_mgr.update_balance_state(results)
 
 
 def refresh_credits(config_path: str, project_name: str = None, dry_run: bool = True) -> Dict[str, Any]:

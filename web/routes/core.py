@@ -189,7 +189,8 @@ def refresh_credits_route():
             }), 500
 
         # 更新缓存
-        update_balance_cache(result['results'], _state_manager)
+        is_partial = project_name is not None
+        update_balance_cache(result['results'], _state_manager, is_partial=is_partial)
 
         execution_time = time.time() - start_time
 
