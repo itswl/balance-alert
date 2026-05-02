@@ -1118,3 +1118,116 @@ body {
 .trend-stat-value.negative {
     color: var(--danger);
 }
+
+/* ==================== 视图切换器 ==================== */
+.view-toggle {
+    display: flex;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+}
+
+.view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.view-btn:hover {
+    color: var(--text-primary);
+}
+
+.view-btn.active {
+    background: var(--bg-primary);
+    color: var(--primary);
+    box-shadow: var(--shadow-sm);
+}
+
+/* ==================== 项目卡片列表模式 ==================== */
+.projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.projects-list .project-card {
+    display: grid;
+    grid-template-columns: 2fr 3fr 3fr 1fr;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1rem 1.5rem;
+}
+
+.projects-list .project-card:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+.projects-list .project-header {
+    margin-bottom: 0;
+    align-items: center;
+}
+
+.projects-list .project-balance {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.projects-list .balance-label {
+    display: none;
+}
+
+.projects-list .balance-value {
+    font-size: 1.25rem;
+    min-width: 80px;
+}
+
+.projects-list .balance-progress {
+    margin-top: 0;
+    flex: 1;
+}
+
+.projects-list .project-details {
+    padding-top: 0;
+    border-top: none;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    align-items: center;
+}
+
+.projects-list .detail-item {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.projects-list .detail-label::after {
+    content: ":";
+}
+
+.projects-list .project-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+    .projects-list .project-card {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .projects-list .project-details {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
