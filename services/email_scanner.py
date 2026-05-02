@@ -461,9 +461,13 @@ class EmailScanner:
                 
         except imaplib.IMAP4.error as e:
             logger.error(f"❌ 邮箱连接错误: {e}")
+            if not dry_run:
+                self._send_error_alert(mailbox_name, str(e))
             return 0, 0
         except Exception as e:
             logger.error(f"❌ 扫描失败: {e}", exc_info=True)
+            if not dry_run:
+                self._send_error_alert(mailbox_name, str(e))
             return 0, 0
     
     def _batch_fetch_emails(self, mail, batch_ids):
@@ -500,6 +504,21 @@ class EmailScanner:
             except Exception as e:
                 logger.warning(f"获取邮件 {email_id} 失败: {e}")
         return messages
+
+    def _send_error_alert(self, mailbox_name, error_msg):
+        """发送邮箱扫描错误告警"""
+        webhook_config = self.config.get('webhook', {})
+        webhook_url = webhook_config.get('url')
+        webhook_type = webhook_config.get('type', 'custom')
+        webhook_source = webhook_config.get('source', 'email-scanner')
+        
+        if not webhook_url:
+            return False
+            
+        adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)
+        title = "❌ 邮箱连接失败告警"
+        content = f"**邮箱**: {mailbox_name}\n**错误信息**: {error_msg}\n**时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        return adapter.send_custom_alert(title, content)
 
     def _send_alert(self, email_info):
         """发送告警通知"""
