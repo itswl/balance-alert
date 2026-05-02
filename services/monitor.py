@@ -199,7 +199,6 @@ class CreditMonitor:
                     provider=provider_name,
                     balance=credits,
                     threshold=threshold,
-                    currency=result.get('currency', 'USD'),
                     balance_type=project_config.get('type', 'credits'),
                     need_alarm=need_alarm
                 )

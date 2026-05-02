@@ -90,7 +90,6 @@ class SubscriptionConfig:
     renewal_day: int
     alert_days_before: int
     amount: float
-    currency: str
     cycle_type: CycleType = CycleType.MONTHLY
     enabled: bool = True
     last_renewed_date: Optional[str] = None
@@ -110,7 +109,6 @@ class SubscriptionConfig:
             renewal_day=_safe_int(data.get('renewal_day', 1), 1),
             alert_days_before=_safe_int(data.get('alert_days_before', 3), 3),
             amount=_safe_float(data.get('amount', 0), 0.0),
-            currency=data.get('currency', 'CNY'),
             cycle_type=cycle_type,
             enabled=data.get('enabled', True),
             last_renewed_date=data.get('last_renewed_date'),

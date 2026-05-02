@@ -21,7 +21,6 @@ class BalanceHistory(Base):
     provider = Column(String(50), nullable=False, index=True, comment='Provider 类型')
     balance = Column(Float, nullable=False, comment='余额数量')
     threshold = Column(Float, comment='告警阈值')
-    currency = Column(String(10), default='USD', comment='货币单位')
     balance_type = Column(String(20), default='credits', comment='类型: balance/credits')
     need_alarm = Column(Boolean, default=False, comment='是否需要告警')
     timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='记录时间')
@@ -41,7 +40,6 @@ class BalanceHistory(Base):
             'provider': self.provider,
             'balance': self.balance,
             'threshold': self.threshold,
-            'currency': self.currency,
             'balance_type': self.balance_type,
             'need_alarm': self.need_alarm,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
@@ -92,7 +90,6 @@ class SubscriptionHistory(Base):
     cycle_type = Column(String(20), nullable=False, comment='周期类型')
     days_until_renewal = Column(Integer, comment='距离续费天数')
     amount = Column(Float, default=0, comment='订阅金额')
-    currency = Column(String(10), default='CNY', comment='货币')
     need_renewal = Column(Boolean, default=False, comment='是否需要续费')
     timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='记录时间')
     
@@ -110,7 +107,6 @@ class SubscriptionHistory(Base):
             'cycle_type': self.cycle_type,
             'days_until_renewal': self.days_until_renewal,
             'amount': self.amount,
-            'currency': self.currency,
             'need_renewal': self.need_renewal,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }

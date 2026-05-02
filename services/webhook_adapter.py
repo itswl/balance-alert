@@ -88,14 +88,14 @@ class WebhookAdapter:
         )
 
     def _build_subscription_text(self, subscription_name: str, renewal_day: int,
-                                 days_until_renewal: int, amount: float, currency: str) -> str:
+                                 days_until_renewal: int, amount: float) -> str:
         """生成订阅提醒通用文本"""
         days_text = self._format_days_text(days_until_renewal)
         return (
             f"订阅: {subscription_name}\n"
             f"续费日期: 每月 {renewal_day} 号\n"
             f"距离续费: {days_text}\n"
-            f"续费金额: {currency} {amount}"
+            f"续费金额: {amount}"
         )
 
     def _wrap_payload(self, title: str, text: str) -> Dict[str, Any]:
@@ -144,7 +144,7 @@ class WebhookAdapter:
         return self._send_request(payload)
     
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
-                               amount: float, currency: str) -> bool:
+                               amount: float) -> bool:
         """
         发送订阅续费提醒
 
@@ -152,17 +152,18 @@ class WebhookAdapter:
             subscription_name: 订阅名称
             renewal_day: 续费日期
             days_until_renewal: 距离续费天数
-            amount: 金额
-            currency: 货币
+            amount: 续费金额
 
         Returns:
             bool: 是否发送成功
         """
         if self.webhook_type == 'custom':
             return self._send_custom_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount, currency
+                subscription_name, renewal_day, days_until_renewal, amount
             )
-        text = self._build_subscription_text(subscription_name, renewal_day, days_until_renewal, amount, currency)
+        text = self._build_subscription_text(
+                subscription_name, renewal_day, days_until_renewal, amount
+            )
         payload = self._wrap_payload("订阅续费提醒", text)
         return self._send_request(payload)
     
@@ -189,7 +190,7 @@ class WebhookAdapter:
         return self._send_request(payload)
     
     def _send_custom_subscription_alert(self, subscription_name, renewal_day,
-                                       days_until_renewal, amount, currency):
+                                       days_until_renewal, amount):
         """发送自定义格式订阅提醒"""
         payload = {
             "Type": "SubscriptionReminder",
@@ -200,8 +201,7 @@ class WebhookAdapter:
                 "RenewalDay": renewal_day,
                 "DaysUntilRenewal": days_until_renewal,
                 "Amount": amount,
-                "Currency": currency,
-                "Message": f"订阅 [{subscription_name}] 将在 {days_until_renewal} 天后（每月{renewal_day}号）续费，金额: {currency} {amount}"
+                "Message": f"订阅 [{subscription_name}] 将在 {days_until_renewal} 天后（每月{renewal_day}号）续费，金额: {amount}"
             }]
         }
         

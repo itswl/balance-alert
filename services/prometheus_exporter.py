@@ -52,7 +52,7 @@ class MetricsCollector:
         self.subscription_amount_gauge = Gauge(
             'balance_alert_subscription_amount',
             'Subscription renewal amount',
-            ['name', 'cycle_type', 'currency']
+            ['name', 'cycle_type']
         )
         
         self.subscription_status_gauge = Gauge(
@@ -246,7 +246,6 @@ class MetricsCollector:
             cycle_type = result.get('cycle_type', 'monthly')
             days_until = result.get('days_until_renewal', 0)
             amount = result.get('amount', 0)
-            currency = result.get('currency', 'CNY')
             need_alert = result.get('need_alert', False)
             already_renewed = result.get('already_renewed_in_cycle', False)
             
@@ -259,8 +258,7 @@ class MetricsCollector:
             # 更新金额
             self.subscription_amount_gauge.labels(
                 name=name,
-                cycle_type=cycle_type,
-                currency=currency
+                cycle_type=cycle_type
             ).set(amount)
             
             # 状态：1=正常，0=需要续费，-1=本周期已续费

@@ -15,8 +15,7 @@ function openSubscriptionModal(subscription = null) {
         document.getElementById('edit-mode').value = 'true';
         document.getElementById('original-name').value = subscription.name;
         document.getElementById('sub-name').value = subscription.name;
-        document.getElementById('sub-amount').value = subscription.amount || 0;
-        document.getElementById('sub-currency').value = subscription.currency || 'CNY';
+        document.getElementById('sub-amount').value = subscription.amount || '';
         document.getElementById('sub-cycle').value = subscription.cycle_type || 'monthly';
         document.getElementById('sub-renewal-day').value = subscription.renewal_day || 1;
         document.getElementById('sub-alert-days').value = subscription.alert_days_before || 7;
@@ -49,8 +48,7 @@ async function saveSubscription(event) {
 
     const data = {
         name: document.getElementById('sub-name').value.trim(),
-        amount: parseFloat(document.getElementById('sub-amount').value),
-        currency: document.getElementById('sub-currency').value,
+        amount: parseFloat(document.getElementById('sub-amount').value) || 0,
         cycle_type: document.getElementById('sub-cycle').value,
         renewal_day: parseInt(document.getElementById('sub-renewal-day').value),
         alert_days_before: parseInt(document.getElementById('sub-alert-days').value),

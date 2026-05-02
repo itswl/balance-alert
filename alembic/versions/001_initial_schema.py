@@ -27,7 +27,6 @@ def upgrade() -> None:
         sa.Column('provider', sa.String(50), nullable=False, index=True, comment='Provider 类型'),
         sa.Column('balance', sa.Float(), nullable=False, comment='余额数量'),
         sa.Column('threshold', sa.Float(), comment='告警阈值'),
-        sa.Column('currency', sa.String(10), default='USD', comment='货币单位'),
         sa.Column('balance_type', sa.String(20), default='credits', comment='类型: balance/credits'),
         sa.Column('need_alarm', sa.Boolean(), default=False, comment='是否需要告警'),
         sa.Column('timestamp', sa.DateTime(), default=sa.func.now(), index=True, comment='记录时间'),
@@ -65,7 +64,6 @@ def upgrade() -> None:
         sa.Column('cycle_type', sa.String(20), nullable=False, comment='周期类型'),
         sa.Column('days_until_renewal', sa.Integer(), comment='距离续费天数'),
         sa.Column('amount', sa.Float(), default=0, comment='订阅金额'),
-        sa.Column('currency', sa.String(10), default='CNY', comment='货币'),
         sa.Column('need_renewal', sa.Boolean(), default=False, comment='是否需要续费'),
         sa.Column('timestamp', sa.DateTime(), default=sa.func.now(), index=True, comment='记录时间'),
         comment='订阅历史记录表'

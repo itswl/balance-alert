@@ -146,7 +146,6 @@ def load_subscriptions_from_env() -> List[Dict[str, Any]]:
             'renewal_day': int(get_env(f'{prefix}RENEWAL_DAY', '1')),
             'alert_days_before': int(get_env(f'{prefix}ALERT_DAYS_BEFORE', '3')),
             'amount': float(get_env(f'{prefix}AMOUNT', '0')),
-            'currency': get_env(f'{prefix}CURRENCY', 'CNY'),
             'enabled': get_env(f'{prefix}ENABLED', 'true').lower() == 'true',
         }
 

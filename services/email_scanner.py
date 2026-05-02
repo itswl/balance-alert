@@ -109,7 +109,7 @@ class EmailScanner:
     
     def _load_config(self):
         """加载配置文件"""
-        from config_loader import load_config_with_env_vars
+        from core.config_loader import load_config_with_env_vars
         return load_config_with_env_vars(self.config_path)
     
     def _parse_email_configs(self):

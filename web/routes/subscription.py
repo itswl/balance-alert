@@ -90,10 +90,6 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
                     sub['amount'] = validated_data.amount
                     updated_fields.append('amount')
 
-                if validated_data.currency is not None:
-                    sub['currency'] = validated_data.currency
-                    updated_fields.append('currency')
-
                 if validated_data.enabled is not None:
                     sub['enabled'] = validated_data.enabled
                     updated_fields.append('enabled')
@@ -156,8 +152,7 @@ def add_subscription(validated_data: AddSubscriptionRequest):
             'renewal_day': validated_data.renewal_day,
             'alert_days_before': validated_data.alert_days_before,
             'amount': validated_data.amount,
-            'currency': validated_data.currency,
-            'enabled': validated_data.enabled
+            'enabled': validated_data.enabled,
         }
 
         # 可选字段

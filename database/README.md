@@ -54,7 +54,6 @@ BalanceRepository.save_balance_record(
     provider="openrouter",
     balance=150.5,
     threshold=100.0,
-    currency="USD",
     balance_type="credits",
     need_alarm=False
 )
@@ -71,7 +70,7 @@ history = BalanceRepository.get_balance_history(
 )
 
 for record in history:
-    print(f"{record['timestamp']}: {record['balance']} {record['currency']}")
+    print(f"{record['timestamp']}: {record['balance']}")
 ```
 
 #### 获取趋势分析
@@ -204,7 +203,6 @@ GET /api/history/projects
 | provider | String(50) | Provider类型 |
 | balance | Float | 余额数量 |
 | threshold | Float | 告警阈值 |
-| currency | String(10) | 货币单位 |
 | balance_type | String(20) | 类型：balance/credits |
 | need_alarm | Boolean | 是否需要告警 |
 | timestamp | DateTime | 记录时间 |
@@ -240,7 +238,6 @@ GET /api/history/projects
 | cycle_type | String(20) | 周期类型 |
 | days_until_renewal | Integer | 距离续费天数 |
 | amount | Float | 订阅金额 |
-| currency | String(10) | 货币 |
 | need_renewal | Boolean | 是否需要续费 |
 | timestamp | DateTime | 记录时间 |
 
