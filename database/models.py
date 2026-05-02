@@ -141,6 +141,72 @@ class SubscriptionConfig(Base):
             'last_renewed_date': self.last_renewed_date
         }
 
+class EmailConfig(Base):
+    """邮箱配置表"""
+    __tablename__ = 'email_config'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True, comment='邮箱显示名称/别名')
+    host = Column(String(200), nullable=False, comment='IMAP 服务器地址')
+    port = Column(Integer, default=993, comment='IMAP 端口')
+    username = Column(String(200), nullable=False, comment='邮箱账号')
+    password = Column(String(500), nullable=False, comment='邮箱授权码/密码')
+    use_ssl = Column(Boolean, default=True, comment='是否使用 SSL')
+    enabled = Column(Boolean, default=True, comment='是否启用')
+    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+
+    __table_args__ = (
+        {'comment': '邮箱监听配置表'}
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'host': self.host,
+            'port': self.port,
+            'username': self.username,
+            'password': self.password,
+            'use_ssl': self.use_ssl,
+            'enabled': self.enabled
+        }
+
+
+class EmailAlertHistory(Base):
+    """邮件告警历史记录"""
+    __tablename__ = 'email_alert_history'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    mailbox = Column(String(200), nullable=False, index=True, comment='被扫描的邮箱账号')
+    sender = Column(String(200), nullable=False, comment='发件人')
+    subject = Column(String(500), nullable=False, comment='邮件主题')
+    date = Column(String(100), nullable=False, comment='邮件发送日期')
+    service_name = Column(String(200), comment='提取到的服务名称')
+    amount = Column(Float, comment='提取到的账单金额')
+    matched_keywords = Column(Text, comment='匹配到的告警关键词 (JSON 格式)')
+    alert_sent = Column(Boolean, default=False, comment='是否成功发送 Webhook 告警')
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='扫描入库时间')
+
+    __table_args__ = (
+        Index('idx_email_mailbox_time', 'mailbox', 'timestamp'),
+        {'comment': '扫描到的告警邮件历史记录'}
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'mailbox': self.mailbox,
+            'sender': self.sender,
+            'subject': self.subject,
+            'date': self.date,
+            'service_name': self.service_name,
+            'amount': self.amount,
+            'matched_keywords': self.matched_keywords,
+            'alert_sent': self.alert_sent,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+        }
+
 class SubscriptionHistory(Base):
     """订阅历史记录"""
     __tablename__ = 'subscription_history'

@@ -73,7 +73,7 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    from .routes import core_bp, subscription_bp, init_core_routes, init_subscription_routes
+    from .routes import core_bp, subscription_bp, project_bp, email_bp, init_core_routes, init_subscription_routes
 
     # 初始化路由（注入依赖）
     init_core_routes(state_manager)
@@ -82,6 +82,8 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
     # 注册蓝图
     app.register_blueprint(core_bp)
     app.register_blueprint(subscription_bp)
+    app.register_blueprint(project_bp)
+    app.register_blueprint(email_bp)
 
     logger.info("蓝图注册完成")
 
@@ -249,97 +251,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
 
     # ========== 配置 API ==========
 
-    @app.route('/api/config/projects', methods=['GET'])
-    def get_projects_config():
-        """获取所有项目配置（不含API Key）"""
-        try:
-            config = load_config_safe()
-            projects = []
 
-            for proj in config.get('projects', []):
-                # 移除敏感信息
-                safe_proj = {
-                    'name': proj.get('name'),
-                    'provider': proj.get('provider'),
-                    'threshold': proj.get('threshold'),
-                    'type': proj.get('type', 'credits'),
-                    'enabled': proj.get('enabled', True)
-                }
-                projects.append(safe_proj)
-
-            return jsonify({'status': 'success', 'projects': projects})
-
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    @app.route('/api/config/threshold', methods=['POST'])
-    @require_api_key
-    def update_threshold():
-        """更新项目告警阈值"""
-        try:
-            data = request.get_json()
-            if not data or 'project_name' not in data or 'new_threshold' not in data:
-                return jsonify({
-                    'status': 'error',
-                    'message': '缺少必要参数: project_name, new_threshold'
-                }), 400
-
-            project_name = data['project_name']
-            new_threshold = float(data['new_threshold'])
-
-            if new_threshold < 0:
-                return jsonify({'status': 'error', 'message': '阈值必须大于等于 0'}), 400
-
-            # 读取配置
-            config = load_config_safe()
-            project_found = False
-            old_threshold = None
-
-            for proj in config.get('projects', []):
-                if proj.get('name') == project_name:
-                    old_threshold = proj.get('threshold')
-                    proj['threshold'] = new_threshold
-                    project_found = True
-                    break
-
-            if not project_found:
-                return jsonify({'status': 'error', 'message': f'未找到项目: {project_name}'}), 404
-
-            # 保存配置 (写入数据库)
-            from database.repository import ConfigRepository
-            from core.config_loader import clear_config_cache
-            
-            success = ConfigRepository.upsert_project({
-                'name': project_name,
-                'threshold': new_threshold
-            })
-            
-            if success:
-                clear_config_cache()
-            
-            audit_log('update_threshold', {
-                'project': project_name,
-                'old': old_threshold,
-                'new': new_threshold
-            })
-
-            # 刷新缓存 (局部更新，合并结果)
-            result = refresh_credits('config.json', project_name, dry_run=True)
-            if result['success']:
-                update_balance_cache(result['results'], state_manager, is_partial=True)
-
-            return jsonify({
-                'status': 'success',
-                'message': f'项目 [{project_name}] 阈值已更新: {old_threshold} -> {new_threshold}',
-                'data': {
-                    'project_name': project_name,
-                    'old_threshold': old_threshold,
-                    'new_threshold': new_threshold
-                }
-            })
-
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
 
     logger.info("额外路由注册完成")
 

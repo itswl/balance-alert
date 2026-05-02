@@ -550,6 +550,22 @@ class EmailScanner:
         
         content = '\n'.join(content_parts)
         
+        # 保存到数据库
+        try:
+            from database.repository import EmailRepository
+            EmailRepository.save_email_alert(
+                mailbox=email_info.get('mailbox', '未知'),
+                sender=email_info['sender'],
+                subject=email_info['subject'],
+                date=email_info['date'],
+                service_name=email_info['service_name'],
+                amount=email_info['amount'],
+                matched_keywords=email_info['keywords'],
+                alert_sent=True
+            )
+        except Exception as e:
+            logger.error(f"保存邮件告警记录失败: {e}")
+
         return adapter.send_custom_alert(title, content)
     
     def _print_mailbox_summary(self, mailbox_name, total_emails, alert_count):

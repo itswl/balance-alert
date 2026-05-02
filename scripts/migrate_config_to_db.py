@@ -31,6 +31,18 @@ def main():
             'last_renewed_date': s.get('last_renewed_date')
         })
         print(f"Migrated subscription: {s['name']}")
+        
+    for e in config.get('email', []):
+        ConfigRepository.upsert_email({
+            'name': e.get('name', e.get('username', 'email')),
+            'host': e.get('host', ''),
+            'port': e.get('port', 993),
+            'username': e.get('username', ''),
+            'password': e.get('password', ''),
+            'use_ssl': e.get('use_ssl', True),
+            'enabled': e.get('enabled', True)
+        })
+        print(f"Migrated email: {e.get('name', e.get('username'))}")
     
     print("迁移完成！")
 
