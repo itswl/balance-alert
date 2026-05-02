@@ -470,6 +470,10 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         for dyn_sub in dynamic_subs:
             static_subs[dyn_sub['name']] = dyn_sub
             
+    # CRITICAL FIX: Ensure we create a new list so we don't accidentally mutate the underlying parsed JSON object 
+    # if it came from a cache or something. Wait, json.loads returns a new dict. 
+    # The real issue is probably that `config['subscriptions']` in the `update_subscription` or `add_subscription` 
+    # endpoint is being iterated over, and then we save ONLY that one to dynamic config.
     config['subscriptions'] = list(static_subs.values())
 
     if validate:

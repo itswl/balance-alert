@@ -305,18 +305,26 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             if not project_found:
                 return jsonify({'status': 'error', 'message': f'未找到项目: {project_name}'}), 404
 
-            # 保存配置
-            write_config(config)
+            # 保存配置 (使用动态配置)
+            from core.config_loader import load_dynamic_config, save_dynamic_config
+            dyn_config = load_dynamic_config()
+            if 'projects' not in dyn_config:
+                dyn_config['projects'] = {}
+            if project_name not in dyn_config['projects']:
+                dyn_config['projects'][project_name] = {}
+            dyn_config['projects'][project_name]['threshold'] = new_threshold
+            save_dynamic_config(dyn_config)
+            
             audit_log('update_threshold', {
                 'project': project_name,
                 'old': old_threshold,
                 'new': new_threshold
             })
 
-            # 刷新缓存
+            # 刷新缓存 (局部更新，合并结果)
             result = refresh_credits('config.json', project_name, dry_run=True)
             if result['success']:
-                update_balance_cache(result['results'], state_manager)
+                update_balance_cache(result['results'], state_manager, is_partial=True)
 
             return jsonify({
                 'status': 'success',
