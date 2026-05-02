@@ -34,19 +34,13 @@ async function saveThreshold(event) {
     try {
         UI.setLoading(true);
 
-        const response = await fetch('/api/config/threshold', {
+        const { response, data: result } = await API.fetchJson('/api/config/threshold', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...API.getAuthHeaders(),
-            },
             body: JSON.stringify({
                 project_name: projectName,
                 new_threshold: newThreshold
             })
         });
-
-        const result = await response.json();
 
         if (response.ok && result.status === 'success') {
             UI.showToast('✅ 阈值已更新', 'success');

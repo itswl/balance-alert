@@ -28,8 +28,10 @@ def _unauthorized():
 def validate_api_key_request() -> bool:
     if request.method == 'OPTIONS':
         return True
+    if not API_KEY:
+        return True
     token = _extract_api_key()
-    return bool(API_KEY) and token == API_KEY
+    return token == API_KEY
 
 
 def protect_api_endpoints(app) -> None:
