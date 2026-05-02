@@ -114,7 +114,7 @@ class EmailScanner:
     
     def _parse_email_configs(self):
         """解析邮箱配置，支持单个或多个邮箱"""
-        email_config = self.config.get('email', {})
+        email_config = self.config.get('email', [])
         
         # 如果是列表，直接返回
         if isinstance(email_config, list):
