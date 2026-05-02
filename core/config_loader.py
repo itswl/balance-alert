@@ -19,30 +19,6 @@ from core.logger import get_logger
 
 logger = get_logger('config_loader')
 
-DYNAMIC_CONFIG_FILE = os.path.join(os.environ.get('DATA_DIR', 'data'), 'dynamic_config.json')
-
-def load_dynamic_config() -> Dict[str, Any]:
-    """加载动态配置 (Web UI 修改的订阅和阈值)"""
-    try:
-        if os.path.exists(DYNAMIC_CONFIG_FILE):
-            with open(DYNAMIC_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except Exception as e:
-        logger.error(f"加载动态配置失败: {e}")
-    return {'projects': {}, 'subscriptions': []}
-
-def save_dynamic_config(config: Dict[str, Any]) -> None:
-    """保存动态配置"""
-    try:
-        os.makedirs(os.path.dirname(DYNAMIC_CONFIG_FILE), exist_ok=True)
-        with open(DYNAMIC_CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-        clear_config_cache()
-    except Exception as e:
-        logger.error(f"保存动态配置失败: {e}")
-        raise e
-
-
 def load_env_file(env_file: str = '.env') -> None:
     """加载 .env 文件"""
     if os.path.exists(env_file):
@@ -449,32 +425,35 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
     if config_version:
         logger.info(f"[Config] 配置版本: {config_version}")
 
-    # 验证配置
-    # 合并动态配置 (dynamic_config.json)
-    dynamic_config = load_dynamic_config()
-    
-    # 覆盖 project 阈值和 enabled 状态
-    dynamic_projects = dynamic_config.get('projects', {})
-    for project in config.get('projects', []):
-        p_name = project['name']
-        if p_name in dynamic_projects:
-            project.update(dynamic_projects[p_name])
+    # =============== 数据源集成 (优先从数据库加载) ===============
+    try:
+        from database.repository import ConfigRepository
+        db_projects = ConfigRepository.get_all_projects()
+        db_subscriptions = ConfigRepository.get_all_subscriptions()
+
+        # 数据库的配置优先级最高，与文件配置进行合并 (同名覆盖，新增追加)
+        if db_projects:
+            static_projs = {p['name']: p for p in config.get('projects', [])}
+            for dp in db_projects:
+                # 排除 DB 里的 id 等多余字段影响核心逻辑，仅保留关键配置
+                clean_dp = {k: v for k, v in dp.items() if k not in ['id', 'created_at', 'updated_at']}
+                if clean_dp['name'] in static_projs:
+                    static_projs[clean_dp['name']].update(clean_dp)
+                else:
+                    static_projs[clean_dp['name']] = clean_dp
+            config['projects'] = list(static_projs.values())
             
-    # 追加或覆盖 subscriptions
-    dynamic_subs = dynamic_config.get('subscriptions', [])
-    deleted_subs = dynamic_config.get('_deleted_subscriptions', [])
-    
-    static_subs = {s['name']: s for s in config.get('subscriptions', []) if s['name'] not in deleted_subs}
-    
-    if dynamic_subs:
-        for dyn_sub in dynamic_subs:
-            static_subs[dyn_sub['name']] = dyn_sub
-            
-    # CRITICAL FIX: Ensure we create a new list so we don't accidentally mutate the underlying parsed JSON object 
-    # if it came from a cache or something. Wait, json.loads returns a new dict. 
-    # The real issue is probably that `config['subscriptions']` in the `update_subscription` or `add_subscription` 
-    # endpoint is being iterated over, and then we save ONLY that one to dynamic config.
-    config['subscriptions'] = list(static_subs.values())
+        if db_subscriptions:
+            static_subs = {s['name']: s for s in config.get('subscriptions', [])}
+            for ds in db_subscriptions:
+                clean_ds = {k: v for k, v in ds.items() if k not in ['id', 'created_at', 'updated_at']}
+                if clean_ds['name'] in static_subs:
+                    static_subs[clean_ds['name']].update(clean_ds)
+                else:
+                    static_subs[clean_ds['name']] = clean_ds
+            config['subscriptions'] = list(static_subs.values())
+    except Exception as e:
+        logger.warning(f"从数据库合并配置失败: {e}")
 
     if validate:
         app_config = AppConfig.from_dict(config)

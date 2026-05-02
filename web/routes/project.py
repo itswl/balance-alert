@@ -7,7 +7,8 @@
 from flask import Blueprint, jsonify, request
 from ..middleware import require_api_key
 from ..utils import load_config_safe, audit_log
-from core.config_loader import load_dynamic_config, save_dynamic_config
+from core.config_loader import clear_config_cache
+from database.repository import ConfigRepository
 from ..handlers import refresh_subscription_cache
 from core.state_manager import StateManager
 from core.logger import get_logger
@@ -82,14 +83,15 @@ def update_project_threshold():
                 'message': f'未找到项目: {project_name}'
             }), 404
 
-        # 保存到动态配置
-        dyn_config = load_dynamic_config()
-        if 'projects' not in dyn_config:
-            dyn_config['projects'] = {}
-        if project_name not in dyn_config['projects']:
-            dyn_config['projects'][project_name] = {}
-        dyn_config['projects'][project_name]['threshold'] = new_threshold
-        save_dynamic_config(dyn_config)
+        # 保存到数据库
+        success = ConfigRepository.upsert_project({
+            'name': project_name,
+            'threshold': new_threshold
+        })
+        
+        if success:
+            clear_config_cache()
+            
         audit_log('update_project_threshold', {
             'project': project_name,
             'old_threshold': old_threshold,

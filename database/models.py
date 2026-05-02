@@ -80,6 +80,67 @@ class AlertHistory(Base):
         }
 
 
+class ProjectConfig(Base):
+    """项目配置表"""
+    __tablename__ = 'project_config'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True, comment='项目名称')
+    provider = Column(String(50), nullable=False, comment='Provider 类型')
+    api_key = Column(String(500), nullable=False, comment='API Key')
+    threshold = Column(Float, default=100.0, comment='告警阈值')
+    type = Column(String(20), default='credits', comment='类型: balance/credits')
+    enabled = Column(Boolean, default=True, comment='是否启用')
+    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+
+    __table_args__ = (
+        {'comment': '项目配置表'}
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'provider': self.provider,
+            'api_key': self.api_key,
+            'threshold': self.threshold,
+            'type': self.type,
+            'enabled': self.enabled
+        }
+
+
+class SubscriptionConfig(Base):
+    """订阅配置表"""
+    __tablename__ = 'subscription_config'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True, comment='订阅名称')
+    cycle_type = Column(String(20), default='monthly', comment='周期类型')
+    renewal_day = Column(Integer, default=1, comment='续费日')
+    alert_days_before = Column(Integer, default=3, comment='提前告警天数')
+    amount = Column(Float, default=0.0, comment='订阅金额')
+    enabled = Column(Boolean, default=True, comment='是否启用')
+    last_renewed_date = Column(String(20), nullable=True, comment='上次续费日期 (YYYY-MM-DD)')
+    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+
+    __table_args__ = (
+        {'comment': '订阅配置表'}
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'cycle_type': self.cycle_type,
+            'renewal_day': self.renewal_day,
+            'alert_days_before': self.alert_days_before,
+            'amount': self.amount,
+            'enabled': self.enabled,
+            'last_renewed_date': self.last_renewed_date
+        }
+
 class SubscriptionHistory(Base):
     """订阅历史记录"""
     __tablename__ = 'subscription_history'

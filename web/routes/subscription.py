@@ -7,7 +7,8 @@
 from flask import Blueprint, jsonify, request
 from ..middleware import require_api_key, validate_request
 from ..utils import load_config_safe, audit_log
-from core.config_loader import load_dynamic_config, save_dynamic_config
+from core.config_loader import clear_config_cache
+from database.repository import ConfigRepository
 from ..handlers import update_subscription_cache, refresh_subscription_cache
 from core.state_manager import StateManager
 from models.api_models import (
@@ -71,23 +72,13 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
         for sub in config.get('subscriptions', []):
             if sub.get('name') == validated_data.name:
                 subscription_found = True
-                dyn_config = load_dynamic_config()
-                if 'subscriptions' not in dyn_config:
-                    dyn_config['subscriptions'] = []
-                    
-                dyn_sub = next((s for s in dyn_config['subscriptions'] if s['name'] == validated_data.name), None)
-                if not dyn_sub:
-                    dyn_sub = sub.copy()
-                    dyn_config['subscriptions'].append(dyn_sub)
+                dyn_sub = sub.copy()
                 
                 if validated_data.new_name:
                     dyn_sub['name'] = validated_data.new_name
                     updated_fields.append('name')
-                    # 如果改名了，需要在动态配置中删除旧的（防止原本是静态的复活）
-                    if '_deleted_subscriptions' not in dyn_config:
-                        dyn_config['_deleted_subscriptions'] = []
-                    if validated_data.name not in dyn_config['_deleted_subscriptions']:
-                        dyn_config['_deleted_subscriptions'].append(validated_data.name)
+                    # 如果改名了，需要删除旧的
+                    ConfigRepository.delete_subscription(validated_data.name)
 
                 if validated_data.cycle_type is not None:
                     dyn_sub['cycle_type'] = validated_data.cycle_type
@@ -113,7 +104,9 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
                     dyn_sub['last_renewed_date'] = validated_data.last_renewed_date
                     updated_fields.append('last_renewed_date')
 
-                save_dynamic_config(dyn_config)
+                success = ConfigRepository.upsert_subscription(dyn_sub)
+                if success:
+                    clear_config_cache()
                 break
 
         if not subscription_found:
@@ -171,21 +164,11 @@ def add_subscription(validated_data: AddSubscriptionRequest):
         if validated_data.last_renewed_date:
             new_subscription['last_renewed_date'] = validated_data.last_renewed_date
 
-        # 保存到动态配置
-        dyn_config = load_dynamic_config()
-        if 'subscriptions' not in dyn_config:
-            dyn_config['subscriptions'] = []
+        # 保存到数据库
+        success = ConfigRepository.upsert_subscription(new_subscription)
+        if success:
+            clear_config_cache()
             
-        # Check if already exists in dynamic config (to prevent duplicates if someone adds it twice)
-        existing = next((s for s in dyn_config['subscriptions'] if s['name'] == validated_data.name), None)
-        if existing:
-            return jsonify({
-                'status': 'error',
-                'message': f'订阅名称 [{validated_data.name}] 已存在'
-            }), 400
-            
-        dyn_config['subscriptions'].append(new_subscription)
-        save_dynamic_config(dyn_config)
         audit_log('add_subscription', {
             'subscription': validated_data.name,
             'cycle_type': validated_data.cycle_type,
@@ -228,28 +211,11 @@ def delete_subscription(validated_data: DeleteSubscriptionRequest):
                 'message': f'未找到订阅: {validated_data.name}'
             }), 404
 
-        # 保存到动态配置 (覆盖式删除)
-        # 我们不能只从 dynamic_config 删除，否则静态配置的还会出现。
-        # 最简单的方法是在动态配置中将其置为一个特殊的删除标记，或者在动态配置里将其 enabled 置为 False 且 amount 为负数？
-        # 更干净的做法：如果静态配置中有它，我们将其放入一个 "deleted_subscriptions" 列表；如果是动态添加的，直接移除。
-        # 为了保持简单且由于合并逻辑，我们这里在动态配置里维护一份完整的覆盖列表，将它排除。
-        
-        dyn_config = load_dynamic_config()
-        if 'subscriptions' not in dyn_config:
-            dyn_config['subscriptions'] = []
+        # 删除
+        success = ConfigRepository.delete_subscription(validated_data.name)
+        if success:
+            clear_config_cache()
             
-        # 如果动态配置里有，移除它
-        dyn_config['subscriptions'] = [s for s in dyn_config['subscriptions'] if s['name'] != validated_data.name]
-        
-        # 如果静态配置里有，我们在动态配置中添加一条 deleted 标记。但考虑到我们的合并逻辑，最简单的办法是在合并逻辑中忽略被标记的。
-        # 为了不改动过多加载逻辑，我们在动态配置里把它设为 enabled: False, 并打上特殊标记？
-        # 不，修改 load_config_with_env_vars 更合理。我们将其从动态配置中移除，并将被删静态订阅名存入 dynamic_config['_deleted_subscriptions'] 即可。
-        if '_deleted_subscriptions' not in dyn_config:
-            dyn_config['_deleted_subscriptions'] = []
-        if validated_data.name not in dyn_config['_deleted_subscriptions']:
-            dyn_config['_deleted_subscriptions'].append(validated_data.name)
-            
-        save_dynamic_config(dyn_config)
         audit_log('delete_subscription', {'subscription': validated_data.name})
 
         # 立即刷新缓存

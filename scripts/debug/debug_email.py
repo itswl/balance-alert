@@ -24,6 +24,7 @@ for email_config in emails:
     username = email_config.get('username')
     password = email_config.get('password')
     name = email_config.get('name', username)
+    print(email_config)
 
     print(f"\n--- 测试邮箱: {name} ---")
     print(f"连接到: {host}:{port}")

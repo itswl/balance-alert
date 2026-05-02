@@ -8,11 +8,117 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
 from core.logger import get_logger
-from .models import BalanceHistory, AlertHistory, SubscriptionHistory
+from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig
 from .engine import get_session, ENABLE_DATABASE
 
 logger = get_logger('repository')
 
+class ConfigRepository:
+    """配置数据访问"""
+    
+    @staticmethod
+    def get_all_projects() -> List[Dict[str, Any]]:
+        """获取所有启用的项目配置"""
+        if not ENABLE_DATABASE:
+            return []
+        
+        try:
+            session = get_session()
+            if session is None: return []
+            projects = session.query(ProjectConfig).all()
+            result = [p.to_dict() for p in projects]
+            session.close()
+            return result
+        except Exception as e:
+            logger.error(f"获取项目配置失败: {e}")
+            return []
+
+    @staticmethod
+    def get_all_subscriptions() -> List[Dict[str, Any]]:
+        """获取所有启用的订阅配置"""
+        if not ENABLE_DATABASE:
+            return []
+            
+        try:
+            session = get_session()
+            if session is None: return []
+            subs = session.query(SubscriptionConfig).all()
+            result = [s.to_dict() for s in subs]
+            session.close()
+            return result
+        except Exception as e:
+            logger.error(f"获取订阅配置失败: {e}")
+            return []
+
+    @staticmethod
+    def upsert_project(project_data: Dict[str, Any]) -> bool:
+        """添加或更新项目"""
+        if not ENABLE_DATABASE:
+            return False
+            
+        try:
+            session = get_session()
+            if session is None: return False
+            
+            project = session.query(ProjectConfig).filter_by(name=project_data['name']).first()
+            if project:
+                for k, v in project_data.items():
+                    setattr(project, k, v)
+            else:
+                project = ProjectConfig(**project_data)
+                session.add(project)
+                
+            session.commit()
+            session.close()
+            return True
+        except Exception as e:
+            logger.error(f"保存项目配置失败: {e}")
+            return False
+
+    @staticmethod
+    def upsert_subscription(sub_data: Dict[str, Any]) -> bool:
+        """添加或更新订阅"""
+        if not ENABLE_DATABASE:
+            return False
+            
+        try:
+            session = get_session()
+            if session is None: return False
+            
+            sub = session.query(SubscriptionConfig).filter_by(name=sub_data['name']).first()
+            if sub:
+                for k, v in sub_data.items():
+                    setattr(sub, k, v)
+            else:
+                sub = SubscriptionConfig(**sub_data)
+                session.add(sub)
+                
+            session.commit()
+            session.close()
+            return True
+        except Exception as e:
+            logger.error(f"保存订阅配置失败: {e}")
+            return False
+            
+    @staticmethod
+    def delete_subscription(name: str) -> bool:
+        """删除订阅"""
+        if not ENABLE_DATABASE:
+            return False
+            
+        try:
+            session = get_session()
+            if session is None: return False
+            
+            sub = session.query(SubscriptionConfig).filter_by(name=name).first()
+            if sub:
+                session.delete(sub)
+                session.commit()
+            session.close()
+            return True
+        except Exception as e:
+            logger.error(f"删除订阅失败: {e}")
+            return False
 
 class BalanceRepository:
     """余额历史数据访问"""
