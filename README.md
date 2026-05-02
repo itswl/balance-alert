@@ -119,54 +119,26 @@ WEBHOOK_TYPE=feishu  # 或 dingtalk, wecom, custom
 
 ## 📝 配置说明
 
-### config.json 示例
+系统的配置分为 **静态配置** 和 **动态配置** 两部分：
 
-```json
-{
-  "webhook": {
-    "url": "${WEBHOOK_URL}",
-    "type": "${WEBHOOK_TYPE}",
-    "source": "credit-monitor"
-  },
-  "projects": [
-    {
-      "name": "OpenRouter",
-      "provider": "openrouter",
-      "api_key": "${PROJECT_1_API_KEY}",
-      "threshold": 100.0,
-      "type": "credits",
-      "enabled": true
-    },
-    {
-      "name": "火山云",
-      "provider": "volc",
-      "api_key": "${PROJECT_2_API_KEY}",
-      "threshold": 5000,
-      "type": "balance",
-      "enabled": true
-    }
-  ],
-  "subscriptions": [
-    {
-      "name": "OpenAI Plus",
-      "cycle_type": "monthly",
-      "renewal_day": 15,
-      "alert_days_before": 3,
-      "amount": 20.0,
-      "currency": "USD"
-    }
-  ]
-}
+### 1. 静态配置 (`.env` 或 `config.json`)
+主要用于配置系统基础参数，如 Webhook 地址、发件邮箱信息、系统参数等。这部分配置在容器运行期间是只读的。
+
+推荐使用环境变量 `.env` 进行配置：
+```bash
+# Webhook 配置
+WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
+WEBHOOK_TYPE=feishu
 ```
 
-**字段说明**：
-- `name`: 项目名称
-- `provider`: 服务商（volc/aliyun/openrouter/tikhub/wxrank/uniapi）
-- `api_key`: 使用环境变量占位符 `${PROJECT_X_API_KEY}`
-- `threshold`: 告警阈值
-- `type`: balance（余额）或 credits（余额）
-- `cycle_type`: weekly/monthly/yearly
-- `renewal_day`: 续费日期（1-31）
+### 2. 动态配置 (数据库)
+为了兼容 Kubernetes/Docker 的只读挂载规范，并支持高并发的页面修改：
+**项目配置（API 密钥、告警阈值）**和**订阅配置（续费提醒）**均已迁移至 SQLite 数据库 (`data/balance_alert.db`) 中管理。
+
+- **初始化**：第一次启动时，系统仍会读取 `.env` 或 `config.json` 中的初始项目，并将其自动迁移到数据库中。
+- **日常管理**：此后，你可以直接通过 Web UI 界面修改各项目的**告警阈值**，或自由地**增删改订阅**。所有的修改会实时持久化到数据库中。
+
+> 💡 **版本升级提示**：如果你是从旧版本升级上来的，请在拉取最新代码后进入容器执行 `alembic upgrade head`，或直接执行 `python scripts/migrate_config_to_db.py` 自动完成数据的无缝迁移。
 
 ## 🎮 常用命令
 

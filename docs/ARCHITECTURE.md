@@ -115,17 +115,17 @@ SubscriptionHistory   # 订阅历史
 └─ timestamp
 ```
 
-### 5. 配置管理 (`config_loader.py`)
+### 5. 配置管理 (`config_loader.py` & `ConfigRepository`)
 
-**三种配置模式**：
-1. **纯环境变量模式** (`USE_ENV_CONFIG=true`)
-2. **混合模式**（默认）- config.json + 环境变量
-3. **纯文件模式** - 仅 config.json
+**动静分离架构**：
+1. **静态配置 (只读)**：`.env` 或 `config.json` 提供系统基础参数（Webhook、邮箱、默认系统设置）。支持环境变量覆盖文件配置（混合模式）和热重载。
+2. **动态配置 (数据库)**：通过 `ConfigRepository` 管理。所有项目配置（API Key, 阈值）和订阅提醒配置均保存至 SQLite 数据库。
 
 **热重载机制**：
 - watchdog 监听文件变化
 - 1秒防抖
 - 异步通知 Web Server 更新缓存
+- 数据访问优先从数据库加载，并在内存中无缝覆盖默认静态文件配置。
 
 ### 6. Webhook 适配器 (`webhook_adapter.py`)
 
