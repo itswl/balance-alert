@@ -38,10 +38,7 @@ async function showProjectTrend(projectName, provider) {
 
     try {
         // 获取趋势数据（默认30天）
-        const response = await fetch(`/api/history/trend/${encodeURIComponent(projectId)}?days=30`, {
-            headers: { ...API.getAuthHeaders() }
-        });
-        const result = await response.json();
+        const { response, data: result } = await API.fetchJson(`/api/history/trend/${encodeURIComponent(projectId)}?days=30`);
 
         if (!response.ok || result.status === 'error') {
             // 数据库未启用或无数据
