@@ -47,8 +47,8 @@ def create_app(state_manager: StateManager = None) -> Flask:
     # 启用 CORS
     CORS(app)
 
-    from .middleware import protect_api_endpoints
-    protect_api_endpoints(app)
+    from .middleware import protect_all_endpoints
+    protect_all_endpoints(app)
 
     # 初始化状态管理器
     if state_manager is None:

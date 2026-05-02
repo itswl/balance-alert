@@ -8,6 +8,7 @@ from flask_cors import CORS
 from functools import wraps
 import json
 import os
+import base64
 import fcntl
 import tempfile
 import time
@@ -77,35 +78,56 @@ CRON_FAILURE_LOG = '/app/logs/cron_failures.log'
 STALENESS_MULTIPLIER = 3  # last_update 超过 refresh_interval * 此倍数视为过期
 
 
+def _extract_api_key() -> str:
+    auth = (request.headers.get('Authorization', '') or '').strip()
+    lower = auth.lower()
+    token = ''
+    if lower.startswith('bearer '):
+        token = auth[7:].strip()
+    elif lower.startswith('basic '):
+        b64 = auth[6:].strip()
+        try:
+            raw = base64.b64decode(b64).decode('utf-8', errors='ignore')
+            if ':' in raw:
+                token = raw.split(':', 1)[1].strip()
+            else:
+                token = raw.strip()
+        except Exception:
+            token = ''
+    if not token:
+        token = (request.args.get('api_key', '') or '').strip()
+    return token
+
+
+def _unauthorized():
+    resp = jsonify({'status': 'error', 'message': '未授权访问'})
+    resp.status_code = 401
+    resp.headers['WWW-Authenticate'] = 'Basic realm="Protected", charset="UTF-8"'
+    return resp
+
+
 def require_api_key(f):
     """API 认证装饰器"""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not API_KEY:
             return f(*args, **kwargs)
-        token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
-        if not token:
-            token = request.args.get('api_key', '')
+        token = _extract_api_key()
         if request.method != 'OPTIONS' and token != API_KEY:
-            return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+            return _unauthorized()
         return f(*args, **kwargs)
     return decorated
 
 
 @app.before_request
 def _api_key_guard():
-    path = request.path or ''
-    if not path.startswith('/api/'):
-        return None
     if not API_KEY:
         return None
     if request.method == 'OPTIONS':
         return None
-    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
-    if not token:
-        token = request.args.get('api_key', '')
+    token = _extract_api_key()
     if token != API_KEY:
-        return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+        return _unauthorized()
     return None
 
 
