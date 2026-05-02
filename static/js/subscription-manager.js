@@ -83,6 +83,7 @@ async function saveSubscription(event) {
             method: method,
             headers: {
                 'Content-Type': 'application/json',
+                ...API.getAuthHeaders(),
             },
             body: JSON.stringify(data)
         });
@@ -119,7 +120,7 @@ async function editSubscription(name) {
         const subscription = AppState.subscriptionData.subscriptions.find(s => s.name === name);
         if (subscription) {
             // 需要获取完整配置（包括 alert_days_before）
-            const response = await fetch('/api/config/subscriptions');
+            const response = await fetch('/api/config/subscriptions', { headers: { ...API.getAuthHeaders() } });
             const result = await response.json();
             const fullSub = result.subscriptions.find(s => s.name === name);
             openSubscriptionModal(fullSub || subscription);
@@ -145,6 +146,7 @@ async function deleteSubscription(name) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...API.getAuthHeaders(),
             },
             body: JSON.stringify({ name })
         });
@@ -178,6 +180,7 @@ async function markSubscriptionRenewed(name) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...API.getAuthHeaders(),
             },
             body: JSON.stringify({ name })
         });
@@ -211,6 +214,7 @@ async function clearSubscriptionRenewed(name) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...API.getAuthHeaders(),
             },
             body: JSON.stringify({ name })
         });

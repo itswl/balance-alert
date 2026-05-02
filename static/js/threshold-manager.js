@@ -38,6 +38,7 @@ async function saveThreshold(event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...API.getAuthHeaders(),
             },
             body: JSON.stringify({
                 project_name: projectName,

@@ -98,11 +98,31 @@ const Utils = {
 const API = {
     baseURL: window.location.origin,
 
+    getApiKey() {
+        return (localStorage.getItem('apiKey') || '').trim();
+    },
+
+    setApiKey(value) {
+        const key = (value || '').trim();
+        if (key) {
+            localStorage.setItem('apiKey', key);
+        } else {
+            localStorage.removeItem('apiKey');
+        }
+    },
+
+    getAuthHeaders() {
+        const apiKey = this.getApiKey();
+        return apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {};
+    },
+
     async request(endpoint, options = {}) {
         try {
+            const authHeaders = this.getAuthHeaders();
             const response = await fetch(`${this.baseURL}${endpoint}`, {
                 headers: {
                     'Content-Type': 'application/json',
+                    ...authHeaders,
                     ...options.headers,
                 },
                 ...options,
@@ -112,7 +132,10 @@ const API = {
 
             if (!response.ok) {
                 // 如果响应包含错误消息，抛出带消息的错误
-                const errorMsg = data.message || data.error || response.statusText;
+                let errorMsg = data.message || data.error || response.statusText;
+                if (response.status === 401) {
+                    errorMsg = '未授权访问，请在设置中填写 API Key';
+                }
                 throw new Error(errorMsg);
             }
 

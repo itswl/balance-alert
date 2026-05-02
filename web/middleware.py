@@ -14,17 +14,41 @@ from pydantic import ValidationError
 API_KEY = os.environ.get('API_KEY', '')
 
 
+def _extract_api_key() -> str:
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    if not token:
+        token = request.args.get('api_key', '')
+    return token.strip()
+
+
+def _unauthorized():
+    return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+
+
+def validate_api_key_request() -> bool:
+    if request.method == 'OPTIONS':
+        return True
+    token = _extract_api_key()
+    return bool(API_KEY) and token == API_KEY
+
+
+def protect_api_endpoints(app) -> None:
+    @app.before_request
+    def _api_key_guard():
+        path = request.path or ''
+        if not path.startswith('/api/'):
+            return None
+        if validate_api_key_request():
+            return None
+        return _unauthorized()
+
+
 def require_api_key(f):
-    """API 认证装饰器，仅在设置了 API_KEY 时启用"""
+    """API 认证装饰器"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not API_KEY:
-            return f(*args, **kwargs)
-        token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
-        if not token:
-            token = request.args.get('api_key', '')
-        if token != API_KEY:
-            return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+        if not validate_api_key_request():
+            return _unauthorized()
         return f(*args, **kwargs)
     return decorated
 
