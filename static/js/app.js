@@ -20,12 +20,7 @@ const Utils = {
             return '-';
         }
 
-        const currencyMap = {
-            'CNY': '',
-            'USD': '$'
-        };
-        const symbol = currencyMap[currency] || '';
-        return `${symbol}${numValue.toFixed(2)}`;
+        return numValue.toFixed(2);
     },
 
     // 格式化数字（带千分位）
