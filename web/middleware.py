@@ -5,6 +5,7 @@ Web 中间件
 提供认证、验证等装饰器
 """
 import os
+import base64
 from functools import wraps
 from flask import request, jsonify
 from pydantic import ValidationError
@@ -15,14 +16,31 @@ API_KEY = os.environ.get('API_KEY', '')
 
 
 def _extract_api_key() -> str:
-    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    auth = (request.headers.get('Authorization', '') or '').strip()
+    lower = auth.lower()
+    token = ''
+    if lower.startswith('bearer '):
+        token = auth[7:].strip()
+    elif lower.startswith('basic '):
+        b64 = auth[6:].strip()
+        try:
+            raw = base64.b64decode(b64).decode('utf-8', errors='ignore')
+            if ':' in raw:
+                token = raw.split(':', 1)[1].strip()
+            else:
+                token = raw.strip()
+        except Exception:
+            token = ''
     if not token:
-        token = request.args.get('api_key', '')
-    return token.strip()
+        token = (request.args.get('api_key', '') or '').strip()
+    return token
 
 
 def _unauthorized():
-    return jsonify({'status': 'error', 'message': '未授权访问'}), 401
+    resp = jsonify({'status': 'error', 'message': '未授权访问'})
+    resp.status_code = 401
+    resp.headers['WWW-Authenticate'] = 'Basic realm="Protected", charset="UTF-8"'
+    return resp
 
 
 def validate_api_key_request() -> bool:
@@ -40,6 +58,14 @@ def protect_api_endpoints(app) -> None:
         path = request.path or ''
         if not path.startswith('/api/'):
             return None
+        if validate_api_key_request():
+            return None
+        return _unauthorized()
+
+
+def protect_all_endpoints(app) -> None:
+    @app.before_request
+    def _api_key_guard_all():
         if validate_api_key_request():
             return None
         return _unauthorized()
