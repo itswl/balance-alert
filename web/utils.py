@@ -155,7 +155,7 @@ def write_config(config: Dict[str, Any], config_path: str = 'config.json') -> No
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
         # 清除配置缓存，确保下次加载时获取最新配置
-        from config_loader import clear_config_cache
+        from core.config_loader import clear_config_cache
         clear_config_cache()
         logger.debug(f"配置文件已更新并清除缓存: {config_path}")
 

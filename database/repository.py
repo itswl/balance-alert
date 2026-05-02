@@ -24,7 +24,6 @@ class BalanceRepository:
         provider: str,
         balance: float,
         threshold: Optional[float] = None,
-        currency: str = 'USD',
         balance_type: str = 'credits',
         need_alarm: bool = False
     ) -> Optional[int]:
@@ -43,7 +42,6 @@ class BalanceRepository:
                 provider=provider,
                 balance=balance,
                 threshold=threshold,
-                currency=currency,
                 balance_type=balance_type,
                 need_alarm=need_alarm,
                 timestamp=datetime.utcnow()
@@ -54,7 +52,7 @@ class BalanceRepository:
             record_id = record.id
             session.close()
 
-            logger.debug(f"保存余额记录: {project_name} = {balance} {currency}")
+            logger.debug(f"保存余额记录: {project_name} = {balance}")
             return record_id
 
         except Exception as e:
@@ -392,7 +390,6 @@ class SubscriptionRepository:
         cycle_type: str,
         days_until_renewal: int,
         amount: float = 0,
-        currency: str = 'CNY',
         need_renewal: bool = False
     ) -> Optional[int]:
         """保存订阅记录"""
@@ -410,7 +407,6 @@ class SubscriptionRepository:
                 cycle_type=cycle_type,
                 days_until_renewal=days_until_renewal,
                 amount=amount,
-                currency=currency,
                 need_renewal=need_renewal,
                 timestamp=datetime.utcnow()
             )

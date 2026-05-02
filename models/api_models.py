@@ -16,19 +16,8 @@ class AddSubscriptionRequest(BaseModel):
     renewal_day: int = Field(..., ge=1, le=31, description="续费日期（1-31）")
     alert_days_before: int = Field(..., ge=0, le=365, description="提前告警天数")
     amount: float = Field(..., ge=0, description="订阅金额")
-    currency: str = Field(default='CNY', min_length=3, max_length=3, description="货币代码（如 CNY, USD）")
     enabled: bool = Field(default=True, description="是否启用")
     last_renewed_date: Optional[str] = Field(default=None, description="上次续费日期（YYYY-MM-DD）")
-
-    @field_validator('currency')
-    @classmethod
-    def validate_currency(cls, v: str) -> str:
-        """验证货币代码"""
-        v = v.upper()
-        valid_currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD', 'SGD']
-        if v not in valid_currencies:
-            raise ValueError(f'不支持的货币代码: {v}，支持: {", ".join(valid_currencies)}')
-        return v
 
     @field_validator('last_renewed_date')
     @classmethod
@@ -76,21 +65,8 @@ class UpdateSubscriptionRequest(BaseModel):
     renewal_day: Optional[int] = Field(default=None, ge=1, le=31, description="续费日期（1-31）")
     alert_days_before: Optional[int] = Field(default=None, ge=0, le=365, description="提前告警天数")
     amount: Optional[float] = Field(default=None, ge=0, description="订阅金额")
-    currency: Optional[str] = Field(default=None, min_length=3, max_length=3, description="货币代码")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
     last_renewed_date: Optional[str] = Field(default=None, description="上次续费日期（YYYY-MM-DD）")
-
-    @field_validator('currency')
-    @classmethod
-    def validate_currency(cls, v: Optional[str]) -> Optional[str]:
-        """验证货币代码"""
-        if v is None:
-            return v
-        v = v.upper()
-        valid_currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'HKD', 'SGD']
-        if v not in valid_currencies:
-            raise ValueError(f'不支持的货币代码: {v}')
-        return v
 
     @field_validator('last_renewed_date')
     @classmethod

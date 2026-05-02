@@ -23,7 +23,7 @@ class SubscriptionChecker:
     
     def _load_config(self):
         """加载配置文件"""
-        from config_loader import load_config_with_env_vars
+        from core.config_loader import load_config_with_env_vars
         return load_config_with_env_vars(self.config_path)
     
     def check_subscriptions(self, dry_run=False):
@@ -65,7 +65,6 @@ class SubscriptionChecker:
         renewal_day = sub.get('renewal_day', 1)
         alert_days_before = sub.get('alert_days_before', 3)
         amount = sub.get('amount', 0)
-        currency = sub.get('currency', 'CNY')
         last_renewed_date = sub.get('last_renewed_date')  # 上次续费日期
         cycle_type = sub.get('cycle_type', 'monthly')  # 续费周期类型: weekly, monthly, yearly
         
@@ -75,7 +74,7 @@ class SubscriptionChecker:
         # 根据周期类型显示不同的续费信息
         cycle_text = self._get_cycle_text(cycle_type, renewal_day)
         logger.info(f"   续费周期: {cycle_text}")
-        logger.info(f"   金额: {currency} {amount}")
+        logger.info(f"   金额: {amount}")
         logger.info(f"{'='*60}")
         
         # 计算距离续费日的天数
@@ -127,7 +126,6 @@ class SubscriptionChecker:
             'need_alert': need_alert,
             'alert_sent': alert_sent,
             'amount': amount,
-            'currency': currency,
             'already_renewed': already_renewed,
             'last_renewed_date': last_renewed_date
         }
@@ -298,16 +296,14 @@ class SubscriptionChecker:
         # 获取订阅信息
         name = sub.get('name')
         renewal_day = sub.get('renewal_day')
-        amount = sub.get('amount')
-        currency = sub.get('currency', 'CNY')
+        amount = sub.get('amount', 0)
         
         # 发送提醒
         return adapter.send_subscription_alert(
             subscription_name=name,
             renewal_day=renewal_day,
             days_until_renewal=days_until_renewal,
-            amount=amount,
-            currency=currency
+            amount=amount
         )
     
     def _print_summary(self):

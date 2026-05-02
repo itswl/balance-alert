@@ -13,7 +13,7 @@ const AppState = {
 // ==================== 工具函数 ====================
 const Utils = {
     // 格式化货币
-    formatCurrency(value, currency = 'CNY') {
+    formatCurrency(value) {
         // 确保 value 是数字
         const numValue = parseFloat(value);
         if (isNaN(numValue)) {
@@ -261,7 +261,6 @@ const UI = {
         const status = Utils.getBalanceStatus(balance, threshold);
         const percentage = Utils.getBalancePercentage(balance, threshold);
         const projectStatus = project.need_alarm ? 'alert' : 'normal';
-        const currency = 'CNY'; // 默认使用人民币
 
         return `
             <div class="project-card" data-provider="${project.provider}" data-status="${projectStatus}">
@@ -282,7 +281,7 @@ const UI = {
                 </div>
                 <div class="project-balance">
                     <div class="balance-label">${project.type === 'balance' ? '当前余额' : '当前余额'}</div>
-                    <div class="balance-value">${Utils.formatCurrency(balance, currency)}</div>
+                    <div class="balance-value">${Utils.formatCurrency(balance)}</div>
                     <div class="balance-progress">
                         <div class="balance-progress-bar ${status}" style="width: ${Math.min(100, percentage)}%"></div>
                     </div>
@@ -290,7 +289,7 @@ const UI = {
                 <div class="project-details">
                     <div class="detail-item">
                         <span class="detail-label">阈值</span>
-                        <span class="detail-value">${Utils.formatCurrency(threshold, currency)}</span>
+                        <span class="detail-value">${Utils.formatCurrency(threshold)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">类型</span>
@@ -328,7 +327,7 @@ const UI = {
                 <div class="subscription-info">
                     <h3>${sub.name}</h3>
                     <div class="subscription-meta">
-                        <span class="meta-item">💰 ${Utils.formatCurrency(amount, sub.currency || 'CNY')}</span>
+                        <span class="meta-item">💰 ${Utils.formatCurrency(amount)}</span>
                         <span class="meta-item">📅 ${cycleText}</span>
                         ${sub.next_renewal_date ? `<span class="meta-item">📆 下次续费: ${sub.next_renewal_date}</span>` : ''}
                         ${sub.already_renewed ? `<span class="meta-item">✅ 已续费</span>` : ''}
