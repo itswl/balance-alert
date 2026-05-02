@@ -19,7 +19,7 @@ class BalanceHistory(Base):
     project_id = Column(String(200), nullable=False, index=True, comment='项目唯一标识')
     project_name = Column(String(200), nullable=False, comment='项目名称')
     provider = Column(String(50), nullable=False, index=True, comment='Provider 类型')
-    balance = Column(Float, nullable=False, comment='余额或积分数量')
+    balance = Column(Float, nullable=False, comment='余额数量')
     threshold = Column(Float, comment='告警阈值')
     currency = Column(String(10), default='USD', comment='货币单位')
     balance_type = Column(String(20), default='credits', comment='类型: balance/credits')

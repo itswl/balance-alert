@@ -21,12 +21,10 @@ const Utils = {
         }
 
         const currencyMap = {
-            'USD': '$',
-            'CNY': '¥',
-            'EUR': '€',
-            'GBP': '£',
+            'CNY': '',
+            'USD': '$'
         };
-        const symbol = currencyMap[currency] || '¥';
+        const symbol = currencyMap[currency] || '';
         return `${symbol}${numValue.toFixed(2)}`;
     },
 
@@ -288,7 +286,7 @@ const UI = {
                     </div>
                 </div>
                 <div class="project-balance">
-                    <div class="balance-label">${project.type === 'balance' ? '当前余额' : '当前积分'}</div>
+                    <div class="balance-label">${project.type === 'balance' ? '当前余额' : '当前余额'}</div>
                     <div class="balance-value">${Utils.formatCurrency(balance, currency)}</div>
                     <div class="balance-progress">
                         <div class="balance-progress-bar ${status}" style="width: ${Math.min(100, percentage)}%"></div>
@@ -301,7 +299,7 @@ const UI = {
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">类型</span>
-                        <span class="detail-value">${project.type === 'balance' ? '余额' : '积分'}</span>
+                        <span class="detail-value">${project.type === 'balance' ? '余额' : '余额'}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">充足度</span>

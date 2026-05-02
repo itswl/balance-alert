@@ -216,7 +216,7 @@ class CreditMonitor:
                 if DB_AVAILABLE and alarm_sent:
                     try:
                         project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
-                        balance_type = '余额' if project_config.get('type') == 'balance' else '积分'
+                        balance_type = '余额'
                         AlertRepository.save_alert_record(
                             project_id=project_id,
                             project_name=project_name,
@@ -272,8 +272,8 @@ class CreditMonitor:
         project_name = project_config.get('name')
         provider = project_config.get('provider')
         threshold = project_config.get('threshold')
-        balance_type = '余额' if project_config.get('type') == 'balance' else '积分'
-        unit = '￥' if project_config.get('type') == 'balance' else ''
+        balance_type = '余额'
+        unit = ''
         
         # 发送告警
         return adapter.send_balance_alert(
@@ -447,7 +447,7 @@ def main() -> None:
     args = parser.parse_args()
     
     try:
-        # 检查余额/积分
+        # 检查余额
         monitor = CreditMonitor(args.config)
         monitor.run(project_name=args.project, dry_run=args.dry_run)
         

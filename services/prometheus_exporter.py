@@ -17,7 +17,7 @@ class MetricsCollector:
     """指标收集器"""
     
     def __init__(self):
-        # 余额/积分指标
+        # 余额指标
         self.balance_gauge = Gauge(
             'balance_alert_balance',
             'Current balance or credits',

@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('project_id', sa.String(200), nullable=False, index=True, comment='项目唯一标识'),
         sa.Column('project_name', sa.String(200), nullable=False, comment='项目名称'),
         sa.Column('provider', sa.String(50), nullable=False, index=True, comment='Provider 类型'),
-        sa.Column('balance', sa.Float(), nullable=False, comment='余额或积分数量'),
+        sa.Column('balance', sa.Float(), nullable=False, comment='余额数量'),
         sa.Column('threshold', sa.Float(), comment='告警阈值'),
         sa.Column('currency', sa.String(10), default='USD', comment='货币单位'),
         sa.Column('balance_type', sa.String(20), default='credits', comment='类型: balance/credits'),

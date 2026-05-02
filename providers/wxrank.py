@@ -1,5 +1,5 @@
 """
-微信排名积分查询适配器
+微信排名余额查询适配器
 """
 from .base import BaseProvider
 import re
@@ -21,12 +21,12 @@ class WxRankProvider(BaseProvider):
     
     def get_credits(self):
         """
-        获取当前积分
+        获取当前余额
         
         Returns:
             dict: 包含以下字段的字典
                 - success (bool): 是否成功获取
-                - credits (float): 积分数值，失败时为 None
+                - credits (float): 余额数值，失败时为 None
                 - error (str): 错误信息，成功时为 None
                 - raw_data (dict): 原始 API 响应数据
         """
@@ -55,11 +55,11 @@ class WxRankProvider(BaseProvider):
                     'raw_data': data
                 }
             
-            # 从 msg 字段中提取积分数字
-            # 格式: "剩余263419积分"
+            # 从 msg 字段中提取余额数字
+            # 格式: "剩余263419余额"
             msg = data.get('msg', '')
             
-            # 尝试多种方式提取积分
+            # 尝试多种方式提取余额
             credits = None
             
             # 方法1: 正则提取数字
@@ -82,7 +82,7 @@ class WxRankProvider(BaseProvider):
                 return {
                     'success': False,
                     'credits': None,
-                    'error': f"无法从响应中解析积分: {msg}",
+                    'error': f"无法从响应中解析余额: {msg}",
                     'raw_data': data
                 }
             

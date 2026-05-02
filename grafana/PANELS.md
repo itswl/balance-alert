@@ -42,7 +42,7 @@
 
 ### 第二行 - 余额对比与比例（2个面板）
 
-#### 7. 项目余额/积分对比
+#### 7. 项目余额对比
 - **类型**: Time Series (Bars)
 - **查询**: `sort_desc(balance_alert_balance{project=~"$project"})`
 - **样式**:

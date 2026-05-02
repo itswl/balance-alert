@@ -195,8 +195,8 @@ pgloader mysql://user:pass@localhost/balance_alert \
 | **SQLite** | $0 (本地) | $0 (本地) | ❌ 不适用 |
 | **MySQL (AWS RDS)** | ~$15 | ~$50 | ~$200 |
 | **PostgreSQL (AWS RDS)** | ~$15 | ~$60 | ~$300 |
-| **MySQL (阿里云)** | ~¥50 | ~¥200 | ~¥800 |
-| **PostgreSQL (阿里云)** | ~¥60 | ~¥250 | ~¥1000 |
+| **MySQL (阿里云)** | ~50 | ~200 | ~800 |
+| **PostgreSQL (阿里云)** | ~60 | ~250 | ~1000 |
 
 *价格仅供参考，实际费用请查询云服务商*
 

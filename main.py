@@ -98,7 +98,7 @@ def update_credits(state_mgr: StateManager = global_state_manager, detector: Dat
 
             logger.info(f"开始更新数据 (智能刷新: {'启用' if smart_refresh_enabled else '禁用'})")
 
-            # 更新余额/积分数据
+            # 更新余额数据
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not get_enable_web_alarm())
 

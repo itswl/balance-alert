@@ -6,8 +6,8 @@
 
 ### 暴露的指标
 
-#### 余额/积分指标
-- `balance_alert_balance` - 当前余额/积分
+#### 余额指标
+- `balance_alert_balance` - 当前余额
 - `balance_alert_threshold` - 告警阈值
 - `balance_alert_ratio` - 余额比例（余额/阈值）
 - `balance_alert_status` - 余额状态（1=正常, 0=告警）
@@ -312,7 +312,7 @@ scrape_configs:
 
 预配置的 Dashboard 包含以下面板：
 
-1. **余额/积分总览** - 显示所有项目的当前余额
+1. **余额总览** - 显示所有项目的当前余额
 2. **余额比例** - 仪表盘显示余额/阈值比例
 3. **余额趋势** - 时间序列图表显示余额变化
 4. **订阅续费倒计时** - 显示各订阅距离续费的天数

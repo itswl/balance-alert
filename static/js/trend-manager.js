@@ -245,7 +245,7 @@ function renderTrendChart(trendData) {
                     ticks: {
                         color: textColor,
                         callback: function(value) {
-                            return '¥' + value.toLocaleString();
+                            return value.toLocaleString();
                         }
                     }
                 }
