@@ -131,7 +131,7 @@ class BaseProvider(ABC):
     @abstractmethod
     def get_credits(self) -> Dict[str, Any]:
         """
-        获取当前余额/积分
+        获取当前余额
         
         Returns:
             dict: 包含以下字段的字典

@@ -1,7 +1,6 @@
-# 💰 余额积分监控系统
+# 💰 余额监控系统
 
-多平台余额/积分监控告警系统，支持实时 Web 界面和自动告警通知。
-
+多平台余额监控告警系统，支持实时 Web 界面和自动告警通知。
 ## ✨ 核心功能
 
 - 🌐 **Web 界面** - 实时查看所有项目余额状态
@@ -17,9 +16,9 @@
 |------|------|------|
 | 🌋 火山云 (Volc) | 余额 | 支持火山引擎账户余额监控 |
 | ☁️ 阿里云 (Aliyun) | 余额 | 支持阿里云账户余额监控 |
-| 🤖 OpenRouter | 积分 | 支持 OpenRouter API 积分监控 |
-| 🔷 UniAPI | 积分 | 支持 UniAPI 账户积分监控 |
-| 📱 微信排名 (WxRank) | 积分 | 支持微信公众号积分监控 |
+| 🤖 OpenRouter | 余额 | 支持 OpenRouter API 余额监控 |
+| 🔷 UniAPI | 余额 | 支持 UniAPI 账户余额监控 |
+| 📱 微信排名 (WxRank) | 余额 | 支持微信公众号余额监控 |
 | 🎬 TikHub | 余额 | 支持 TikHub API 余额监控 |
 
 ## 🚀 快速开始
@@ -165,7 +164,7 @@ WEBHOOK_TYPE=feishu  # 或 dingtalk, wecom, custom
 - `provider`: 服务商（volc/aliyun/openrouter/tikhub/wxrank/uniapi）
 - `api_key`: 使用环境变量占位符 `${PROJECT_X_API_KEY}`
 - `threshold`: 告警阈值
-- `type`: balance（余额）或 credits（积分）
+- `type`: balance（余额）或 credits（余额）
 - `cycle_type`: weekly/monthly/yearly
 - `renewal_day`: 续费日期（1-31）
 

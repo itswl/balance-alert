@@ -122,12 +122,12 @@ class WebhookAdapter:
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
                           threshold: float, unit: str = '') -> bool:
         """
-        发送余额/积分告警
+        发送余额告警
 
         Args:
             project_name: 项目名称
             provider: 服务商
-            balance_type: 类型 (余额/积分)
+            balance_type: 类型 (余额)
             current_value: 当前值
             threshold: 阈值
             unit: 单位

@@ -496,7 +496,7 @@
           "refId": "A"
         }
       ],
-      "title": "项目余额/积分对比",
+      "title": "项目余额对比",
       "type": "timeseries"
     },
     {

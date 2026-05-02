@@ -85,7 +85,7 @@ class OpenRouterProvider(BaseProvider):
                     'raw_data': data
                 }
             
-            # 计算可用余额 = 总积分 - 已使用积分
+            # 计算可用余额 = 总余额 - 已使用余额
             available_credits = float(total_credits) - float(total_usage)
             
             result['credits'] = available_credits

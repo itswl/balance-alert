@@ -163,8 +163,8 @@ class AsyncCreditMonitor:
         project_name = project_config.get('name')
         provider = project_config.get('provider')
         threshold = project_config.get('threshold')
-        balance_type = '余额' if project_config.get('type') == 'balance' else '积分'
-        unit = '￥' if project_config.get('type') == 'balance' else ''
+        balance_type = '余额'
+        unit = ''
         
         # 发送告警
         return adapter.send_balance_alert(

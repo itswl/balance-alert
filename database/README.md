@@ -202,7 +202,7 @@ GET /api/history/projects
 | project_id | String(200) | 项目唯一标识 |
 | project_name | String(200) | 项目名称 |
 | provider | String(50) | Provider类型 |
-| balance | Float | 余额或积分数量 |
+| balance | Float | 余额数量 |
 | threshold | Float | 告警阈值 |
 | currency | String(10) | 货币单位 |
 | balance_type | String(20) | 类型：balance/credits |

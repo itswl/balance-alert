@@ -245,8 +245,8 @@ class EmailScanner:
         # 尝试提取金额
         amount_patterns = [
             r'余额[：:]\s*([0-9,]+\.?[0-9]*)\s*元',
+            r'金额[：:]\s*([0-9,]+\.?[0-9]*)',
             r'([0-9,]+\.?[0-9]*)\s*元',
-            r'¥\s*([0-9,]+\.?[0-9]*)',
             r'CNY\s*([0-9,]+\.?[0-9]*)',
             r'\$\s*([0-9,]+\.?[0-9]*)',
         ]
@@ -418,7 +418,7 @@ class EmailScanner:
                             # 尝试提取服务信息
                             service_name, amount = self._extract_service_info(subject, body)
 
-                            amount_str = f" | 金额: ¥{amount}" if amount else ""
+                            amount_str = f" | 金额: {amount}" if amount else ""
                             logger.warning(
                                 f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
                                 f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
@@ -526,7 +526,7 @@ class EmailScanner:
         ]
         
         if email_info['amount']:
-            content_parts.append(f"**金额**: ¥{email_info['amount']}")
+            content_parts.append(f"**金额**: {email_info['amount']}")
         
         content_parts.append(f"**关键词**: {', '.join(email_info['keywords'])}")
         
