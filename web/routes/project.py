@@ -6,7 +6,8 @@
 """
 from flask import Blueprint, jsonify, request
 from ..middleware import require_api_key
-from ..utils import load_config_safe, write_config, audit_log
+from ..utils import load_config_safe, audit_log
+from core.config_loader import load_dynamic_config, save_dynamic_config
 from ..handlers import refresh_subscription_cache
 from core.state_manager import StateManager
 from core.logger import get_logger
@@ -66,7 +67,7 @@ def update_project_threshold():
         # 读取配置文件
         config = load_config_safe()
 
-        # 查找项目
+        # 查找项目并应用动态配置
         project_found = False
         for project in config.get('projects', []):
             if project.get('name') == project_name:
@@ -81,8 +82,14 @@ def update_project_threshold():
                 'message': f'未找到项目: {project_name}'
             }), 404
 
-        # 保存配置文件
-        write_config(config)
+        # 保存到动态配置
+        dyn_config = load_dynamic_config()
+        if 'projects' not in dyn_config:
+            dyn_config['projects'] = {}
+        if project_name not in dyn_config['projects']:
+            dyn_config['projects'][project_name] = {}
+        dyn_config['projects'][project_name]['threshold'] = new_threshold
+        save_dynamic_config(dyn_config)
         audit_log('update_project_threshold', {
             'project': project_name,
             'old_threshold': old_threshold,
