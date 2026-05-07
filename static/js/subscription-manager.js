@@ -1,5 +1,38 @@
 // ==================== 订阅管理功能 ====================
 
+function populateSubscriptionProjectOptions(selectedProject = '') {
+    const select = document.getElementById('sub-owner-project');
+    if (!select) return;
+
+    const projects = (AppState.balanceData?.projects || [])
+        .map(p => p.owner_project)
+        .filter(Boolean);
+    const uniqueProjects = [...new Set(projects)];
+
+    select.innerHTML = '';
+
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '未关联项目';
+    select.appendChild(emptyOption);
+
+    uniqueProjects.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project;
+        option.textContent = project;
+        option.selected = project === selectedProject;
+        select.appendChild(option);
+    });
+
+    if (selectedProject && !uniqueProjects.includes(selectedProject)) {
+        const option = document.createElement('option');
+        option.value = selectedProject;
+        option.textContent = selectedProject;
+        option.selected = true;
+        select.appendChild(option);
+    }
+}
+
 // 打开订阅模态框
 function openSubscriptionModal(subscription = null) {
     const modal = document.getElementById('subscription-modal');
@@ -8,6 +41,7 @@ function openSubscriptionModal(subscription = null) {
 
     // 重置表单
     form.reset();
+    populateSubscriptionProjectOptions(subscription?.owner_project || subscription?.project || '');
 
     if (subscription) {
         // 编辑模式
@@ -15,6 +49,7 @@ function openSubscriptionModal(subscription = null) {
         document.getElementById('edit-mode').value = 'true';
         document.getElementById('original-name').value = subscription.name;
         document.getElementById('sub-name').value = subscription.name;
+        document.getElementById('sub-owner-project').value = subscription.owner_project || subscription.project || '';
         document.getElementById('sub-amount').value = subscription.amount || '';
         document.getElementById('sub-cycle').value = subscription.cycle_type || 'monthly';
         document.getElementById('sub-renewal-day').value = subscription.renewal_day || 1;
@@ -48,6 +83,7 @@ async function saveSubscription(event) {
 
     const data = {
         name: document.getElementById('sub-name').value.trim(),
+        owner_project: document.getElementById('sub-owner-project').value || null,
         amount: parseFloat(document.getElementById('sub-amount').value) || 0,
         cycle_type: document.getElementById('sub-cycle').value,
         renewal_day: parseInt(document.getElementById('sub-renewal-day').value),

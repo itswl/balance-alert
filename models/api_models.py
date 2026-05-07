@@ -12,6 +12,7 @@ from datetime import date
 class AddSubscriptionRequest(BaseModel):
     """添加订阅请求"""
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称")
+    owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Literal['weekly', 'monthly', 'yearly'] = Field(..., description="续费周期类型")
     renewal_day: int = Field(..., ge=1, le=31, description="续费日期（1-31）")
     alert_days_before: int = Field(..., ge=0, le=365, description="提前告警天数")
@@ -46,6 +47,7 @@ class AddSubscriptionRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "ChatGPT Plus 订阅",
+                "owner_project": "AI 平台",
                 "cycle_type": "monthly",
                 "renewal_day": 15,
                 "alert_days_before": 3,
@@ -61,6 +63,7 @@ class UpdateSubscriptionRequest(BaseModel):
     """更新订阅请求"""
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称（用于查找）")
     new_name: Optional[str] = Field(default=None, min_length=1, max_length=200, description="新订阅名称")
+    owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Optional[Literal['weekly', 'monthly', 'yearly']] = Field(default=None, description="续费周期类型")
     renewal_day: Optional[int] = Field(default=None, ge=1, le=31, description="续费日期（1-31）")
     alert_days_before: Optional[int] = Field(default=None, ge=0, le=365, description="提前告警天数")

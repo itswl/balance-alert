@@ -91,11 +91,92 @@ const Utils = {
 // ==================== API 服务 ====================
 const API = {
     baseURL: window.location.origin,
+    storageKey: 'apiKey',
+    _apiKeyPromptPromise: null,
 
-    async fetchJson(endpoint, options = {}) {
+    getApiKey() {
+        return (localStorage.getItem(this.storageKey) || '').trim();
+    },
+
+    setApiKey(value) {
+        const key = (value || '').trim();
+        if (key) {
+            localStorage.setItem(this.storageKey, key);
+        } else {
+            localStorage.removeItem(this.storageKey);
+        }
+    },
+
+    getAuthHeaders() {
+        const apiKey = this.getApiKey();
+        return apiKey ? { 'X-API-Key': apiKey } : {};
+    },
+
+    async ensureApiKey(force = false, message = '') {
+        const current = this.getApiKey();
+        if (current && !force) {
+            return current;
+        }
+        return this.promptForApiKey(message);
+    },
+
+    async promptForApiKey(message = '') {
+        if (this._apiKeyPromptPromise) {
+            return this._apiKeyPromptPromise;
+        }
+
+        this._apiKeyPromptPromise = new Promise((resolve) => {
+            const modal = document.getElementById('auth-modal');
+            const form = document.getElementById('auth-form');
+            const input = document.getElementById('auth-api-key');
+            const error = document.getElementById('auth-error');
+
+            if (!modal || !form || !input) {
+                const value = window.prompt(message || '请输入 API Key', this.getApiKey());
+                if (value !== null) {
+                    this.setApiKey(value);
+                }
+                resolve(this.getApiKey() || null);
+                return;
+            }
+
+            error.textContent = message || '';
+            error.style.display = message ? 'block' : 'none';
+            input.value = this.getApiKey();
+            modal.classList.add('active');
+            input.focus();
+
+            const onSubmit = (event) => {
+                event.preventDefault();
+                const value = input.value.trim();
+                if (!value) {
+                    error.textContent = '请输入 API Key';
+                    error.style.display = 'block';
+                    return;
+                }
+                this.setApiKey(value);
+                modal.classList.remove('active');
+                form.removeEventListener('submit', onSubmit);
+                resolve(value);
+            };
+
+            form.addEventListener('submit', onSubmit);
+        });
+
+        const key = await this._apiKeyPromptPromise;
+        this._apiKeyPromptPromise = null;
+        return key;
+    },
+
+    async fetchJson(endpoint, options = {}, retried = false) {
+        if (endpoint.startsWith('/api/')) {
+            await this.ensureApiKey();
+        }
+
         const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
         const headers = {
             'Content-Type': 'application/json',
+            ...this.getAuthHeaders(),
             ...(options.headers || {}),
         };
         const response = await fetch(url, {
@@ -108,6 +189,15 @@ const API = {
         } catch (e) {
             data = null;
         }
+
+        if (response.status === 401 && endpoint.startsWith('/api/') && !retried) {
+            const message = data?.message || 'API Key 无效，请更新后继续';
+            const key = await this.promptForApiKey(message);
+            if (key) {
+                return this.fetchJson(endpoint, options, true);
+            }
+        }
+
         return { response, data };
     },
 
@@ -210,13 +300,17 @@ const UI = {
         const status = Utils.getBalanceStatus(balance, threshold);
         const percentage = Utils.getBalancePercentage(balance, threshold);
         const projectStatus = project.need_alarm ? 'alert' : 'normal';
+        const ownerProject = project.owner_project || '未关联项目';
 
         return `
             <div class="project-card" data-provider="${project.provider}" data-status="${projectStatus}">
                 <div class="project-header">
                     <div class="project-info">
                         <h3>${project.project}</h3>
-                        <span class="project-provider">${project.provider}</span>
+                        <div class="project-meta-row">
+                            <span class="project-provider">${project.provider}</span>
+                            <span class="owner-project-badge">${ownerProject}</span>
+                        </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <button class="action-icon-btn" onclick="editProjectThreshold('${project.project}', ${threshold})" title="编辑阈值">
@@ -242,7 +336,7 @@ const UI = {
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">类型</span>
-                        <span class="detail-value">${project.type === 'balance' ? '余额' : '余额'}</span>
+                        <span class="detail-value">API 调用</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">充足度</span>
@@ -270,12 +364,20 @@ const UI = {
         const daysClass = sub.days_until_renewal <= 7 ? 'danger' : (sub.days_until_renewal <= 14 ? 'warning' : '');
         const cycleText = sub.cycle_type === 'monthly' ? '月付' : sub.cycle_type === 'yearly' ? '年付' : '周付';
         const amount = parseFloat(sub.amount) || 0;
+        const ownerProject = sub.owner_project || '未关联项目';
 
         return `
             <div class="subscription-card">
                 <div class="subscription-info">
                     <h3>${sub.name}</h3>
                     <div class="subscription-meta">
+                        <span class="meta-item project-meta">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                            </svg>
+                            ${ownerProject}
+                        </span>
                         <span class="meta-item">💰 ${Utils.formatCurrency(amount)}</span>
                         <span class="meta-item">📅 ${cycleText}</span>
                         ${sub.next_renewal_date ? `<span class="meta-item">📆 下次续费: ${sub.next_renewal_date}</span>` : ''}

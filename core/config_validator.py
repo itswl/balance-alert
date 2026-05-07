@@ -90,6 +90,7 @@ class SubscriptionConfig:
     renewal_day: int
     alert_days_before: int
     amount: float
+    owner_project: Optional[str] = None
     cycle_type: CycleType = CycleType.MONTHLY
     enabled: bool = True
     last_renewed_date: Optional[str] = None
@@ -106,6 +107,7 @@ class SubscriptionConfig:
 
         return cls(
             name=data.get('name', ''),
+            owner_project=data.get('owner_project') or data.get('project'),
             renewal_day=_safe_int(data.get('renewal_day', 1), 1),
             alert_days_before=_safe_int(data.get('alert_days_before', 3), 3),
             amount=_safe_float(data.get('amount', 0), 0.0),
@@ -146,6 +148,7 @@ class ProjectConfig:
     api_key: str
     threshold: float
     type: ProjectType
+    owner_project: Optional[str] = None
     enabled: bool = True
 
     @classmethod
@@ -159,6 +162,7 @@ class ProjectConfig:
 
         return cls(
             name=data.get('name', ''),
+            owner_project=data.get('owner_project') or data.get('project'),
             provider=data.get('provider', ''),
             api_key=data.get('api_key', ''),
             threshold=_safe_float(data.get('threshold', 0), 0.0),

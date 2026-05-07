@@ -120,6 +120,7 @@ class CreditMonitor:
             dict: 检查结果
         """
         project_name = project_config.get('name', 'Unknown')
+        owner_project = project_config.get('owner_project') or project_config.get('project')
         provider_name = project_config.get('provider')
         api_key = project_config.get('api_key')
         threshold = project_config.get('threshold', 0)
@@ -134,6 +135,7 @@ class CreditMonitor:
             logger.error(f"❌ {error_msg}")
             return {
                 'project': project_name,
+                'owner_project': owner_project,
                 'success': False,
                 'error': error_msg,
                 'alarm_sent': False
@@ -154,6 +156,7 @@ class CreditMonitor:
                         need_alarm = credits < threshold
                         return {
                             'project': project_name,
+                            'owner_project': owner_project,
                             'provider': provider_name,
                             'type': project_config.get('type'),
                             'success': True,
@@ -172,6 +175,7 @@ class CreditMonitor:
             logger.error(f"❌ 获取余额失败: {result['error']}")
             return {
                 'project': project_name,
+                'owner_project': owner_project,
                 'success': False,
                 'error': result['error'],
                 'alarm_sent': False
@@ -234,6 +238,7 @@ class CreditMonitor:
         
         return {
             'project': project_name,
+            'owner_project': owner_project,
             'provider': provider_name,
             'type': project_config.get('type'),  # 传递类型字段到前端
             'success': True,
@@ -277,6 +282,7 @@ class CreditMonitor:
         # 发送告警
         return adapter.send_balance_alert(
             project_name=project_name,
+            owner_project=project_config.get('owner_project') or project_config.get('project'),
             provider=provider,
             balance_type=balance_type,
             current_value=credits,

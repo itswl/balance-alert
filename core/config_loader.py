@@ -113,6 +113,7 @@ def load_projects_from_env() -> List[Dict[str, Any]]:
 
         project_config = {
             'name': name,
+            'owner_project': get_env(f'{prefix}OWNER_PROJECT') or get_env(f'{prefix}PROJECT') or None,
             'provider': get_env(f'{prefix}PROVIDER', 'openrouter'),
             'api_key': get_env(f'{prefix}API_KEY', ''),
             'threshold': float(get_env(f'{prefix}THRESHOLD', '100.0')),
@@ -141,6 +142,7 @@ def load_subscriptions_from_env() -> List[Dict[str, Any]]:
 
         sub_config = {
             'name': name,
+            'owner_project': get_env(f'{prefix}OWNER_PROJECT') or get_env(f'{prefix}PROJECT') or None,
             'cycle_type': get_env(f'{prefix}CYCLE_TYPE', 'monthly'),
             'renewal_day': int(get_env(f'{prefix}RENEWAL_DAY', '1')),
             'alert_days_before': int(get_env(f'{prefix}ALERT_DAYS_BEFORE', '3')),

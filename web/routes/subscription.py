@@ -83,6 +83,10 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
                     dyn_sub['cycle_type'] = validated_data.cycle_type
                     updated_fields.append('cycle_type')
 
+                if 'owner_project' in validated_data.model_fields_set:
+                    dyn_sub['owner_project'] = validated_data.owner_project
+                    updated_fields.append('owner_project')
+
                 if validated_data.renewal_day is not None:
                     dyn_sub['renewal_day'] = validated_data.renewal_day
                     updated_fields.append('renewal_day')
@@ -151,6 +155,7 @@ def add_subscription(validated_data: AddSubscriptionRequest):
         # 创建新订阅
         new_subscription = {
             'name': validated_data.name,
+            'owner_project': validated_data.owner_project,
             'cycle_type': validated_data.cycle_type,
             'renewal_day': validated_data.renewal_day,
             'alert_days_before': validated_data.alert_days_before,

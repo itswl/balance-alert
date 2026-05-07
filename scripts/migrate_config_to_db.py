@@ -12,6 +12,7 @@ def main():
     for p in config.get('projects', []):
         ConfigRepository.upsert_project({
             'name': p['name'],
+            'owner_project': p.get('owner_project') or p.get('project'),
             'provider': p.get('provider', ''),
             'api_key': p.get('api_key', ''),
             'threshold': p.get('threshold', 0),
@@ -23,6 +24,7 @@ def main():
     for s in config.get('subscriptions', []):
         ConfigRepository.upsert_subscription({
             'name': s['name'],
+            'owner_project': s.get('owner_project') or s.get('project'),
             'cycle_type': s.get('cycle_type', 'monthly'),
             'renewal_day': s.get('renewal_day', 1),
             'alert_days_before': s.get('alert_days_before', 3),
