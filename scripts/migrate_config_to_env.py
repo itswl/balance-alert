@@ -96,6 +96,9 @@ def generate_env_file(config: Dict[str, Any], env_path: str = ".env") -> None:
     for idx, project in enumerate(projects, 1):
         lines.append(f"# 项目{idx} - {project.get('name', '')}")
         lines.append(f"PROJECT_{idx}_NAME={project.get('name', '')}")
+        owner_project = project.get('owner_project') or project.get('project')
+        if owner_project:
+            lines.append(f"PROJECT_{idx}_OWNER_PROJECT={owner_project}")
         lines.append(f"PROJECT_{idx}_PROVIDER={project.get('provider', '')}")
         lines.append(f"PROJECT_{idx}_API_KEY={project.get('api_key', '')}")
         lines.append(f"PROJECT_{idx}_THRESHOLD={project.get('threshold', 0)}")
@@ -111,6 +114,9 @@ def generate_env_file(config: Dict[str, Any], env_path: str = ".env") -> None:
     for idx, sub in enumerate(subscriptions, 1):
         lines.append(f"# 订阅{idx} - {sub.get('name', '')}")
         lines.append(f"SUBSCRIPTION_{idx}_NAME={sub.get('name', '')}")
+        owner_project = sub.get('owner_project') or sub.get('project')
+        if owner_project:
+            lines.append(f"SUBSCRIPTION_{idx}_OWNER_PROJECT={owner_project}")
         lines.append(f"SUBSCRIPTION_{idx}_CYCLE_TYPE={sub.get('cycle_type', 'monthly')}")
         lines.append(f"SUBSCRIPTION_{idx}_RENEWAL_DAY={sub.get('renewal_day', 1)}")
         lines.append(f"SUBSCRIPTION_{idx}_ALERT_DAYS_BEFORE={sub.get('alert_days_before', 3)}")

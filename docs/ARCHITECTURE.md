@@ -253,6 +253,16 @@ spec:
 
 ## 安全性
 
+## 配置归属
+- API 调用配置和订阅配置都使用 `owner_project` 标记所属业务项目
+- 余额接口保留 `project` 表示 API 调用项名称，并使用 `owner_project` 表示所属业务项目
+- 前端在 API 调用卡片和订阅卡片上都会显示所属项目
+
+### 认证与授权
+- `/api/*` 使用 API Key 认证
+- API Key 来自环境变量 `API_KEY` 或 `WEB_API_KEY`
+- 前端将用户输入的 API Key 持久保存在浏览器 `localStorage`
+
 ### 速率限制
 - 默认：100 req/min（每个 IP）
 - `/api/refresh`: 2 req/min + 30秒冷却

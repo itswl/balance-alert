@@ -86,6 +86,7 @@ class ProjectConfig(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(200), nullable=False, unique=True, comment='项目名称')
+    owner_project = Column(String(200), nullable=True, index=True, comment='所属项目名称')
     provider = Column(String(50), nullable=False, comment='Provider 类型')
     api_key = Column(String(500), nullable=False, comment='API Key')
     threshold = Column(Float, default=100.0, comment='告警阈值')
@@ -102,6 +103,7 @@ class ProjectConfig(Base):
         return {
             'id': self.id,
             'name': self.name,
+            'owner_project': self.owner_project,
             'provider': self.provider,
             'api_key': self.api_key,
             'threshold': self.threshold,
@@ -116,6 +118,7 @@ class SubscriptionConfig(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(200), nullable=False, unique=True, comment='订阅名称')
+    owner_project = Column(String(200), nullable=True, index=True, comment='所属项目名称')
     cycle_type = Column(String(20), default='monthly', comment='周期类型')
     renewal_day = Column(Integer, default=1, comment='续费日')
     alert_days_before = Column(Integer, default=3, comment='提前告警天数')
@@ -133,6 +136,7 @@ class SubscriptionConfig(Base):
         return {
             'id': self.id,
             'name': self.name,
+            'owner_project': self.owner_project,
             'cycle_type': self.cycle_type,
             'renewal_day': self.renewal_day,
             'alert_days_before': self.alert_days_before,

@@ -77,10 +77,13 @@ class WebhookAdapter:
         return f"{days} 天后"
 
     def _build_balance_text(self, project_name: str, provider: str, balance_type: str,
-                            current_value: float, threshold: float, unit: str) -> str:
+                            current_value: float, threshold: float, unit: str,
+                            owner_project: str = None) -> str:
         """生成余额告警通用文本"""
+        owner_text = f"所属项目: {owner_project}\n" if owner_project else ""
         return (
-            f"项目: {project_name}\n"
+            f"API 调用: {project_name}\n"
+            f"{owner_text}"
             f"服务商: {provider}\n"
             f"当前{balance_type}: {unit}{current_value:,.2f}\n"
             f"告警阈值: {unit}{threshold:,.2f}\n"
@@ -88,11 +91,14 @@ class WebhookAdapter:
         )
 
     def _build_subscription_text(self, subscription_name: str, renewal_day: int,
-                                 days_until_renewal: int, amount: float) -> str:
+                                 days_until_renewal: int, amount: float,
+                                 owner_project: str = None) -> str:
         """生成订阅提醒通用文本"""
         days_text = self._format_days_text(days_until_renewal)
+        project_text = f"所属项目: {owner_project}\n" if owner_project else ""
         return (
             f"订阅: {subscription_name}\n"
+            f"{project_text}"
             f"续费日期: 每月 {renewal_day} 号\n"
             f"距离续费: {days_text}\n"
             f"续费金额: {amount}"
@@ -120,12 +126,13 @@ class WebhookAdapter:
             }
 
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
-                          threshold: float, unit: str = '') -> bool:
+                          threshold: float, unit: str = '', owner_project: str = None) -> bool:
         """
         发送余额告警
 
         Args:
             project_name: 项目名称
+            owner_project: 所属项目名称
             provider: 服务商
             balance_type: 类型 (余额)
             current_value: 当前值
@@ -137,19 +144,20 @@ class WebhookAdapter:
         """
         if self.webhook_type == 'custom':
             return self._send_custom_balance_alert(
-                project_name, provider, balance_type, current_value, threshold, unit
+                project_name, provider, balance_type, current_value, threshold, unit, owner_project
             )
-        text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit)
+        text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit, owner_project)
         payload = self._wrap_payload("余额告警", text)
         return self._send_request(payload)
     
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
-                               amount: float) -> bool:
+                               amount: float, owner_project: str = None) -> bool:
         """
         发送订阅续费提醒
 
         Args:
             subscription_name: 订阅名称
+            owner_project: 所属项目名称
             renewal_day: 续费日期
             days_until_renewal: 距离续费天数
             amount: 续费金额
@@ -159,10 +167,10 @@ class WebhookAdapter:
         """
         if self.webhook_type == 'custom':
             return self._send_custom_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount
+                subscription_name, renewal_day, days_until_renewal, amount, owner_project
             )
         text = self._build_subscription_text(
-                subscription_name, renewal_day, days_until_renewal, amount
+                subscription_name, renewal_day, days_until_renewal, amount, owner_project
             )
         payload = self._wrap_payload("订阅续费提醒", text)
         return self._send_request(payload)
@@ -170,7 +178,7 @@ class WebhookAdapter:
     # ==================== 自定义格式 ====================
     
     def _send_custom_balance_alert(self, project_name, provider, balance_type,
-                                   current_value, threshold, unit):
+                                   current_value, threshold, unit, owner_project=None):
         """发送自定义格式余额告警"""
         payload = {
             "Type": "AlarmNotification",
@@ -178,6 +186,7 @@ class WebhookAdapter:
             "Level": "critical",
             "Resources": [{
                 "ProjectName": project_name,
+                "OwnerProject": owner_project,
                 "Provider": provider,
                 "BalanceType": balance_type,
                 "CurrentValue": current_value,
@@ -190,7 +199,7 @@ class WebhookAdapter:
         return self._send_request(payload)
     
     def _send_custom_subscription_alert(self, subscription_name, renewal_day,
-                                       days_until_renewal, amount):
+                                       days_until_renewal, amount, owner_project=None):
         """发送自定义格式订阅提醒"""
         payload = {
             "Type": "SubscriptionReminder",
@@ -198,6 +207,7 @@ class WebhookAdapter:
             "Level": "warning" if days_until_renewal > 0 else "critical",
             "Resources": [{
                 "SubscriptionName": subscription_name,
+                "OwnerProject": owner_project,
                 "RenewalDay": renewal_day,
                 "DaysUntilRenewal": days_until_renewal,
                 "Amount": amount,

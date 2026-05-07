@@ -37,6 +37,7 @@
   "subscriptions": [
     {
       "name": "emqx - mqtt - 授权",
+      "owner_project": "AI 平台",
       "cycle_type": "monthly",
       "renewal_day": 9,
       "alert_days_before": 3,
@@ -46,6 +47,7 @@
     },
     {
       "name": "融云 - im - 授权",
+      "owner_project": "云服务",
       "cycle_type": "monthly",
       "renewal_day": 17,
       "alert_days_before": 3,
@@ -56,6 +58,7 @@
     },
     {
       "name": "GitHub Copilot",
+      "owner_project": "AI 平台",
       "cycle_type": "yearly",
       "renewal_day": 1,
       "alert_days_before": 7,
@@ -66,6 +69,7 @@
     },
     {
       "name": "每周备份服务",
+      "owner_project": "数据服务",
       "cycle_type": "weekly",
       "renewal_day": 1,
       "alert_days_before": 1,
@@ -77,6 +81,7 @@
   "projects": [
     {
       "name": "OpenRouter",
+      "owner_project": "AI 平台",
       "provider": "openrouter",
       "_comment": "API Key 可从环境变量 API_KEY_OPENROUTER 覆盖",
       "api_key": "${API_KEY}",
@@ -86,6 +91,7 @@
     },
     {
       "name": "UniAPI",
+      "owner_project": "AI 平台",
       "provider": "uniapi",
       "_comment": "API Key 可从环境变量 API_KEY_UNIAPI 覆盖",
       "api_key": "${API_KEY}",
@@ -95,6 +101,7 @@
     },
     {
       "name": "WxRank-微信公众号",
+      "owner_project": "增长工具",
       "provider": "wxrank",
       "_comment": "API Key 可从环境变量 API_KEY_WXRANK微信公众号 覆盖",
       "api_key": "${API_KEY}",
@@ -104,6 +111,7 @@
     },
     {
       "name": "Volc-火山引擎-自然选择",
+      "owner_project": "云服务",
       "provider": "volc",
       "_comment": "API Key 可从环境变量 API_KEY_VOLC_火山引擎_自然选择 覆盖",
       "api_key": "${API_KEY}",
@@ -113,6 +121,7 @@
     },
     {
       "name": "Volc-火山引擎-陌玉",
+      "owner_project": "云服务",
       "provider": "volc",
       "_comment": "API Key 可从环境变量 API_KEY_VOLC_火山引擎_陌玉 覆盖",
       "api_key": "${API_KEY}",
@@ -122,6 +131,7 @@
     },
     {
       "name": "Aliyun-阿里云-1",
+      "owner_project": "云服务",
       "provider": "aliyun",
       "_comment": "API Key 可从环境变量 API_KEY_ALIYUN_阿里云_1 覆盖",
       "api_key": "${API_KEY}",
@@ -131,6 +141,7 @@
     },
     {
       "name": "Aliyun-阿里云-2",
+      "owner_project": "云服务",
       "provider": "aliyun",
       "_comment": "API Key 可从环境变量 API_KEY_ALIYUN_阿里云_2 覆盖",
       "api_key": "${API_KEY}",
@@ -140,6 +151,7 @@
     },
     {
       "name": "TikHub",
+      "owner_project": "数据服务",
       "provider": "tikhub",
       "_comment": "API Key 可从环境变量 API_KEY_TIKHUB 覆盖",
       "api_key": "${API_KEY}",

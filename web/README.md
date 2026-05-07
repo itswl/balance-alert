@@ -128,6 +128,10 @@ python main.py
 
 ### middleware.py - 中间件
 
+**protect_api_endpoints(app)**
+
+统一保护 `/api/*` 接口，请求必须携带 `X-API-Key` 或 `Authorization: Bearer <key>`，服务端使用环境变量 `API_KEY` 或 `WEB_API_KEY` 校验。
+
 **@validate_request(model_class)**
 
 请求验证装饰器，使用 Pydantic 模型验证请求体。

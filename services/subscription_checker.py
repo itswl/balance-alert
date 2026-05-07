@@ -62,6 +62,7 @@ class SubscriptionChecker:
     def _check_subscription(self, sub, today, current_day, dry_run):
         """检查单个订阅"""
         name = sub.get('name', '未知订阅')
+        owner_project = sub.get('owner_project') or sub.get('project')
         renewal_day = sub.get('renewal_day', 1)
         alert_days_before = sub.get('alert_days_before', 3)
         amount = sub.get('amount', 0)
@@ -70,6 +71,8 @@ class SubscriptionChecker:
         
         logger.info(f"{'='*60}")
         logger.info(f"📦 订阅: {name}")
+        if owner_project:
+            logger.info(f"   所属项目: {owner_project}")
 
         # 根据周期类型显示不同的续费信息
         cycle_text = self._get_cycle_text(cycle_type, renewal_day)
@@ -119,6 +122,7 @@ class SubscriptionChecker:
         
         return {
             'name': name,
+            'owner_project': owner_project,
             'renewal_day': renewal_day,
             'cycle_type': cycle_type,
             'days_until_renewal': days_until_renewal,
@@ -295,12 +299,14 @@ class SubscriptionChecker:
         
         # 获取订阅信息
         name = sub.get('name')
+        owner_project = sub.get('owner_project') or sub.get('project')
         renewal_day = sub.get('renewal_day')
         amount = sub.get('amount', 0)
         
         # 发送提醒
         return adapter.send_subscription_alert(
             subscription_name=name,
+            owner_project=owner_project,
             renewal_day=renewal_day,
             days_until_renewal=days_until_renewal,
             amount=amount
@@ -325,7 +331,8 @@ class SubscriptionChecker:
             for r in self.results:
                 status = "⚠️需提醒" if r.get('need_alert') else "✅正常"
                 days = r['days_until_renewal']
-                logger.info(f"  {status} {r['name']}: 还有 {days} 天续费")
+                owner_project = f" ({r['owner_project']})" if r.get('owner_project') else ""
+                logger.info(f"  {status} {r['name']}{owner_project}: 还有 {days} 天续费")
 
         logger.info(f"{'='*60}")
 

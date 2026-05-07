@@ -4,6 +4,17 @@
 
 - **Base URL**: `http://localhost:8080`
 - **格式**: JSON
+- **认证**: API Key
+
+## 认证
+
+所有 `/api/*` 接口都需要 API Key。前端会将输入的 API Key 保存在浏览器 `localStorage`，后续请求会自动通过 `X-API-Key` 请求头发送。
+
+```bash
+export API_KEY="your-secret-key"
+
+curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
+```
 
 ## 核心 API
 
@@ -35,6 +46,7 @@ GET /api/credits?force_refresh=true  # 强制刷新
   "projects": [
     {
       "name": "OpenRouter Main",
+      "owner_project": "AI 平台",
       "provider": "openrouter",
       "balance": 150.75,
       "threshold": 100.0,
@@ -72,6 +84,7 @@ GET /api/subscriptions
   "subscriptions": [
     {
       "name": "GitHub Copilot",
+      "owner_project": "AI 平台",
       "cycle_type": "monthly",
       "renewal_date": "2024-03-01",
       "days_until_renewal": 5,
@@ -91,6 +104,7 @@ Content-Type: application/json
 
 {
   "name": "Netflix Premium",
+  "owner_project": "AI 平台",
   "cycle_type": "monthly",
   "renewal_day": 15,
   "alert_days_before": 3,
@@ -177,8 +191,10 @@ GET /api/history/stats?days=30
 |--------|------|
 | 200 | 成功 |
 | 400 | 请求错误（参数验证失败） |
+| 401 | API Key 无效或未提供 |
 | 404 | 资源不存在 |
 | 429 | 请求过多（超出速率限制） |
+| 503 | API Key 未配置或服务不可用 |
 | 500 | 服务器错误 |
 
 ## 速率限制
@@ -207,9 +223,10 @@ X-RateLimit-Remaining: 0
 import requests
 
 class BalanceAlertClient:
-    def __init__(self, base_url):
+    def __init__(self, base_url, api_key):
         self.base_url = base_url
         self.session = requests.Session()
+        self.session.headers.update({'X-API-Key': api_key})
 
     def get_credits(self):
         """获取所有项目余额"""
@@ -225,7 +242,7 @@ class BalanceAlertClient:
         return resp.json()
 
 # 使用
-client = BalanceAlertClient('http://localhost:8080')
+client = BalanceAlertClient('http://localhost:8080', 'your-secret-key')
 projects = client.get_credits()
 for p in projects:
     print(f"{p['name']}: {p['balance']} {p['currency']}")

@@ -238,6 +238,14 @@
                 </div>
 
                 <div class="settings-section">
+                    <h3>访问认证</h3>
+                    <div class="form-group">
+                        <label for="setting-api-key">API Key</label>
+                        <input type="password" id="setting-api-key" autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="settings-section">
                     <h3>关于</h3>
                     <p style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.6;">
                         <strong>Balance Alert</strong><br>
@@ -249,6 +257,27 @@
             <div class="modal-footer">
                 <button type="button" class="btn-primary" onclick="closeSettingsModal()">关闭</button>
             </div>
+        </div>
+    </div>
+
+    <!-- API Key 认证模态框 -->
+    <div id="auth-modal" class="modal auth-modal">
+        <div class="modal-content auth-modal-content">
+            <div class="modal-header">
+                <h2>输入 API Key</h2>
+            </div>
+            <form id="auth-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="auth-api-key">API Key</label>
+                        <input type="password" id="auth-api-key" autocomplete="current-password" required>
+                    </div>
+                    <p id="auth-error" class="form-error" style="display: none;"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">保存并继续</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -301,6 +330,13 @@
                 <div class="form-group">
                     <label for="sub-name">订阅名称 *</label>
                     <input type="text" id="sub-name" required placeholder="例如：Netflix、云服务器">
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-owner-project">所属项目</label>
+                    <select id="sub-owner-project">
+                        <option value="">未关联项目</option>
+                    </select>
                 </div>
 
                 <div class="form-row">

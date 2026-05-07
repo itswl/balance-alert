@@ -432,6 +432,23 @@ body {
     color: var(--text-secondary);
 }
 
+.project-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.owner-project-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: rgba(99, 102, 241, 0.12);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
 .project-status {
     width: 12px;
     height: 12px;
@@ -562,6 +579,20 @@ body {
 .meta-item {
     font-size: 0.875rem;
     color: var(--text-secondary);
+}
+
+.project-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.project-meta svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
 }
 
 .subscription-status {
@@ -769,6 +800,14 @@ body {
     animation: modalSlideIn 0.3s ease;
 }
 
+.auth-modal {
+    z-index: 11000;
+}
+
+.auth-modal-content {
+    max-width: 420px;
+}
+
 @keyframes modalSlideIn {
     from {
         transform: translateY(-50px);
@@ -861,6 +900,13 @@ body {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-error {
+    color: var(--danger);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin: 0;
 }
 
 .form-row {
