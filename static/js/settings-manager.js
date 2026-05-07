@@ -7,7 +7,6 @@ function openSettingsModal() {
     // 加载当前设置
     const darkModeCheckbox = document.getElementById('setting-dark-mode');
     const autoRefreshCheckbox = document.getElementById('setting-auto-refresh');
-    const apiKeyInput = document.getElementById('setting-api-key');
 
     // 深色模式
     if (darkModeCheckbox) {
@@ -42,14 +41,6 @@ function openSettingsModal() {
                 }
             }
         });
-    }
-
-    if (apiKeyInput) {
-        apiKeyInput.value = API.getApiKey();
-        apiKeyInput.onchange = (e) => {
-            API.setApiKey(e.target.value);
-            UI.showToast(API.getApiKey() ? '✅ API Key 已保存' : '🗑️ API Key 已清除', 'info');
-        };
     }
 
     modal.classList.add('active');

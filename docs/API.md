@@ -4,20 +4,6 @@
 
 - **Base URL**: `http://localhost:8080`
 - **格式**: JSON
-- **认证**: API Key (Bearer Token)
-
-## 认证
-
-```bash
-# 设置 API Key
-export API_KEY="your-secret-key"
-
-# 请求方式1：Header
-curl -H "Authorization: Bearer your-key" http://localhost:8080/api/credits
-
-# 请求方式2：Query
-curl "http://localhost:8080/api/credits?api_key=your-key"
-```
 
 ## 核心 API
 
@@ -191,7 +177,6 @@ GET /api/history/stats?days=30
 |--------|------|
 | 200 | 成功 |
 | 400 | 请求错误（参数验证失败） |
-| 401 | 未授权（API Key 无效） |
 | 404 | 资源不存在 |
 | 429 | 请求过多（超出速率限制） |
 | 500 | 服务器错误 |
@@ -222,12 +207,9 @@ X-RateLimit-Remaining: 0
 import requests
 
 class BalanceAlertClient:
-    def __init__(self, base_url, api_key):
+    def __init__(self, base_url):
         self.base_url = base_url
         self.session = requests.Session()
-        self.session.headers.update({
-            'Authorization': f'Bearer {api_key}'
-        })
 
     def get_credits(self):
         """获取所有项目余额"""
@@ -243,7 +225,7 @@ class BalanceAlertClient:
         return resp.json()
 
 # 使用
-client = BalanceAlertClient('http://localhost:8080', 'your-api-key')
+client = BalanceAlertClient('http://localhost:8080')
 projects = client.get_credits()
 for p in projects:
     print(f"{p['name']}: {p['balance']} {p['currency']}")
@@ -256,22 +238,18 @@ for p in projects:
 curl http://localhost:8080/health
 
 # 获取余额
-curl -H "Authorization: Bearer KEY" \
-     http://localhost:8080/api/credits
+curl http://localhost:8080/api/credits
 
 # 刷新余额
-curl -X POST -H "Authorization: Bearer KEY" \
-     http://localhost:8080/api/refresh
+curl -X POST http://localhost:8080/api/refresh
 
 # 添加订阅
-curl -X POST -H "Authorization: Bearer KEY" \
-     -H "Content-Type: application/json" \
+curl -X POST -H "Content-Type: application/json" \
      -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"amount":99}' \
      http://localhost:8080/api/subscription/add
 
 # 查询趋势
-curl -H "Authorization: Bearer KEY" \
-     "http://localhost:8080/api/history/trend/abc123?days=30"
+curl "http://localhost:8080/api/history/trend/abc123?days=30"
 ```
 
 ## Swagger 文档

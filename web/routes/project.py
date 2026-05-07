@@ -5,7 +5,6 @@
 包含项目的配置更新功能
 """
 from flask import Blueprint, jsonify, request
-from ..middleware import require_api_key
 from ..utils import load_config_safe, audit_log
 from core.config_loader import clear_config_cache
 from database.repository import ConfigRepository
@@ -45,7 +44,6 @@ def get_projects_config():
 
 
 @project_bp.route('/config/threshold', methods=['POST'])
-@require_api_key
 def update_project_threshold():
     """更新项目阈值"""
     try:

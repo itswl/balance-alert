@@ -47,9 +47,6 @@ def create_app(state_manager: StateManager = None) -> Flask:
     # 启用 CORS
     CORS(app)
 
-    from .middleware import protect_api_endpoints
-    protect_api_endpoints(app)
-
     # 初始化状态管理器
     if state_manager is None:
         state_manager = StateManager()
@@ -99,7 +96,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
         state_manager: 状态管理器实例
     """
     from flask import jsonify, request
-    from .middleware import require_api_key
     from .utils import load_config_safe, audit_log
     from .handlers import update_balance_cache, refresh_credits
 
@@ -114,7 +110,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
         logger.warning(f"数据库模块不可用: {e}")
 
     @app.route('/api/history/balance', methods=['GET'])
-    @require_api_key
     def get_balance_history():
         """查询余额历史"""
         if not DB_AVAILABLE:
@@ -147,7 +142,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     @app.route('/api/history/trend/<project_id>', methods=['GET'])
-    @require_api_key
     def get_balance_trend(project_id: str):
         """获取余额趋势分析"""
         if not DB_AVAILABLE:
@@ -178,7 +172,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     @app.route('/api/history/alerts', methods=['GET'])
-    @require_api_key
     def get_alert_history():
         """查询告警历史"""
         if not DB_AVAILABLE:
@@ -211,7 +204,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     @app.route('/api/history/stats', methods=['GET'])
-    @require_api_key
     def get_alert_statistics():
         """获取告警统计"""
         if not DB_AVAILABLE:
@@ -235,7 +227,6 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
     @app.route('/api/history/projects', methods=['GET'])
-    @require_api_key
     def get_all_projects_summary():
         """获取所有项目摘要"""
         if not DB_AVAILABLE:

@@ -9,7 +9,6 @@ import time
 import threading
 from flask import Blueprint, jsonify, request, render_template, send_from_directory
 from pathlib import Path
-from ..middleware import require_api_key
 from ..utils import get_enable_web_alarm, make_etag_response
 from ..handlers import update_balance_cache, refresh_credits
 from core.state_manager import StateManager
@@ -112,7 +111,6 @@ def health():
 
 
 @core_bp.route('/api/credits')
-@require_api_key
 def get_credits():
     """获取所有项目的余额信息"""
     balance_state = _state_manager.get_balance_state()
@@ -128,7 +126,6 @@ def get_credits():
 
 
 @core_bp.route('/api/refresh', methods=['GET', 'POST'])
-@require_api_key
 def refresh_credits_route():
     """
     手动刷新余额
