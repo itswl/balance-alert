@@ -5,7 +5,7 @@
 包含订阅的增删改查、标记续费等功能
 """
 from flask import Blueprint, jsonify, request
-from ..middleware import require_api_key, validate_request
+from ..middleware import validate_request
 from ..utils import load_config_safe, audit_log
 from core.config_loader import clear_config_cache
 from database.repository import ConfigRepository
@@ -57,7 +57,6 @@ def get_subscriptions_config():
 
 
 @subscription_bp.route('/config/subscription', methods=['POST'])
-@require_api_key
 @validate_request(UpdateSubscriptionRequest)
 def update_subscription(validated_data: UpdateSubscriptionRequest):
     """更新订阅配置"""
@@ -133,7 +132,6 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
 
 
 @subscription_bp.route('/subscription/add', methods=['POST'])
-@require_api_key
 @validate_request(AddSubscriptionRequest)
 def add_subscription(validated_data: AddSubscriptionRequest):
     """添加新订阅"""
@@ -188,7 +186,6 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 
 
 @subscription_bp.route('/subscription/delete', methods=['POST', 'DELETE'])
-@require_api_key
 @validate_request(DeleteSubscriptionRequest)
 def delete_subscription(validated_data: DeleteSubscriptionRequest):
     """删除订阅"""
@@ -231,7 +228,6 @@ def delete_subscription(validated_data: DeleteSubscriptionRequest):
 
 
 @subscription_bp.route('/subscription/mark_renewed', methods=['POST'])
-@require_api_key
 def mark_subscription_renewed():
     """标记订阅已续费"""
     try:
@@ -263,6 +259,8 @@ def mark_subscription_renewed():
         # 刷新缓存
         refresh_subscription_cache('config.json', _state_manager)
 
+        config = load_config_safe()
+
         # 计算下次续费日期
         from ..handlers import calculate_next_renewal_date
         from datetime import datetime
@@ -285,7 +283,6 @@ def mark_subscription_renewed():
 
 
 @subscription_bp.route('/subscription/clear_renewed', methods=['POST'])
-@require_api_key
 def clear_subscription_renewed():
     """清除订阅的续费标记"""
     try:

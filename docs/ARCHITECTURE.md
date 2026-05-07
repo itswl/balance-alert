@@ -253,10 +253,6 @@ spec:
 
 ## 安全性
 
-### 认证与授权
-- API Key 认证（环境变量 `API_KEY`）
-- JWT 认证（可选，`ENABLE_JWT=true`）
-
 ### 速率限制
 - 默认：100 req/min（每个 IP）
 - `/api/refresh`: 2 req/min + 30秒冷却

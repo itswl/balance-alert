@@ -8,7 +8,7 @@
 web/
 ├── __init__.py              # 模块入口
 ├── app.py                   # Flask 应用工厂
-├── middleware.py            # 中间件（认证、验证）
+├── middleware.py            # 中间件（请求验证）
 ├── utils.py                 # 工具函数
 ├── routes/                  # 路由蓝图
 │   ├── __init__.py
@@ -29,7 +29,7 @@ web/
 
 - **routes/**：处理 HTTP 请求/响应，路由定义
 - **handlers/**：业务逻辑处理，与框架解耦
-- **middleware.py**：横切关注点（认证、验证）
+- **middleware.py**：横切关注点（请求验证）
 - **utils.py**：工具函数，可复用
 
 ### 2. Flask Blueprint
@@ -127,12 +127,6 @@ python main.py
 - 注册错误处理器
 
 ### middleware.py - 中间件
-
-**@require_api_key**
-
-API 认证装饰器，支持两种方式：
-1. Header: `Authorization: Bearer <key>`
-2. Query: `?api_key=<key>`
 
 **@validate_request(model_class)**
 

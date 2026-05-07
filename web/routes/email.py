@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request
-from ..middleware import require_api_key
 from ..utils import audit_log
 from core.config_loader import clear_config_cache
 from database.repository import ConfigRepository
@@ -18,7 +17,6 @@ def get_emails_config():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @email_bp.route('/config/email', methods=['POST'])
-@require_api_key
 def save_email():
     """添加或更新邮箱配置"""
     try:
@@ -38,7 +36,6 @@ def save_email():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @email_bp.route('/config/email/delete', methods=['POST'])
-@require_api_key
 def delete_email():
     """删除邮箱配置"""
     try:
