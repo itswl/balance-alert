@@ -6,6 +6,7 @@
 """
 import os
 import signal
+import sys
 import threading
 import time
 from web import create_app
@@ -23,6 +24,7 @@ logger = get_logger('web_server')
 
 # 优雅关闭事件
 _stop_event = threading.Event()
+_shutdown_signal_count = 0
 
 # 全局状态管理器和数据检测器
 from database.repository import BalanceRepository, SubscriptionRepository
@@ -206,9 +208,16 @@ if __name__ == '__main__':
 
     # 注册信号处理器实现优雅关闭
     def _shutdown_handler(signum, frame):
+        global _shutdown_signal_count
+        _shutdown_signal_count += 1
         sig_name = signal.Signals(signum).name
+        if _shutdown_signal_count > 1:
+            logger.warning(f"再次收到 {sig_name} 信号，强制退出")
+            os._exit(128 + signum)
+
         logger.info(f"收到 {sig_name} 信号，正在优雅关闭...")
         _stop_event.set()
+        raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
@@ -217,6 +226,8 @@ if __name__ == '__main__':
     start_config_watcher('config.json')
 
     # 初始化数据库（如果启用）
+    update_thread = None
+
     try:
         from database import init_database
         if init_database():
@@ -257,9 +268,14 @@ if __name__ == '__main__':
             logger.warning("waitress 未安装，使用 Flask 开发服务器")
             app.run(host='0.0.0.0', port=web_port, debug=False)
 
+    except KeyboardInterrupt:
+        logger.info("主进程退出中...")
+        sys.exit(0)
     finally:
         # 优雅关闭：通知后台线程停止
         _stop_event.set()
+        if update_thread and update_thread.is_alive():
+            update_thread.join(timeout=5)
         # 停止配置文件监听器
         stop_config_watcher()
         logger.info("服务已关闭")
