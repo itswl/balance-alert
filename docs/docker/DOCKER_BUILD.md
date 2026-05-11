@@ -110,8 +110,9 @@ docker run -d \
 ### 5. 验证界面
 
 ```bash
-# 检查健康状态
-curl http://localhost:8080/health
+# 检查存活/就绪状态
+curl http://localhost:8080/live
+curl http://localhost:8080/ready
 
 # 访问 Web 界面
 open http://localhost:8080
@@ -301,7 +302,7 @@ jobs:
         run: |
           docker run -d --name test -p 8080:8080 balance-alert:latest
           sleep 10
-          curl -f http://localhost:8080/health
+          curl -f http://localhost:8080/live
           docker stop test
 ```
 

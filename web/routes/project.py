@@ -5,7 +5,7 @@
 包含项目的配置更新功能
 """
 from flask import Blueprint, jsonify, request
-from ..utils import load_config_safe, audit_log
+from ..utils import load_config_safe, audit_log, mask_project_config
 from core.config_loader import clear_config_cache
 from database.repository import ConfigRepository
 from ..handlers import refresh_subscription_cache
@@ -37,7 +37,7 @@ def get_projects_config():
     """获取所有项目配置"""
     try:
         config = load_config_safe()
-        projects = config.get('projects', [])
+        projects = [mask_project_config(project) for project in config.get('projects', [])]
         return jsonify({'status': 'success', 'projects': projects})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500

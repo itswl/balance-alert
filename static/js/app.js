@@ -29,6 +29,22 @@ const Utils = {
         return new Intl.NumberFormat('zh-CN').format(num);
     },
 
+    // HTML 文本转义
+    escapeHTML(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[char]));
+    },
+
+    // HTML 属性转义
+    escapeAttr(value) {
+        return this.escapeHTML(value);
+    },
+
     // 格式化日期
     formatDate(dateString) {
         if (!dateString) return '-';
@@ -255,10 +271,15 @@ const UI = {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <div style="flex: 1;">${message}</div>
-            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0; width: 24px; height: 24px;">×</button>
-        `;
+        const text = document.createElement('div');
+        text.style.flex = '1';
+        text.textContent = message;
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.textContent = '×';
+        closeBtn.style.cssText = 'background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.25rem; padding: 0; width: 24px; height: 24px;';
+        closeBtn.addEventListener('click', () => toast.remove());
+        toast.append(text, closeBtn);
         container.appendChild(toast);
 
         // 3秒后自动移除
@@ -301,19 +322,26 @@ const UI = {
         const percentage = Utils.getBalancePercentage(balance, threshold);
         const projectStatus = project.need_alarm ? 'alert' : 'normal';
         const ownerProject = project.owner_project || '未关联项目';
+        const projectName = project.project || project.name || '未知项目';
+        const provider = project.provider || 'unknown';
+        const projectNameEscaped = Utils.escapeHTML(projectName);
+        const providerEscaped = Utils.escapeHTML(provider);
+        const ownerProjectEscaped = Utils.escapeHTML(ownerProject);
+        const projectNameAttr = Utils.escapeAttr(projectName);
+        const providerAttr = Utils.escapeAttr(provider);
 
         return `
-            <div class="project-card" data-provider="${project.provider}" data-status="${projectStatus}">
+            <div class="project-card" data-provider="${providerAttr}" data-status="${projectStatus}">
                 <div class="project-header">
                     <div class="project-info">
-                        <h3>${project.project}</h3>
+                        <h3>${projectNameEscaped}</h3>
                         <div class="project-meta-row">
-                            <span class="project-provider">${project.provider}</span>
-                            <span class="owner-project-badge">${ownerProject}</span>
+                            <span class="project-provider">${providerEscaped}</span>
+                            <span class="owner-project-badge">${ownerProjectEscaped}</span>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <button class="action-icon-btn" onclick="editProjectThreshold('${project.project}', ${threshold})" title="编辑阈值">
+                        <button class="action-icon-btn js-edit-threshold" data-project="${projectNameAttr}" data-threshold="${Utils.escapeAttr(threshold)}" title="编辑阈值">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -348,7 +376,7 @@ const UI = {
                     </div>
                 </div>
                 <div class="project-actions">
-                    <button class="btn-link" onclick="showProjectTrend('${project.project}', '${project.provider}')">
+                    <button class="btn-link js-show-trend" data-project="${projectNameAttr}" data-provider="${providerAttr}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 4px;">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                         </svg>
@@ -365,47 +393,52 @@ const UI = {
         const cycleText = sub.cycle_type === 'monthly' ? '月付' : sub.cycle_type === 'yearly' ? '年付' : '周付';
         const amount = parseFloat(sub.amount) || 0;
         const ownerProject = sub.owner_project || '未关联项目';
+        const subName = sub.name || '未知订阅';
+        const subNameEscaped = Utils.escapeHTML(subName);
+        const ownerProjectEscaped = Utils.escapeHTML(ownerProject);
+        const subNameAttr = Utils.escapeAttr(subName);
+        const nextRenewalEscaped = Utils.escapeHTML(sub.next_renewal_date || '');
 
         return `
             <div class="subscription-card">
                 <div class="subscription-info">
-                    <h3>${sub.name}</h3>
+                    <h3>${subNameEscaped}</h3>
                     <div class="subscription-meta">
                         <span class="meta-item project-meta">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
                                 <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
                             </svg>
-                            ${ownerProject}
+                            ${ownerProjectEscaped}
                         </span>
                         <span class="meta-item">💰 ${Utils.formatCurrency(amount)}</span>
                         <span class="meta-item">📅 ${cycleText}</span>
-                        ${sub.next_renewal_date ? `<span class="meta-item">📆 下次续费: ${sub.next_renewal_date}</span>` : ''}
+                        ${sub.next_renewal_date ? `<span class="meta-item">📆 下次续费: ${nextRenewalEscaped}</span>` : ''}
                         ${sub.already_renewed ? `<span class="meta-item">✅ 已续费</span>` : ''}
                     </div>
                 </div>
                 <div class="subscription-status">
                     <div class="subscription-actions">
                         ${!sub.already_renewed ? `
-                        <button class="action-icon-btn success" onclick="markSubscriptionRenewed('${sub.name}')" title="标记已续费">
+                        <button class="action-icon-btn success js-mark-renewed" data-name="${subNameAttr}" title="标记已续费">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                         </button>
                         ` : `
-                        <button class="action-icon-btn" onclick="clearSubscriptionRenewed('${sub.name}')" title="取消续费标记">
+                        <button class="action-icon-btn js-clear-renewed" data-name="${subNameAttr}" title="取消续费标记">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <path d="M3 3l18 18M18 6l-12 12"></path>
                             </svg>
                         </button>
                         `}
-                        <button class="action-icon-btn" onclick="editSubscription('${sub.name}')" title="编辑">
+                        <button class="action-icon-btn js-edit-subscription" data-name="${subNameAttr}" title="编辑">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                             </svg>
                         </button>
-                        <button class="action-icon-btn danger" onclick="deleteSubscription('${sub.name}')" title="删除">
+                        <button class="action-icon-btn danger js-delete-subscription" data-name="${subNameAttr}" title="删除">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <polyline points="3 6 5 6 21 6"></polyline>
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -444,8 +477,8 @@ const UI = {
         if (AppState.searchQuery) {
             const query = AppState.searchQuery.toLowerCase();
             filteredProjects = filteredProjects.filter(p =>
-                p.project.toLowerCase().includes(query) ||
-                p.provider.toLowerCase().includes(query)
+                (p.project || '').toLowerCase().includes(query) ||
+                (p.provider || '').toLowerCase().includes(query)
             );
         }
 
@@ -508,12 +541,18 @@ const UI = {
         const select = document.getElementById('provider-filter');
         const providers = [...new Set((data.projects || []).map(p => p.provider))];
 
-        const options = ['<option value="all">全部平台</option>'];
-        providers.forEach(provider => {
-            options.push(`<option value="${provider}">${provider}</option>`);
-        });
+        select.innerHTML = '';
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = '全部平台';
+        select.appendChild(allOption);
 
-        select.innerHTML = options.join('');
+        providers.forEach(provider => {
+            const option = document.createElement('option');
+            option.value = provider;
+            option.textContent = provider;
+            select.appendChild(option);
+        });
     },
 };
 
@@ -521,8 +560,6 @@ const UI = {
 const App = {
     // 初始化
     async init() {
-        console.log('🚀 Balance Alert 初始化...');
-
         // 初始化主题
         this.initTheme();
 
@@ -534,8 +571,6 @@ const App = {
 
         // 启动自动刷新
         this.startAutoRefresh();
-
-        console.log('✅ 初始化完成');
     },
 
     // 初始化主题
@@ -605,6 +640,43 @@ const App = {
             AppState.currentFilter = e.target.value;
             if (AppState.balanceData) {
                 UI.renderProjects(AppState.balanceData);
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const editThresholdBtn = event.target.closest('.js-edit-threshold');
+            if (editThresholdBtn) {
+                editProjectThreshold(editThresholdBtn.dataset.project, parseFloat(editThresholdBtn.dataset.threshold || '0'));
+                return;
+            }
+
+            const trendBtn = event.target.closest('.js-show-trend');
+            if (trendBtn) {
+                showProjectTrend(trendBtn.dataset.project, trendBtn.dataset.provider);
+                return;
+            }
+
+            const markRenewedBtn = event.target.closest('.js-mark-renewed');
+            if (markRenewedBtn) {
+                markSubscriptionRenewed(markRenewedBtn.dataset.name);
+                return;
+            }
+
+            const clearRenewedBtn = event.target.closest('.js-clear-renewed');
+            if (clearRenewedBtn) {
+                clearSubscriptionRenewed(clearRenewedBtn.dataset.name);
+                return;
+            }
+
+            const editSubscriptionBtn = event.target.closest('.js-edit-subscription');
+            if (editSubscriptionBtn) {
+                editSubscription(editSubscriptionBtn.dataset.name);
+                return;
+            }
+
+            const deleteSubscriptionBtn = event.target.closest('.js-delete-subscription');
+            if (deleteSubscriptionBtn) {
+                deleteSubscription(deleteSubscriptionBtn.dataset.name);
             }
         });
     },
@@ -702,7 +774,6 @@ const App = {
     startAutoRefresh() {
         // 每5分钟自动刷新一次数据（不调用 API refresh，只 reload）
         AppState.autoRefreshInterval = setInterval(async () => {
-            console.log('🔄 自动刷新数据...');
             try {
                 const [balanceData, subscriptionData] = await Promise.all([
                     API.getCredits(),

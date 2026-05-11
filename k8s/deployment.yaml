@@ -94,7 +94,7 @@ spec:
           # 存活探针：检测容器是否需要重启
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: web
             initialDelaySeconds: 30
             periodSeconds: 30
@@ -116,7 +116,7 @@ spec:
           # 启动探针：检测容器是否已启动（避免慢启动被 kill）
           startupProbe:
             httpGet:
-              path: /health
+              path: /live
               port: web
             initialDelaySeconds: 0
             periodSeconds: 5

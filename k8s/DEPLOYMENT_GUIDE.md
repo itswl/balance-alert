@@ -121,8 +121,9 @@ kubectl get svc -n balance-alert
 # 查看 Pod 日志
 kubectl logs -f deployment/balance-alert -n balance-alert
 
-# 测试健康检查
-kubectl exec -it deployment/balance-alert -n balance-alert -- curl localhost:8080/health
+# 测试存活/就绪检查
+kubectl exec -it deployment/balance-alert -n balance-alert -- curl localhost:8080/live
+kubectl exec -it deployment/balance-alert -n balance-alert -- curl localhost:8080/ready
 
 # 端口转发到本地测试
 kubectl port-forward svc/balance-alert -n balance-alert 8080:8080

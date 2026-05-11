@@ -44,8 +44,14 @@ def create_app(state_manager: StateManager = None) -> Flask:
     app.config['JSON_AS_ASCII'] = False  # 支持中文JSON
     app.config['JSON_SORT_KEYS'] = False  # 保持JSON键顺序
 
-    # 启用 CORS
-    CORS(app)
+    # 按需启用 CORS；同源前端无需开启，生产环境建议通过 CORS_ORIGINS 白名单控制。
+    if os.environ.get('WEB_ENABLE_CORS', 'false').lower() == 'true':
+        raw_origins = os.environ.get('CORS_ORIGINS', '')
+        origins = [origin.strip() for origin in raw_origins.split(',') if origin.strip()]
+        if origins:
+            CORS(app, origins=origins)
+        else:
+            logger.warning("WEB_ENABLE_CORS=true 但未设置 CORS_ORIGINS，已跳过 CORS 开启")
 
     from .middleware import protect_api_endpoints
     protect_api_endpoints(app)

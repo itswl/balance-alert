@@ -72,7 +72,7 @@ USER appuser
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/live || exit 1
 
 # 暴露端口（文档用途）
 EXPOSE 8080 9100

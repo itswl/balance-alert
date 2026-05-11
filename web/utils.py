@@ -145,8 +145,17 @@ def validate_renewal_day(renewal_day: int, cycle_type: str) -> Optional[str]:
             return "月度订阅的 renewal_day 必须在 1-31 之间"
     elif cycle_type == 'yearly':
         # renewal_day 存储的是 MMDD 格式的整数，例如 315 表示 3月15日
+        if renewal_day <= 31:
+            return None
         if not (101 <= renewal_day <= 1231):
             return "年度订阅的 renewal_day 格式错误，应为 MMDD（如 315 表示 3月15日）"
+        month = renewal_day // 100
+        day = renewal_day % 100
+        try:
+            from datetime import date
+            date(2024, month, day)
+        except ValueError:
+            return "年度订阅的 renewal_day 日期无效，应为有效 MMDD（如 315 表示 3月15日）"
     else:
         return f"不支持的周期类型: {cycle_type}"
 
@@ -214,3 +223,29 @@ def audit_log(action: str, details: Dict[str, Any]) -> None:
         details: 操作详情
     """
     logger.info(f"[AUDIT] {action}: {json.dumps(details, ensure_ascii=False)}")
+
+
+def mask_secret(value: Any, visible_prefix: int = 4, visible_suffix: int = 4) -> str:
+    """对 API Key、密码等敏感字段做展示用脱敏。"""
+    if value is None:
+        return ''
+    text = str(value)
+    if not text:
+        return ''
+    if len(text) <= visible_prefix + visible_suffix:
+        return '***'
+    return f"{text[:visible_prefix]}***{text[-visible_suffix:]}"
+
+
+def mask_project_config(project: Dict[str, Any]) -> Dict[str, Any]:
+    masked = dict(project)
+    if 'api_key' in masked:
+        masked['api_key'] = mask_secret(masked.get('api_key'))
+    return masked
+
+
+def mask_email_config(email_config: Dict[str, Any]) -> Dict[str, Any]:
+    masked = dict(email_config)
+    if 'password' in masked:
+        masked['password'] = '***' if masked.get('password') else ''
+    return masked

@@ -5,7 +5,7 @@
 提供数据库 CRUD 操作封装
 """
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, desc
 from core.logger import get_logger
 from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
@@ -13,6 +13,12 @@ import json
 from .engine import get_session, ENABLE_DATABASE
 
 logger = get_logger('repository')
+
+
+def utcnow() -> datetime:
+    """Return naive UTC datetime for existing database columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 class ConfigRepository:
     """配置数据访问"""
@@ -47,6 +53,8 @@ class ConfigRepository:
             email = session.query(EmailConfig).filter_by(name=email_data['name']).first()
             if email:
                 for k, v in email_data.items():
+                    if k == 'password' and v == '***':
+                        continue
                     setattr(email, k, v)
             else:
                 email = EmailConfig(**email_data)
@@ -126,6 +134,8 @@ class ConfigRepository:
             project = session.query(ProjectConfig).filter_by(name=project_data['name']).first()
             if project:
                 for k, v in project_data.items():
+                    if k == 'api_key' and v == '***':
+                        continue
                     setattr(project, k, v)
             else:
                 project = ProjectConfig(**project_data)
@@ -183,6 +193,7 @@ class ConfigRepository:
             logger.error(f"删除订阅失败: {e}")
             return False
 
+
 class EmailRepository:
     """邮件历史数据访问"""
 
@@ -217,7 +228,7 @@ class EmailRepository:
                 amount=amount,
                 matched_keywords=keywords_json,
                 alert_sent=alert_sent,
-                timestamp=datetime.utcnow()
+                timestamp=utcnow()
             )
 
             session.add(record)
@@ -234,6 +245,42 @@ class EmailRepository:
                 session.rollback()
                 session.close()
             return None
+
+    @staticmethod
+    def has_recent_email_alert(
+        mailbox: str,
+        sender: str,
+        subject: str,
+        date: str,
+        days: int = 30
+    ) -> bool:
+        """检查近期是否已经成功发送过同一封告警邮件。"""
+        if not ENABLE_DATABASE:
+            return False
+
+        session = None
+        try:
+            session = get_session()
+            if session is None:
+                return False
+
+            since = utcnow() - timedelta(days=days)
+            exists = session.query(EmailAlertHistory.id)\
+                .filter(EmailAlertHistory.mailbox == mailbox)\
+                .filter(EmailAlertHistory.sender == sender)\
+                .filter(EmailAlertHistory.subject == subject)\
+                .filter(EmailAlertHistory.date == date)\
+                .filter(EmailAlertHistory.alert_sent.is_(True))\
+                .filter(EmailAlertHistory.timestamp >= since)\
+                .first() is not None
+            return exists
+
+        except Exception as e:
+            logger.error(f"查询邮件告警去重记录失败: {e}", exc_info=True)
+            return False
+        finally:
+            if session:
+                session.close()
 
 
 class BalanceRepository:
@@ -266,7 +313,7 @@ class BalanceRepository:
                 threshold=threshold,
                 balance_type=balance_type,
                 need_alarm=need_alarm,
-                timestamp=datetime.utcnow()
+                timestamp=utcnow()
             )
 
             session.add(record)
@@ -329,7 +376,7 @@ class BalanceRepository:
             query = session.query(BalanceHistory)
 
             # 时间范围筛选
-            since = datetime.utcnow() - timedelta(days=days)
+            since = utcnow() - timedelta(days=days)
             query = query.filter(BalanceHistory.timestamp >= since)
 
             # 项目筛选
@@ -366,7 +413,7 @@ class BalanceRepository:
             if session is None:
                 return {'error': 'Database not available'}
 
-            since = datetime.utcnow() - timedelta(days=days)
+            since = utcnow() - timedelta(days=days)
 
             # 查询原始数据
             records = session.query(BalanceHistory)\
@@ -484,7 +531,7 @@ class AlertRepository:
                 message=message,
                 balance_value=balance_value,
                 threshold_value=threshold_value,
-                timestamp=datetime.utcnow()
+                timestamp=utcnow()
             )
 
             session.add(record)
@@ -501,6 +548,39 @@ class AlertRepository:
                 session.rollback()
                 session.close()
             return None
+
+    @staticmethod
+    def has_recent_alert(
+        project_id: str,
+        alert_type: str,
+        within_seconds: int,
+        status: str = 'sent'
+    ) -> bool:
+        """检查指定告警在冷却窗口内是否已经发送过。"""
+        if not ENABLE_DATABASE or within_seconds <= 0:
+            return False
+
+        session = None
+        try:
+            session = get_session()
+            if session is None:
+                return False
+
+            since = utcnow() - timedelta(seconds=within_seconds)
+            query = session.query(AlertHistory.id)\
+                .filter(AlertHistory.project_id == project_id)\
+                .filter(AlertHistory.alert_type == alert_type)\
+                .filter(AlertHistory.timestamp >= since)
+            if status:
+                query = query.filter(AlertHistory.status == status)
+            return query.first() is not None
+
+        except Exception as e:
+            logger.error(f"查询告警冷却记录失败: {e}", exc_info=True)
+            return False
+        finally:
+            if session:
+                session.close()
 
     @staticmethod
     def get_recent_alerts(
@@ -521,7 +601,7 @@ class AlertRepository:
             query = session.query(AlertHistory)
 
             # 时间范围
-            since = datetime.utcnow() - timedelta(days=days)
+            since = utcnow() - timedelta(days=days)
             query = query.filter(AlertHistory.timestamp >= since)
 
             # 项目筛选
@@ -557,7 +637,7 @@ class AlertRepository:
             if session is None:
                 return {'error': 'Database not available'}
 
-            since = datetime.utcnow() - timedelta(days=days)
+            since = utcnow() - timedelta(days=days)
 
             # 总告警数
             total_alerts = session.query(func.count(AlertHistory.id))\
@@ -630,7 +710,7 @@ class SubscriptionRepository:
                 days_until_renewal=days_until_renewal,
                 amount=amount,
                 need_renewal=need_renewal,
-                timestamp=datetime.utcnow()
+                timestamp=utcnow()
             )
 
             session.add(record)
@@ -665,7 +745,7 @@ class SubscriptionRepository:
 
             query = session.query(SubscriptionHistory)
 
-            since = datetime.utcnow() - timedelta(days=days)
+            since = utcnow() - timedelta(days=days)
             query = query.filter(SubscriptionHistory.timestamp >= since)
 
             if subscription_id:

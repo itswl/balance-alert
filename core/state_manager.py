@@ -53,6 +53,7 @@ class StateManager:
         self._lock: threading.RLock = threading.RLock()
         self._callbacks: List[Callable[[str, Any], None]] = []
         self._cache_file: str = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
+        self._start_time: float = time.time()
         # 预计算快照，避免每次 get 都 deepcopy
         self._balance_snapshot: Optional[Dict[str, Any]] = None
         self._subscription_snapshot: Optional[Dict[str, Any]] = None

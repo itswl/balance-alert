@@ -57,16 +57,34 @@ def get_email_password_from_env(email_name: str) -> Optional[str]:
     return get_env('EMAIL_PASSWORD')
 
 
+def _env_token(value: str) -> str:
+    """将项目名转换为环境变量安全片段。"""
+    return re.sub(r'[^A-Z0-9]+', '_', value.upper()).strip('_')
+
+
 def get_api_key_from_env(project_name: str) -> Optional[str]:
     """从环境变量获取 API Key"""
-    # 尝试特定项目的环境变量
-    specific_key = f'{project_name.upper().replace(" ", "_").replace("-", "_")}_API_KEY'
-    api_key = get_env(specific_key)
-    if api_key:
-        return api_key
+    project_token = _env_token(project_name)
+    candidates = [
+        f'{project_token}_API_KEY',
+        f'API_KEY_{project_token}',
+    ]
 
-    # 尝试通用环境变量
-    return get_env('API_KEY')
+    for key in candidates:
+        api_key = get_env(key)
+        if api_key:
+            return api_key
+
+    # 项目密钥的通用 fallback 使用 PROJECT_API_KEY，避免与 Web 认证 API_KEY 混用。
+    generic_key = get_env('PROJECT_API_KEY') or get_env('DEFAULT_PROJECT_API_KEY')
+    if generic_key:
+        return generic_key
+
+    # 兼容旧部署：显式打开后才允许 API_KEY 作为项目通用密钥。
+    if get_env('ALLOW_LEGACY_PROJECT_API_KEY', 'false').lower() == 'true':
+        return get_env('API_KEY')
+
+    return None
 
 
 def load_emails_from_env() -> List[Dict[str, Any]]:

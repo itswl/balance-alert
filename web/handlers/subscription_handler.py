@@ -87,10 +87,16 @@ def calculate_next_renewal_date(cycle_type: str, renewal_day: int, from_date: da
         return datetime(next_year, next_month, actual_day)
 
     elif cycle_type == 'yearly':
-        # renewal_day 格式: MMDD (如 315 表示 3月15日)
+        # 新格式: renewal_day 为 MMDD (如 315 表示 3月15日)。
+        # 兼容旧格式：1-31 时按 from_date 的周年日计算。
+        if renewal_day <= 31:
+            try:
+                return from_date.replace(year=from_date.year + 1)
+            except ValueError:
+                return from_date.replace(year=from_date.year + 1, day=28)
+
         renewal_month = renewal_day // 100
         renewal_day_of_month = renewal_day % 100
-
         next_year = from_date.year + 1
         return datetime(next_year, renewal_month, renewal_day_of_month)
 

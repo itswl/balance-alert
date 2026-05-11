@@ -71,6 +71,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    document.querySelectorAll('.js-close-settings-modal').forEach((button) => {
+        button.addEventListener('click', closeSettingsModal);
+    });
+
     // 模态框点击外部关闭
     const modal = document.getElementById('settings-modal');
     if (modal) {

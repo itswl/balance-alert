@@ -40,6 +40,9 @@ Thumbs.db
 logs/
 *.log
 
+# Local debug scripts
+scripts/debug/test_database.py
+
 # Docker
 # .dockerignore
 
@@ -51,9 +54,6 @@ config.json
 .env.local
 .env.*.local
 *.env.backup*
-
-# Test files
-test_*.py
 
 # db
 *.db

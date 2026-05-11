@@ -4,6 +4,7 @@
 支持配置驱动的多项目余额检查和告警
 """
 import json
+import os
 import sys
 import argparse
 import hashlib
@@ -44,8 +45,21 @@ PROVIDER_CACHE_TTL = 600  # 实例缓存 10 分钟
 _provider_cache: Dict[str, Tuple[float, Any]] = {}
 
 
+def _get_alert_cooldown_seconds(config: Dict[str, Any]) -> int:
+    """获取告警冷却时间，默认 24 小时。"""
+    env_value = os.environ.get('ALERT_COOLDOWN_SECONDS')
+    raw_value = env_value if env_value is not None else config.get('settings', {}).get('alert_cooldown_seconds', 86400)
+    try:
+        return max(0, int(raw_value))
+    except (TypeError, ValueError):
+        return 86400
+
+
 def _get_or_create_provider(provider_name: str, api_key: str) -> Any:
     """获取或创建 Provider 实例（带 TTL 缓存）"""
+    if not api_key:
+        raise ValueError(f"项目缺少 API Key，无法创建服务商适配器: {provider_name}")
+
     cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
     now = time.time()
 
@@ -141,6 +155,9 @@ class CreditMonitor:
                 'alarm_sent': False
             }
         
+        result = None
+        cached = False
+
         # 检查 TTL 缓存
         cache_ttl = self.config.get('settings', {}).get('response_cache_ttl', DEFAULT_RESPONSE_CACHE_TTL)
         cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
@@ -152,24 +169,11 @@ class CreditMonitor:
                     if time.time() - cached_time < cache_ttl:
                         logger.info(f"[{project_name}] 使用缓存结果 (TTL: {cache_ttl}s)")
                         result = cached_result
-                        credits = result['credits']
-                        need_alarm = credits < threshold
-                        return {
-                            'project': project_name,
-                            'owner_project': owner_project,
-                            'provider': provider_name,
-                            'type': project_config.get('type'),
-                            'success': True,
-                            'credits': credits,
-                            'threshold': threshold,
-                            'need_alarm': need_alarm,
-                            'alarm_sent': False,
-                            'error': None,
-                            'cached': True
-                        }
+                        cached = True
 
         # 获取余额
-        result = provider.get_credits()
+        if result is None:
+            result = provider.get_credits()
         
         if not result['success']:
             logger.error(f"❌ 获取余额失败: {result['error']}")
@@ -185,7 +189,7 @@ class CreditMonitor:
         logger.info(f"[{project_name}] 当前余额: {credits}")
 
         # 缓存成功的结果
-        if cache_ttl > 0:
+        if cache_ttl > 0 and not cached:
             with _cache_lock:
                 _response_cache[cache_key] = (time.time(), result)
 
@@ -213,24 +217,28 @@ class CreditMonitor:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
 
             if not dry_run:
-                alarm_sent = self._send_alarm(project_config, credits)
+                project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+                alert_cooldown = _get_alert_cooldown_seconds(self.config)
+                if DB_AVAILABLE and AlertRepository.has_recent_alert(project_id, 'low_balance', alert_cooldown):
+                    logger.info(f"[{project_name}] 告警仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
+                else:
+                    alarm_sent = self._send_alarm(project_config, credits)
 
-                # 保存告警历史到数据库
-                if DB_AVAILABLE and alarm_sent:
-                    try:
-                        project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
-                        balance_type = '余额'
-                        AlertRepository.save_alert_record(
-                            project_id=project_id,
-                            project_name=project_name,
-                            alert_type='low_balance',
-                            message=f"{balance_type}不足: {credits} < {threshold}",
-                            balance_value=credits,
-                            threshold_value=threshold,
-                            status='sent'
-                        )
-                    except Exception as e:
-                        logger.error(f"保存告警历史失败: {e}")
+                    # 保存告警历史到数据库
+                    if DB_AVAILABLE and alarm_sent:
+                        try:
+                            balance_type = '余额'
+                            AlertRepository.save_alert_record(
+                                project_id=project_id,
+                                project_name=project_name,
+                                alert_type='low_balance',
+                                message=f"{balance_type}不足: {credits} < {threshold}",
+                                balance_value=credits,
+                                threshold_value=threshold,
+                                status='sent'
+                            )
+                        except Exception as e:
+                            logger.error(f"保存告警历史失败: {e}")
             else:
                 logger.info(f"[{project_name}] [测试模式] 跳过发送告警")
         else:
@@ -246,7 +254,8 @@ class CreditMonitor:
             'threshold': threshold,
             'need_alarm': need_alarm,
             'alarm_sent': alarm_sent,
-            'error': None
+            'error': None,
+            'cached': cached
         }
     
     def _send_alarm(self, project_config: Dict[str, Any], credits: float) -> bool:
@@ -322,8 +331,8 @@ class CreditMonitor:
 
         # 记录活跃项目数（Prometheus 指标）
         try:
-            from prometheus_exporter import set_active_projects_count
-            set_active_projects_count(len(projects))
+            from services.prometheus_exporter import metrics_collector
+            metrics_collector.active_projects_count.set(len(projects))
         except Exception:
             pass  # 容错，不影响主流程
 
@@ -363,8 +372,8 @@ class CreditMonitor:
         # 记录执行时间（Prometheus 指标）
         execution_time = time.time() - start_time
         try:
-            from prometheus_exporter import record_monitor_execution
-            record_monitor_execution(execution_time)
+            from services.prometheus_exporter import metrics_collector
+            metrics_collector.monitor_execution_time.observe(execution_time)
             logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
         except Exception:
             pass  # 容错

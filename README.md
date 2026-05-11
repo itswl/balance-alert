@@ -181,7 +181,7 @@ python monitor.py --dry-run   # 测试模式（不发送告警）
 docker compose --profile monitoring up -d
 
 # 访问
-# Grafana: http://localhost:3000 (admin/admin123)
+# Grafana: http://localhost:3000 (账号和密码来自 .env 中的 GRAFANA_ADMIN_USER/GRAFANA_ADMIN_PASSWORD)
 # Prometheus: http://localhost:9090
 # Metrics: http://localhost:9100/metrics
 ```

@@ -5,10 +5,15 @@
 定义数据表结构
 """
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Index
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+from sqlalchemy.orm import declarative_base
+from datetime import datetime, timezone
 
 Base = declarative_base()
+
+
+def utcnow() -> datetime:
+    """Return naive UTC datetime for compatibility with existing columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class BalanceHistory(Base):
@@ -23,7 +28,7 @@ class BalanceHistory(Base):
     threshold = Column(Float, comment='告警阈值')
     balance_type = Column(String(20), default='credits', comment='类型: balance/credits')
     need_alarm = Column(Boolean, default=False, comment='是否需要告警')
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='记录时间')
+    timestamp = Column(DateTime, default=utcnow, index=True, comment='记录时间')
     
     __table_args__ = (
         Index('idx_project_time', 'project_id', 'timestamp'),
@@ -58,7 +63,7 @@ class AlertHistory(Base):
     message = Column(Text, comment='告警消息')
     balance_value = Column(Float, comment='触发告警时的余额')
     threshold_value = Column(Float, comment='阈值')
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='告警时间')
+    timestamp = Column(DateTime, default=utcnow, index=True, comment='告警时间')
     
     __table_args__ = (
         Index('idx_project_type_time', 'project_id', 'alert_type', 'timestamp'),
@@ -92,8 +97,8 @@ class ProjectConfig(Base):
     threshold = Column(Float, default=100.0, comment='告警阈值')
     type = Column(String(20), default='credits', comment='类型: balance/credits')
     enabled = Column(Boolean, default=True, comment='是否启用')
-    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = Column(DateTime, default=utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, comment='更新时间')
 
     __table_args__ = (
         {'comment': '项目配置表'}
@@ -125,8 +130,8 @@ class SubscriptionConfig(Base):
     amount = Column(Float, default=0.0, comment='订阅金额')
     enabled = Column(Boolean, default=True, comment='是否启用')
     last_renewed_date = Column(String(20), nullable=True, comment='上次续费日期 (YYYY-MM-DD)')
-    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = Column(DateTime, default=utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, comment='更新时间')
 
     __table_args__ = (
         {'comment': '订阅配置表'}
@@ -157,8 +162,8 @@ class EmailConfig(Base):
     password = Column(String(500), nullable=False, comment='邮箱授权码/密码')
     use_ssl = Column(Boolean, default=True, comment='是否使用 SSL')
     enabled = Column(Boolean, default=True, comment='是否启用')
-    created_at = Column(DateTime, default=datetime.utcnow, comment='创建时间')
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment='更新时间')
+    created_at = Column(DateTime, default=utcnow, comment='创建时间')
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, comment='更新时间')
 
     __table_args__ = (
         {'comment': '邮箱监听配置表'}
@@ -190,7 +195,7 @@ class EmailAlertHistory(Base):
     amount = Column(Float, comment='提取到的账单金额')
     matched_keywords = Column(Text, comment='匹配到的告警关键词 (JSON 格式)')
     alert_sent = Column(Boolean, default=False, comment='是否成功发送 Webhook 告警')
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='扫描入库时间')
+    timestamp = Column(DateTime, default=utcnow, index=True, comment='扫描入库时间')
 
     __table_args__ = (
         Index('idx_email_mailbox_time', 'mailbox', 'timestamp'),
@@ -222,7 +227,7 @@ class SubscriptionHistory(Base):
     days_until_renewal = Column(Integer, comment='距离续费天数')
     amount = Column(Float, default=0, comment='订阅金额')
     need_renewal = Column(Boolean, default=False, comment='是否需要续费')
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True, comment='记录时间')
+    timestamp = Column(DateTime, default=utcnow, index=True, comment='记录时间')
     
     __table_args__ = (
         Index('idx_subscription_time', 'subscription_id', 'timestamp'),

@@ -29,9 +29,11 @@ supercronic /app/crontab &
 CRON_PID=$!
 echo "Cron service started with PID: $CRON_PID"
 echo ""
-echo "🚀 Running initial balance check..."
-python -m services.monitor
-echo ""
+if [ "${RUN_INITIAL_CHECK:-false}" = "true" ]; then
+    echo "🚀 Running initial balance check..."
+    python -m services.monitor --dry-run
+    echo ""
+fi
 echo "✅ All services started successfully!"
 echo ""
 echo "📊 Access Web UI: http://localhost:8080"

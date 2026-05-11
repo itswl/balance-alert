@@ -436,6 +436,27 @@ class EmailScanner:
                                 'alert_sent': False
                             }
 
+                            duplicate_sent = False
+                            if not dry_run:
+                                try:
+                                    from database.repository import EmailRepository
+                                    duplicate_sent = EmailRepository.has_recent_email_alert(
+                                        mailbox=mailbox_name,
+                                        sender=sender,
+                                        subject=subject,
+                                        date=date,
+                                        days=max(days, 1)
+                                    )
+                                except Exception as e:
+                                    logger.error(f"查询邮件告警去重失败: {e}")
+
+                            if duplicate_sent:
+                                result['duplicate'] = True
+                                logger.info(f"邮件告警已发送过，跳过重复通知 | 邮箱: {mailbox_name} | 主题: {subject}")
+                                self.results.append(result)
+                                processed_count += 1
+                                continue
+
                             # 发送告警
                             if not dry_run:
                                 alert_sent = self._send_alert(result)
@@ -550,6 +571,8 @@ class EmailScanner:
         
         content = '\n'.join(content_parts)
         
+        alert_sent = adapter.send_custom_alert(title, content)
+
         # 保存到数据库
         try:
             from database.repository import EmailRepository
@@ -561,12 +584,12 @@ class EmailScanner:
                 service_name=email_info['service_name'],
                 amount=email_info['amount'],
                 matched_keywords=email_info['keywords'],
-                alert_sent=True
+                alert_sent=alert_sent
             )
         except Exception as e:
             logger.error(f"保存邮件告警记录失败: {e}")
 
-        return adapter.send_custom_alert(title, content)
+        return alert_sent
     
     def _print_mailbox_summary(self, mailbox_name, total_emails, alert_count):
         """打印单个邮箱扫描汇总"""

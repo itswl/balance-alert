@@ -33,6 +33,26 @@ function populateSubscriptionProjectOptions(selectedProject = '') {
     }
 }
 
+function updateRenewalDayInputForCycle() {
+    const cycle = document.getElementById('sub-cycle')?.value || 'monthly';
+    const input = document.getElementById('sub-renewal-day');
+    if (!input) return;
+
+    if (cycle === 'weekly') {
+        input.min = '1';
+        input.max = '7';
+        input.placeholder = '1-7';
+    } else if (cycle === 'yearly') {
+        input.min = '101';
+        input.max = '1231';
+        input.placeholder = 'MMDD，例如 315';
+    } else {
+        input.min = '1';
+        input.max = '31';
+        input.placeholder = '1-31';
+    }
+}
+
 // 打开订阅模态框
 function openSubscriptionModal(subscription = null) {
     const modal = document.getElementById('subscription-modal');
@@ -65,6 +85,7 @@ function openSubscriptionModal(subscription = null) {
         document.getElementById('sub-enabled').checked = true;
     }
 
+    updateRenewalDayInputForCycle();
     modal.classList.add('active');
 }
 
@@ -123,13 +144,9 @@ async function saveSubscription(event) {
             closeSubscriptionModal();
 
             // 重新加载订阅数据（强制不使用缓存）
-            console.log('重新加载订阅数据...');
             const subscriptionData = await API.getSubscriptions(true);
-            console.log('获取到订阅数据:', subscriptionData);
             AppState.subscriptionData = subscriptionData;
-            console.log('开始渲染订阅列表...');
             UI.renderSubscriptions(subscriptionData);
-            console.log('渲染完成');
         } else {
             UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
         }
@@ -254,6 +271,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const addBtn = document.getElementById('add-subscription-btn');
     if (addBtn) {
         addBtn.addEventListener('click', () => openSubscriptionModal());
+    }
+
+    document.querySelectorAll('.js-close-subscription-modal').forEach((button) => {
+        button.addEventListener('click', closeSubscriptionModal);
+    });
+
+    const saveBtn = document.querySelector('.js-save-subscription');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveSubscription);
+    }
+
+    const form = document.getElementById('subscription-form');
+    if (form) {
+        form.addEventListener('submit', saveSubscription);
+    }
+
+    const cycleSelect = document.getElementById('sub-cycle');
+    if (cycleSelect) {
+        cycleSelect.addEventListener('change', updateRenewalDayInputForCycle);
     }
 
     // 模态框点击外部关闭

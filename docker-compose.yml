@@ -54,8 +54,8 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before enabling monitoring}
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/balance-alert-dashboard.json
       - TZ=Asia/Shanghai

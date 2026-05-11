@@ -82,7 +82,8 @@ class BaseProvider:
 
 **核心 API**：
 - `GET /` - 仪表盘页面
-- `GET /health` - 健康检查
+- `GET /health` / `GET /ready` - 就绪检查
+- `GET /live` - 存活检查
 - `GET /api/credits` - 获取余额
 - `POST /api/refresh` - 手动刷新
 
@@ -195,7 +196,7 @@ spec:
             memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /health
+            path: /live
             port: 8080
           periodSeconds: 30
 ```
@@ -260,7 +261,7 @@ spec:
 
 ### 认证与授权
 - `/api/*` 使用 API Key 认证
-- API Key 来自环境变量 `API_KEY` 或 `WEB_API_KEY`
+- API Key 来自环境变量 `WEB_API_KEY`
 - 前端将用户输入的 API Key 持久保存在浏览器 `localStorage`
 
 ### 速率限制

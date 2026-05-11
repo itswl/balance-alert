@@ -28,13 +28,14 @@ _shutdown_signal_count = 0
 
 # 全局状态管理器和数据检测器
 from database.repository import BalanceRepository, SubscriptionRepository
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, and_
 from database.models import BalanceHistory, SubscriptionHistory
 from database.engine import get_session
 
 # ======= State Init =======
 def init_state_from_db(state_mgr: StateManager):
     """从数据库加载最近的状态，以便重启后 UI 立即可用"""
+    session = None
     try:
         session = get_session()
         if not session:
@@ -42,7 +43,17 @@ def init_state_from_db(state_mgr: StateManager):
             
         # 1. 恢复 Balance 状态
         # 每个项目取最新的一条记录
-        latest_balances = session.query(BalanceHistory).group_by(BalanceHistory.project_id).having(func.max(BalanceHistory.timestamp)).all()
+        balance_subquery = session.query(
+            BalanceHistory.project_id,
+            func.max(BalanceHistory.timestamp).label('max_timestamp')
+        ).group_by(BalanceHistory.project_id).subquery()
+        latest_balances = session.query(BalanceHistory).join(
+            balance_subquery,
+            and_(
+                BalanceHistory.project_id == balance_subquery.c.project_id,
+                BalanceHistory.timestamp == balance_subquery.c.max_timestamp
+            )
+        ).all()
         if latest_balances:
             projects_state = []
             for b in latest_balances:
@@ -60,7 +71,17 @@ def init_state_from_db(state_mgr: StateManager):
             state_mgr.update_balance_state(projects_state)
             
         # 2. 恢复 Subscription 状态
-        latest_subs = session.query(SubscriptionHistory).group_by(SubscriptionHistory.subscription_id).having(func.max(SubscriptionHistory.timestamp)).all()
+        sub_subquery = session.query(
+            SubscriptionHistory.subscription_id,
+            func.max(SubscriptionHistory.timestamp).label('max_timestamp')
+        ).group_by(SubscriptionHistory.subscription_id).subquery()
+        latest_subs = session.query(SubscriptionHistory).join(
+            sub_subquery,
+            and_(
+                SubscriptionHistory.subscription_id == sub_subquery.c.subscription_id,
+                SubscriptionHistory.timestamp == sub_subquery.c.max_timestamp
+            )
+        ).all()
         if latest_subs:
             subs_state = []
             for s in latest_subs:
@@ -76,13 +97,14 @@ def init_state_from_db(state_mgr: StateManager):
                 })
             state_mgr.update_subscription_state(subs_state)
             
-        session.close()
         logger.info("已从数据库恢复初始状态")
     except Exception as e:
         logger.error(f"从数据库恢复状态失败: {e}")
+    finally:
+        if session:
+            session.close()
 
 global_state_manager = StateManager()
-init_state_from_db(global_state_manager)
 
 
 class DataChangeDetector:
@@ -232,6 +254,7 @@ if __name__ == '__main__':
         from database import init_database
         if init_database():
             logger.info("✅ 数据库已初始化")
+            init_state_from_db(global_state_manager)
     except Exception as e:
         logger.warning(f"数据库初始化失败（将跳过历史数据功能）: {e}")
 
