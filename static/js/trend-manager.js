@@ -49,7 +49,7 @@ async function showProjectTrend(projectName, provider) {
                         <line x1="12" y1="8" x2="12" y2="12"></line>
                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
-                    <p>${result.message || '暂无历史数据'}</p>
+                    <p>${Utils.escapeHTML(result.message || '暂无历史数据')}</p>
                     <p style="font-size: 0.875rem; margin-top: 0.5rem;">
                         提示：需要启用数据库功能才能查看趋势图表<br>
                         请设置环境变量 ENABLE_DATABASE=true 并重启服务
@@ -78,7 +78,7 @@ async function showProjectTrend(projectName, provider) {
         console.error('加载趋势数据失败:', error);
         statsContainer.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--danger);">
-                <p>❌ 加载失败：${error.message}</p>
+                <p>❌ 加载失败：${Utils.escapeHTML(error.message)}</p>
             </div>
         `;
     } finally {
@@ -268,6 +268,10 @@ function closeTrendModal() {
 
 // 绑定事件
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.js-close-trend-modal').forEach((button) => {
+        button.addEventListener('click', closeTrendModal);
+    });
+
     // 模态框点击外部关闭
     const modal = document.getElementById('trend-modal');
     if (modal) {

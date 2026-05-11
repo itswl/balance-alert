@@ -221,7 +221,7 @@ curl "http://localhost:9090/api/v1/query?query=balance_alert_balance" | python3 
 
 ```bash
 # 测试数据源 API
-curl -u admin:admin123 http://localhost:3000/api/datasources | python3 -m json.tool
+curl -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/datasources | python3 -m json.tool
 
 # 应该看到 Prometheus 数据源：
 # "name": "Prometheus"
@@ -233,7 +233,7 @@ curl -u admin:admin123 http://localhost:3000/api/datasources | python3 -m json.t
 
 ```
 1. 访问 http://localhost:3000
-2. 登录 (admin/admin123)
+2. 使用 .env 中的 GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD 登录
 3. 进入 Dashboards → Browse
 4. 找到 "余额监控 Dashboard"
 5. 打开 Dashboard
@@ -311,9 +311,9 @@ ls grafana/datasources/
 rm grafana/datasources/prometheus.yml
 ```
 
-### "Get \"http://web:9100/metrics\": EOF"
+### Prometheus 抓取 metrics 返回 EOF
 
-**原因**：web 服务未加入 monitoring 网络
+**原因**：Prometheus target 指向了不存在的旧服务名，或应用服务未加入 monitoring 网络
 
 **解决**：
 ```yaml

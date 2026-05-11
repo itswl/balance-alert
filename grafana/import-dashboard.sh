@@ -7,10 +7,15 @@ set -e
 
 # 配置
 GRAFANA_URL="${1:-http://localhost:3000}"
-GRAFANA_USER="${2:-admin}"
-GRAFANA_PASS="${3:-admin123}"
+GRAFANA_USER="${2:-${GRAFANA_ADMIN_USER:-admin}}"
+GRAFANA_PASS="${3:-${GRAFANA_ADMIN_PASSWORD:-}}"
 DASHBOARD_FILE="dashboards/balance-alert-dashboard.json"
 DATASOURCE_NAME="Prometheus"
+
+if [ -z "$GRAFANA_PASS" ]; then
+    echo "❌ 错误: 请通过第 3 个参数或 GRAFANA_ADMIN_PASSWORD 环境变量提供 Grafana 密码"
+    exit 1
+fi
 
 echo "========================================="
 echo "Grafana Dashboard 自动导入工具"

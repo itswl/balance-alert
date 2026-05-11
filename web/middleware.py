@@ -12,7 +12,14 @@ from pydantic import ValidationError
 
 
 def _get_api_key() -> str:
-    return (os.environ.get('API_KEY') or os.environ.get('WEB_API_KEY') or '').strip()
+    api_key = (os.environ.get('WEB_API_KEY') or os.environ.get('WEB_AUTH_API_KEY') or '').strip()
+    if api_key:
+        return api_key
+
+    if os.environ.get('ALLOW_LEGACY_WEB_API_KEY', 'false').lower() == 'true':
+        return (os.environ.get('API_KEY') or '').strip()
+
+    return ''
 
 
 def _extract_api_key() -> str:
@@ -30,7 +37,7 @@ def _extract_api_key() -> str:
 def _auth_not_configured():
     return jsonify({
         'status': 'error',
-        'message': 'API Key 未配置，请设置 API_KEY 或 WEB_API_KEY'
+        'message': 'API Key 未配置，请设置 WEB_API_KEY'
     }), 503
 
 

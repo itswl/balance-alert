@@ -47,13 +47,10 @@ async function saveThreshold(event) {
             closeThresholdModal();
 
             // 重新加载项目数据（强制不使用缓存）
-            console.log('重新加载项目数据...');
             const balanceData = await API.getCredits();
-            console.log('获取到项目数据:', balanceData);
             AppState.balanceData = balanceData;
             UI.updateStats(balanceData);
             UI.renderProjects(balanceData);
-            console.log('渲染完成');
         } else {
             UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
         }
@@ -67,6 +64,20 @@ async function saveThreshold(event) {
 
 // 绑定事件
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.js-close-threshold-modal').forEach((button) => {
+        button.addEventListener('click', closeThresholdModal);
+    });
+
+    const saveBtn = document.querySelector('.js-save-threshold');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveThreshold);
+    }
+
+    const form = document.getElementById('threshold-form');
+    if (form) {
+        form.addEventListener('submit', saveThreshold);
+    }
+
     // 模态框点击外部关闭
     const modal = document.getElementById('threshold-modal');
     if (modal) {

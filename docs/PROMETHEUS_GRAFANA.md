@@ -39,7 +39,7 @@ docker compose --profile monitoring logs -f
 # 停止服务
 docker compose --profile monitoring down
 ```
-- **Grafana**: http://localhost:3000 （默认账号：admin/admin123）
+- **Grafana**: http://localhost:3000 （账号和密码来自 `.env` 中的 `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`）
 - **Prometheus**: http://localhost:9090
 - **监控服务**: http://localhost:8080
 - **Metrics端点**: http://localhost:9100/metrics
@@ -268,7 +268,7 @@ cat /tmp/dashboard.json | jq '{dashboard: ., overwrite: true}' | \
 
 ```bash
 # 从 Prometheus 容器内测试
-docker exec -it <prometheus-container> wget -O- http://web:9100/metrics
+docker exec -it <prometheus-container> wget -O- http://credit-monitor:9100/metrics
 
 # 从 Prometheus 宿主机测试
 curl http://localhost:9100/metrics

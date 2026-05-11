@@ -25,6 +25,21 @@ DEFAULT_MAX_RETRIES = 3
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
 
 
+def _mask_webhook_url(url: str) -> str:
+    """Mask webhook secrets before writing URLs to logs."""
+    if not url:
+        return ''
+
+    for marker in ('hook/', 'access_token=', 'key='):
+        if marker in url:
+            prefix, _, secret = url.partition(marker)
+            return f"{prefix}{marker}{secret[:4]}***" if secret else f"{prefix}{marker}***"
+
+    if len(url) <= 16:
+        return '***'
+    return f"{url[:12]}***{url[-4:]}"
+
+
 class WebhookAdapter:
     """Webhook 发送适配器"""
 
@@ -76,6 +91,30 @@ class WebhookAdapter:
             return "明天"
         return f"{days} 天后"
 
+    @staticmethod
+    def _format_subscription_cycle(cycle_type: str, renewal_day: int) -> str:
+        """格式化订阅续费周期，年付支持 MMDD 表达。"""
+        try:
+            renewal_day = int(renewal_day)
+        except (TypeError, ValueError):
+            return "未知周期"
+
+        if cycle_type == 'weekly':
+            weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+            if 1 <= renewal_day <= 7:
+                return f"每周 {weekdays[renewal_day - 1]}"
+            return f"每周第 {renewal_day} 天"
+
+        if cycle_type == 'yearly':
+            if renewal_day > 31:
+                month = renewal_day // 100
+                day = renewal_day % 100
+                if 1 <= month <= 12 and 1 <= day <= 31:
+                    return f"每年 {month}月{day}日"
+            return "每年固定日期"
+
+        return f"每月 {renewal_day} 号"
+
     def _build_balance_text(self, project_name: str, provider: str, balance_type: str,
                             current_value: float, threshold: float, unit: str,
                             owner_project: str = None) -> str:
@@ -92,14 +131,16 @@ class WebhookAdapter:
 
     def _build_subscription_text(self, subscription_name: str, renewal_day: int,
                                  days_until_renewal: int, amount: float,
-                                 owner_project: str = None) -> str:
+                                 owner_project: str = None,
+                                 cycle_type: str = 'monthly') -> str:
         """生成订阅提醒通用文本"""
         days_text = self._format_days_text(days_until_renewal)
         project_text = f"所属项目: {owner_project}\n" if owner_project else ""
+        cycle_text = self._format_subscription_cycle(cycle_type, renewal_day)
         return (
             f"订阅: {subscription_name}\n"
             f"{project_text}"
-            f"续费日期: 每月 {renewal_day} 号\n"
+            f"续费周期: {cycle_text}\n"
             f"距离续费: {days_text}\n"
             f"续费金额: {amount}"
         )
@@ -151,7 +192,8 @@ class WebhookAdapter:
         return self._send_request(payload)
     
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
-                               amount: float, owner_project: str = None) -> bool:
+                               amount: float, owner_project: str = None,
+                               cycle_type: str = 'monthly') -> bool:
         """
         发送订阅续费提醒
 
@@ -167,10 +209,10 @@ class WebhookAdapter:
         """
         if self.webhook_type == 'custom':
             return self._send_custom_subscription_alert(
-                subscription_name, renewal_day, days_until_renewal, amount, owner_project
+                subscription_name, renewal_day, days_until_renewal, amount, owner_project, cycle_type
             )
         text = self._build_subscription_text(
-                subscription_name, renewal_day, days_until_renewal, amount, owner_project
+                subscription_name, renewal_day, days_until_renewal, amount, owner_project, cycle_type
             )
         payload = self._wrap_payload("订阅续费提醒", text)
         return self._send_request(payload)
@@ -199,8 +241,10 @@ class WebhookAdapter:
         return self._send_request(payload)
     
     def _send_custom_subscription_alert(self, subscription_name, renewal_day,
-                                       days_until_renewal, amount, owner_project=None):
+                                       days_until_renewal, amount, owner_project=None,
+                                       cycle_type='monthly'):
         """发送自定义格式订阅提醒"""
+        cycle_text = self._format_subscription_cycle(cycle_type, renewal_day)
         payload = {
             "Type": "SubscriptionReminder",
             "RuleName": f"{subscription_name}续费提醒",
@@ -209,9 +253,10 @@ class WebhookAdapter:
                 "SubscriptionName": subscription_name,
                 "OwnerProject": owner_project,
                 "RenewalDay": renewal_day,
+                "CycleType": cycle_type,
                 "DaysUntilRenewal": days_until_renewal,
                 "Amount": amount,
-                "Message": f"订阅 [{subscription_name}] 将在 {days_until_renewal} 天后（每月{renewal_day}号）续费，金额: {amount}"
+                "Message": f"订阅 [{subscription_name}] 将在 {days_until_renewal} 天后（{cycle_text}）续费，金额: {amount}"
             }]
         }
         
@@ -229,7 +274,7 @@ class WebhookAdapter:
         Returns:
             bool: 是否发送成功
         """
-        logger.info(f"准备发送 Webhook | URL: {self.webhook_url} | 类型: {self.webhook_type}")
+        logger.info(f"准备发送 Webhook | URL: {_mask_webhook_url(self.webhook_url)} | 类型: {self.webhook_type}")
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:500]}")
 
         try:

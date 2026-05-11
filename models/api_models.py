@@ -5,7 +5,7 @@ API 请求验证模型
 使用 Pydantic 进行请求数据验证，确保 API 输入安全可靠
 """
 from typing import Literal, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from datetime import date
 
 
@@ -14,7 +14,7 @@ class AddSubscriptionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称")
     owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Literal['weekly', 'monthly', 'yearly'] = Field(..., description="续费周期类型")
-    renewal_day: int = Field(..., ge=1, le=31, description="续费日期（1-31）")
+    renewal_day: int = Field(..., ge=1, le=1231, description="续费日期（月/周使用 1-31，年付使用 MMDD）")
     alert_days_before: int = Field(..., ge=0, le=365, description="提前告警天数")
     amount: float = Field(..., ge=0, description="订阅金额")
     enabled: bool = Field(default=True, description="是否启用")
@@ -41,10 +41,19 @@ class AddSubscriptionRequest(BaseModel):
             raise ValueError('周循环的续费日期应在 1-7 之间')
         elif cycle_type == 'monthly' and v > 31:
             raise ValueError('月循环的续费日期应在 1-31 之间')
+        elif cycle_type == 'yearly':
+            if v <= 31:
+                return v
+            month = v // 100
+            day = v % 100
+            try:
+                date(2024, month, day)
+            except ValueError:
+                raise ValueError('年循环的续费日期应为有效 MMDD，如 315 表示 3月15日')
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "ChatGPT Plus 订阅",
                 "owner_project": "AI 平台",
@@ -57,7 +66,7 @@ class AddSubscriptionRequest(BaseModel):
                 "last_renewed_date": "2026-01-15"
             }
         }
-
+    )
 
 class UpdateSubscriptionRequest(BaseModel):
     """更新订阅请求"""
@@ -65,7 +74,7 @@ class UpdateSubscriptionRequest(BaseModel):
     new_name: Optional[str] = Field(default=None, min_length=1, max_length=200, description="新订阅名称")
     owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Optional[Literal['weekly', 'monthly', 'yearly']] = Field(default=None, description="续费周期类型")
-    renewal_day: Optional[int] = Field(default=None, ge=1, le=31, description="续费日期（1-31）")
+    renewal_day: Optional[int] = Field(default=None, ge=1, le=1231, description="续费日期（月/周使用 1-31，年付使用 MMDD）")
     alert_days_before: Optional[int] = Field(default=None, ge=0, le=365, description="提前告警天数")
     amount: Optional[float] = Field(default=None, ge=0, description="订阅金额")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
@@ -83,17 +92,36 @@ class UpdateSubscriptionRequest(BaseModel):
         except ValueError:
             raise ValueError('日期格式错误，应为 YYYY-MM-DD')
 
+    @model_validator(mode='after')
+    def validate_cycle_renewal_day(self):
+        """根据周期类型验证更新后的续费日期。"""
+        if self.renewal_day is None or self.cycle_type is None:
+            return self
+        if self.cycle_type == 'weekly' and self.renewal_day > 7:
+            raise ValueError('周循环的续费日期应在 1-7 之间')
+        if self.cycle_type == 'monthly' and self.renewal_day > 31:
+            raise ValueError('月循环的续费日期应在 1-31 之间')
+        if self.cycle_type == 'yearly' and self.renewal_day > 31:
+            month = self.renewal_day // 100
+            day = self.renewal_day % 100
+            try:
+                date(2024, month, day)
+            except ValueError:
+                raise ValueError('年循环的续费日期应为有效 MMDD，如 315 表示 3月15日')
+        return self
+
 
 class DeleteSubscriptionRequest(BaseModel):
     """删除订阅请求"""
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "ChatGPT Plus 订阅"
             }
         }
+    )
 
 
 class RefreshRequest(BaseModel):
@@ -101,13 +129,14 @@ class RefreshRequest(BaseModel):
     project_name: Optional[str] = Field(default=None, description="项目名称（可选，不指定则刷新所有）")
     force: bool = Field(default=False, description="是否强制刷新（忽略缓存）")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "project_name": "OpenRouter",
                 "force": False
             }
         }
+    )
 
 
 class AddEmailRequest(BaseModel):
@@ -131,8 +160,8 @@ class AddEmailRequest(BaseModel):
             raise ValueError('IMAP 主机格式无效')
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Gmail 邮箱",
                 "host": "imap.gmail.com",
@@ -143,6 +172,7 @@ class AddEmailRequest(BaseModel):
                 "enabled": True
             }
         }
+    )
 
 
 class UpdateEmailRequest(BaseModel):
@@ -161,9 +191,10 @@ class DeleteEmailRequest(BaseModel):
     """删除邮箱配置请求"""
     name: str = Field(..., min_length=1, max_length=100, description="邮箱名称")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "Gmail 邮箱"
             }
         }
+    )

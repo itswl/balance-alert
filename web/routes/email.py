@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from ..utils import audit_log
+from ..utils import audit_log, mask_email_config
 from core.config_loader import clear_config_cache
 from database.repository import ConfigRepository
 from core.logger import get_logger
@@ -11,7 +11,7 @@ email_bp = Blueprint('email', __name__, url_prefix='/api')
 def get_emails_config():
     """获取所有邮箱配置"""
     try:
-        emails = ConfigRepository.get_all_emails()
+        emails = [mask_email_config(email) for email in ConfigRepository.get_all_emails()]
         return jsonify({'status': 'success', 'emails': emails})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500

@@ -247,7 +247,7 @@ class MetricsCollector:
             days_until = result.get('days_until_renewal', 0)
             amount = result.get('amount', 0)
             need_alert = result.get('need_alert', False)
-            already_renewed = result.get('already_renewed_in_cycle', False)
+            already_renewed = result.get('already_renewed', result.get('already_renewed_in_cycle', False))
             
             # 更新天数
             self.subscription_days_gauge.labels(

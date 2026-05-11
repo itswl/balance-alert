@@ -11,7 +11,7 @@
 所有 `/api/*` 接口都需要 API Key。前端会将输入的 API Key 保存在浏览器 `localStorage`，后续请求会自动通过 `X-API-Key` 请求头发送。
 
 ```bash
-export API_KEY="your-secret-key"
+export WEB_API_KEY="your-secret-key"
 
 curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
 ```

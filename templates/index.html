@@ -183,7 +183,7 @@
         <div class="modal-content" style="max-width: 900px;">
             <div class="modal-header">
                 <h2 id="trend-modal-title">余额趋势</h2>
-                <button class="modal-close" onclick="closeTrendModal()">
+                <button class="modal-close js-close-trend-modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -199,7 +199,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeTrendModal()">关闭</button>
+                <button type="button" class="btn-secondary js-close-trend-modal">关闭</button>
             </div>
         </div>
     </div>
@@ -209,7 +209,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>系统设置</h2>
-                <button class="modal-close" onclick="closeSettingsModal()">
+                <button class="modal-close js-close-settings-modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -255,7 +255,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-primary" onclick="closeSettingsModal()">关闭</button>
+                <button type="button" class="btn-primary js-close-settings-modal">关闭</button>
             </div>
         </div>
     </div>
@@ -286,7 +286,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="threshold-modal-title">编辑告警阈值</h2>
-                <button class="modal-close" onclick="closeThresholdModal()">
+                <button class="modal-close js-close-threshold-modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -305,8 +305,8 @@
                 </div>
             </form>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeThresholdModal()">取消</button>
-                <button type="submit" class="btn-primary" onclick="saveThreshold(event)">保存</button>
+                <button type="button" class="btn-secondary js-close-threshold-modal">取消</button>
+                <button type="button" class="btn-primary js-save-threshold">保存</button>
             </div>
         </div>
     </div>
@@ -316,7 +316,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-title">添加订阅</h2>
-                <button class="modal-close" onclick="closeSubscriptionModal()">
+                <button class="modal-close js-close-subscription-modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -379,8 +379,8 @@
                 </div>
             </form>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeSubscriptionModal()">取消</button>
-                <button type="submit" class="btn-primary" onclick="saveSubscription(event)">保存</button>
+                <button type="button" class="btn-secondary js-close-subscription-modal">取消</button>
+                <button type="button" class="btn-primary js-save-subscription">保存</button>
             </div>
         </div>
     </div>

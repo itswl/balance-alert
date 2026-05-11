@@ -8,7 +8,7 @@ scrape_configs:
   # 余额监控服务
   - job_name: 'balance-alert'
     static_configs:
-      - targets: ['web:9100']  # Docker 网络中的服务名，9100 端口
+      - targets: ['credit-monitor:9100']  # Docker Compose 服务名，9100 端口
         labels:
           service: 'balance-alert'
           environment: 'production'

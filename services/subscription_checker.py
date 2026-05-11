@@ -4,12 +4,30 @@
 """
 import json
 import sys
+import os
+import hashlib
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
 
 # 创建 logger
 logger = get_logger('subscription_checker')
+
+try:
+    from database.repository import AlertRepository, SubscriptionRepository
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+
+
+def _get_alert_cooldown_seconds(config) -> int:
+    """获取订阅提醒冷却时间，默认 24 小时。"""
+    env_value = os.environ.get('SUBSCRIPTION_ALERT_COOLDOWN_SECONDS') or os.environ.get('ALERT_COOLDOWN_SECONDS')
+    raw_value = env_value if env_value is not None else config.get('settings', {}).get('subscription_alert_cooldown_seconds', 86400)
+    try:
+        return max(0, int(raw_value))
+    except (TypeError, ValueError):
+        return 86400
 
 
 class SubscriptionChecker:
@@ -114,11 +132,45 @@ class SubscriptionChecker:
             logger.warning(f"⚠️  需要提醒续费! (提前 {alert_days_before} 天)")
 
             if not dry_run:
-                alert_sent = self._send_alert(sub, days_until_renewal)
+                subscription_id = hashlib.md5(f"subscription:{name}".encode()).hexdigest()
+                alert_cooldown = _get_alert_cooldown_seconds(self.config)
+                if DB_AVAILABLE and AlertRepository.has_recent_alert(
+                    subscription_id, 'subscription_renewal', alert_cooldown
+                ):
+                    logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
+                else:
+                    alert_sent = self._send_alert(sub, days_until_renewal)
+                    if DB_AVAILABLE and alert_sent:
+                        try:
+                            AlertRepository.save_alert_record(
+                                project_id=subscription_id,
+                                project_name=name,
+                                alert_type='subscription_renewal',
+                                message=f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
+                                balance_value=amount,
+                                threshold_value=alert_days_before,
+                                status='sent'
+                            )
+                        except Exception as e:
+                            logger.error(f"保存订阅提醒告警历史失败: {e}")
             else:
                 logger.info("🔍 [测试模式] 跳过发送告警")
         else:
             logger.info(f"✅ 无需提醒")
+
+        if DB_AVAILABLE:
+            try:
+                subscription_id = hashlib.md5(f"subscription:{name}".encode()).hexdigest()
+                SubscriptionRepository.save_subscription_record(
+                    subscription_id=subscription_id,
+                    subscription_name=name,
+                    cycle_type=cycle_type,
+                    days_until_renewal=days_until_renewal,
+                    amount=amount,
+                    need_renewal=need_alert
+                )
+            except Exception as e:
+                logger.error(f"保存订阅历史失败: {e}")
         
         return {
             'name': name,
@@ -142,7 +194,15 @@ class SubscriptionChecker:
                 return f"每周 {weekdays[renewal_day - 1]}"
             return f"每周第 {renewal_day} 天"
         elif cycle_type == 'yearly':
-            return f"每年（固定日期）"
+            try:
+                renewal_day = int(renewal_day)
+            except (TypeError, ValueError):
+                return "每年（固定日期）"
+            if renewal_day > 31:
+                month = renewal_day // 100
+                day = renewal_day % 100
+                return f"每年 {month}月{day}日"
+            return "每年（固定日期）"
         else:  # monthly
             return f"每月 {renewal_day} 号"
     
@@ -154,6 +214,13 @@ class SubscriptionChecker:
         except ValueError:
             # 闰年2/29 → 非闰年回退到2/28
             return datetime(new_year, dt.month, 28)
+
+    @staticmethod
+    def _safe_month_date(year, month, day):
+        """安全构造月内日期，目标日超出当月天数时回退到月末。"""
+        import calendar
+        max_day = calendar.monthrange(year, month)[1]
+        return datetime(year, month, min(day, max_day))
 
     def _calculate_cycle_start(self, cycle_type, renewal_day, today, next_renewal_date):
         """计算当前续费周期的起始日期"""
@@ -167,11 +234,11 @@ class SubscriptionChecker:
             # 月周期：从上个月的续费日开始
             if today.day < renewal_day:
                 if today.month == 1:
-                    return datetime(today.year - 1, 12, renewal_day)
+                    return self._safe_month_date(today.year - 1, 12, renewal_day)
                 else:
-                    return datetime(today.year, today.month - 1, renewal_day)
+                    return self._safe_month_date(today.year, today.month - 1, renewal_day)
             else:
-                return datetime(today.year, today.month, renewal_day)
+                return self._safe_month_date(today.year, today.month, renewal_day)
     
     def _calculate_days_until_renewal(self, cycle_type, renewal_day, today, last_renewed_date=None):
         """
@@ -236,8 +303,21 @@ class SubscriptionChecker:
             except ValueError:
                 pass
 
-        # 如果没有上次续费日期，使用今年的今天作为续费日
-        next_renewal_date = self._safe_replace_year(today, today.year + 1)
+        # 没有上次续费日期时，优先按 MMDD 格式解析 renewal_day。
+        try:
+            renewal_day_int = int(renewal_day)
+            if renewal_day_int > 31:
+                month = renewal_day_int // 100
+                day = renewal_day_int % 100
+                next_renewal_date = datetime(today.year, month, day)
+                if next_renewal_date < today:
+                    next_renewal_date = self._safe_replace_year(next_renewal_date, today.year + 1)
+            else:
+                # 兼容旧配置：年付但只写了 1-31 时，使用明年今天。
+                next_renewal_date = self._safe_replace_year(today, today.year + 1)
+        except (TypeError, ValueError):
+            next_renewal_date = self._safe_replace_year(today, today.year + 1)
+
         delta = next_renewal_date - today
         return delta.days, next_renewal_date
 
@@ -309,7 +389,8 @@ class SubscriptionChecker:
             owner_project=owner_project,
             renewal_day=renewal_day,
             days_until_renewal=days_until_renewal,
-            amount=amount
+            amount=amount,
+            cycle_type=sub.get('cycle_type', 'monthly')
         )
     
     def _print_summary(self):

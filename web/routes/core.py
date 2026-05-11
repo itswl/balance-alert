@@ -52,9 +52,10 @@ def index():
 
 
 @core_bp.route('/health')
+@core_bp.route('/ready')
 def health():
     """
-    健康检查端点（Kubernetes readiness/liveness probe）
+    就绪检查端点
 
     返回：
     - 200: 服务健康且数据可用
@@ -77,7 +78,8 @@ def health():
             last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00')) if isinstance(last_update, str) else last_update
             refresh_interval = get_refresh_interval()
             stale_threshold = timedelta(seconds=refresh_interval * STALENESS_MULTIPLIER)
-            time_since_update = datetime.now() - last_update_dt
+            now = datetime.now(last_update_dt.tzinfo) if last_update_dt.tzinfo else datetime.now()
+            time_since_update = now - last_update_dt
             is_stale = time_since_update > stale_threshold
         except Exception:
             is_stale = False
@@ -108,6 +110,17 @@ def health():
 
     status_code = 200 if response_data['status'] == 'healthy' else 503
     return jsonify(response_data), status_code
+
+
+@core_bp.route('/live')
+def live():
+    """存活检查端点：只验证进程能正常响应。"""
+    uptime_seconds = int(time.time() - _state_manager._start_time) if hasattr(_state_manager, '_start_time') else 0
+    return jsonify({
+        'status': 'alive',
+        'uptime_seconds': uptime_seconds,
+        'version': os.environ.get('APP_VERSION', '1.0.0')
+    })
 
 
 @core_bp.route('/api/credits')

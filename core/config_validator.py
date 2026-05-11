@@ -6,6 +6,7 @@
 from typing import Dict, Any, List, Optional, Literal
 from dataclasses import dataclass, field
 from enum import Enum
+from datetime import date
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -133,6 +134,18 @@ class SubscriptionConfig:
         if self.cycle_type == CycleType.WEEKLY:
             if self.renewal_day < 1 or self.renewal_day > 7:
                 errors.append("周周期的续费日期必须在 1-7 之间")
+        elif self.cycle_type == CycleType.YEARLY:
+            if self.renewal_day <= 31 and self.last_renewed_date:
+                pass  # 兼容旧配置：年付日期由 last_renewed_date 推导
+            elif self.renewal_day < 101 or self.renewal_day > 1231:
+                errors.append("年周期的续费日期必须为 MMDD 格式（如 315 表示 3月15日）")
+            else:
+                month = self.renewal_day // 100
+                day = self.renewal_day % 100
+                try:
+                    date(2024, month, day)
+                except ValueError:
+                    errors.append("年周期的续费日期不是有效日期")
         else:
             if self.renewal_day < 1 or self.renewal_day > 31:
                 errors.append("续费日期必须在 1-31 之间")
