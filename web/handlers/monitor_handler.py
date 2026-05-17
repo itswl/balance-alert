@@ -5,7 +5,7 @@
 处理余额监控相关的业务逻辑
 """
 from typing import Dict, Any, List
-from services.monitor import CreditMonitor
+from services.monitor import run_credit_monitor
 from core.state_manager import StateManager
 from core.logger import get_logger
 
@@ -39,19 +39,4 @@ def refresh_credits(config_path: str, project_name: str = None, dry_run: bool = 
     Returns:
         刷新结果字典
     """
-    try:
-        monitor = CreditMonitor(config_path)
-        monitor.run(project_name=project_name, dry_run=dry_run)
-
-        return {
-            'success': True,
-            'results': monitor.results,
-            'count': len(monitor.results)
-        }
-    except Exception as e:
-        logger.error(f"刷新失败: {e}", exc_info=True)
-        return {
-            'success': False,
-            'error': str(e),
-            'count': 0
-        }
+    return run_credit_monitor(config_path, project_name=project_name, dry_run=dry_run)

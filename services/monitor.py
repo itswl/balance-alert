@@ -426,6 +426,25 @@ class CreditMonitor:
                 logger.error(f"  {project}: {error}")
 
 
+def run_credit_monitor(config_path: str, project_name: Optional[str] = None, dry_run: bool = True) -> Dict[str, Any]:
+    try:
+        monitor = CreditMonitor(config_path)
+        monitor.run(project_name=project_name, dry_run=dry_run)
+        return {
+            'success': True,
+            'results': monitor.results,
+            'count': len(monitor.results),
+        }
+    except Exception as e:
+        logger.error(f"刷新失败: {e}", exc_info=True)
+        return {
+            'success': False,
+            'error': str(e),
+            'count': 0,
+            'results': [],
+        }
+
+
 def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(

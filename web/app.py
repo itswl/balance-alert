@@ -82,21 +82,39 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true':
-        from .routes import create_subscription_bp
-        app.register_blueprint(create_subscription_bp(state_manager))
-
-    if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true':
-        from .routes import project_bp, email_bp
-        app.register_blueprint(project_bp)
-        app.register_blueprint(email_bp)
-
-    if os.environ.get('ENABLE_HISTORY_API', 'false').lower() == 'true':
-        from .routes import history_bp
-        app.register_blueprint(history_bp)
+    def _enabled(name: str) -> bool:
+        return os.environ.get(name, 'false').lower() == 'true'
 
     from .routes import create_core_bp
     app.register_blueprint(create_core_bp(state_manager))
+
+    def _subscription_bp():
+        from .routes import create_subscription_bp
+        return create_subscription_bp(state_manager)
+
+    def _dynamic_config_bps():
+        from .routes import project_bp, email_bp
+        return [project_bp, email_bp]
+
+    def _history_bp():
+        from .routes import history_bp
+        return history_bp
+
+    registrations = [
+        ('ENABLE_SUBSCRIPTIONS', _subscription_bp),
+        ('ENABLE_DYNAMIC_CONFIG', _dynamic_config_bps),
+        ('ENABLE_HISTORY_API', _history_bp),
+    ]
+
+    for flag, factory in registrations:
+        if not _enabled(flag):
+            continue
+        value = factory()
+        if isinstance(value, list):
+            for bp in value:
+                app.register_blueprint(bp)
+        else:
+            app.register_blueprint(value)
 
     logger.info("蓝图注册完成")
 

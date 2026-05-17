@@ -10,7 +10,7 @@ import sys
 import threading
 from web import create_app
 from core.state_manager import StateManager
-from services.monitor import CreditMonitor
+from services.monitor import run_credit_monitor
 from core.logger import get_logger
 from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
 
@@ -25,10 +25,10 @@ global_state_manager = StateManager()
 
 
 def _update_balance(state_mgr: StateManager):
-    monitor = CreditMonitor(get_default_config_path())
-    monitor.run(dry_run=not get_enable_web_alarm())
-    state_mgr.update_balance_state(monitor.results)
-    return monitor.results
+    result = run_credit_monitor(get_default_config_path(), dry_run=not get_enable_web_alarm())
+    if result.get('success'):
+        state_mgr.update_balance_state(result.get('results') or [])
+    return result.get('results') or []
 
 
 def _update_subscriptions(state_mgr: StateManager):
