@@ -14,7 +14,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from flask import jsonify, make_response, request
 from core.logger import get_logger
-from core.config_loader import load_config_with_env_vars, get_enable_web_alarm as _get_enable_web_alarm, get_refresh_interval as _get_refresh_interval
+from core.config_loader import get_enable_web_alarm as _get_enable_web_alarm, get_refresh_interval as _get_refresh_interval
+from services.config_service import load_config as _load_config
 
 logger = get_logger('web.utils')
 
@@ -45,7 +46,7 @@ def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any
         配置字典，失败返回 None
     """
     try:
-        return load_config_with_env_vars(config_path, validate=False)
+        return _load_config(config_path, validate=False)
     except Exception as e:
         logger.error(f"加载配置失败: {e}")
         return None

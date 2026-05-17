@@ -18,7 +18,7 @@ from services.subscription_checker import SubscriptionChecker
 from services.email_scanner import EmailScanner
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
-from core.config_loader import load_config_with_env_vars
+from services.config_service import load_config
 
 # 创建 logger（必须在使用前定义）
 logger = get_logger('monitor')
@@ -30,6 +30,36 @@ try:
 except ImportError:
     DB_AVAILABLE = False
     logger.warning("数据库模块不可用，历史数据不会被保存")
+
+
+def get_balance_history(project_id: Optional[str] = None, provider: Optional[str] = None, days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
+    if not DB_AVAILABLE:
+        raise RuntimeError("数据库功能未启用")
+    return BalanceRepository.get_balance_history(project_id=project_id, provider=provider, days=days, limit=limit)
+
+
+def get_balance_trend(project_id: str, days: int = 30) -> Dict[str, Any]:
+    if not DB_AVAILABLE:
+        raise RuntimeError("数据库功能未启用")
+    return BalanceRepository.get_balance_trend(project_id, days)
+
+
+def get_recent_alerts(project_id: Optional[str] = None, alert_type: Optional[str] = None, days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
+    if not DB_AVAILABLE:
+        raise RuntimeError("数据库功能未启用")
+    return AlertRepository.get_recent_alerts(project_id=project_id, alert_type=alert_type, days=days, limit=limit)
+
+
+def get_alert_statistics(days: int = 30) -> Dict[str, Any]:
+    if not DB_AVAILABLE:
+        raise RuntimeError("数据库功能未启用")
+    return AlertRepository.get_alert_statistics(days)
+
+
+def get_all_projects_summary() -> List[Dict[str, Any]]:
+    if not DB_AVAILABLE:
+        raise RuntimeError("数据库功能未启用")
+    return BalanceRepository.get_all_projects_summary()
 
 # 并发检查常量
 DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
@@ -148,13 +178,9 @@ class CreditMonitor:
         Returns:
             Dict[str, Any]: 配置字典
         """
-        if not self.config_path.exists():
+        if not self.config_path.exists() and os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() != 'true':
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
-        
-        try:
-            return load_config_with_env_vars(str(self.config_path))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"配置文件格式错误: {e}")
+        return load_config(str(self.config_path))
     
     def _get_max_concurrent_checks(self) -> int:
         """获取最大并发检查数，默认为5
