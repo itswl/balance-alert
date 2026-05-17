@@ -32,6 +32,13 @@ def get_engine():
         return None
     
     if _engine is None:
+        if 'sqlite' in DATABASE_URL:
+            db_path = DATABASE_URL.replace('sqlite:///', '')
+            db_dir = os.path.dirname(db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"创建数据目录: {db_dir}")
+
         # 创建引擎
         _engine = create_engine(
             DATABASE_URL,

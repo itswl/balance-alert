@@ -280,7 +280,7 @@ if __name__ == '__main__':
         else:
             logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")
         logger.info("ℹ️  要启用 Web 告警，请设置环境变量: ENABLE_WEB_ALARM=true")
-        logger.info("🔄 配置文件自动重载已启用")
+        logger.info("🔄 配置加载已简化：每次读取时生效（不做文件监听）")
         logger.info("")
 
         try:
