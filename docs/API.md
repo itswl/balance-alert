@@ -22,6 +22,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
 
 ```bash
 GET /health
+GET /ready
+GET /live
 ```
 
 **响应**：
@@ -33,11 +35,28 @@ GET /health
 }
 ```
 
-### 2. 获取所有项目余额
+### 2. 查询功能开关
+
+```bash
+GET /api/features
+```
+
+**响应**：
+```json
+{
+  "status": "success",
+  "features": {
+    "subscriptions": false,
+    "dynamic_config": false,
+    "history": false
+  }
+}
+```
+
+### 3. 获取所有项目余额
 
 ```bash
 GET /api/credits
-GET /api/credits?force_refresh=true  # 强制刷新
 ```
 
 **响应**：
@@ -59,9 +78,10 @@ GET /api/credits?force_refresh=true  # 强制刷新
 }
 ```
 
-### 3. 手动刷新余额
+### 4. 手动刷新余额
 
 ```bash
+GET /api/refresh
 POST /api/refresh
 Content-Type: application/json
 
@@ -70,9 +90,13 @@ Content-Type: application/json
 }
 ```
 
-**限制**：30秒冷却时间
+**限制**：30 秒冷却时间（触发时返回 429）
 
-### 4. 获取订阅状态
+## 订阅 API（可选）
+
+需启用：`ENABLE_SUBSCRIPTIONS=true`
+
+### 5. 获取订阅状态
 
 ```bash
 GET /api/subscriptions
@@ -96,7 +120,7 @@ GET /api/subscriptions
 }
 ```
 
-### 5. 添加订阅
+### 6. 添加订阅
 
 ```bash
 POST /api/subscription/add
@@ -113,10 +137,11 @@ Content-Type: application/json
 }
 ```
 
-### 6. 删除订阅
+### 7. 删除订阅
 
 ```bash
 POST /api/subscription/delete
+DELETE /api/subscription/delete
 Content-Type: application/json
 
 {
@@ -124,11 +149,64 @@ Content-Type: application/json
 }
 ```
 
+## 动态配置 API（可选）
+
+需启用：`ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true`
+
+### 8. 获取项目配置
+
+```bash
+GET /api/config/projects
+```
+
+### 9. 更新项目阈值
+
+```bash
+POST /api/config/threshold
+Content-Type: application/json
+
+{
+  "project_name": "OpenRouter Main",
+  "new_threshold": 100
+}
+```
+
+### 10. 获取邮箱配置
+
+```bash
+GET /api/config/emails
+```
+
+### 11. 添加/更新邮箱配置
+
+```bash
+POST /api/config/email
+Content-Type: application/json
+
+{
+  "name": "mail-1",
+  "host": "imap.example.com",
+  "username": "user@example.com",
+  "password": "${EMAIL_PASSWORD}"
+}
+```
+
+### 12. 删除邮箱配置
+
+```bash
+POST /api/config/email/delete
+Content-Type: application/json
+
+{
+  "name": "mail-1"
+}
+```
+
 ## 历史数据 API
 
-需启用数据库：`ENABLE_DATABASE=true`
+需启用：`ENABLE_HISTORY_API=true` 且 `ENABLE_DATABASE=true`
 
-### 7. 查询余额历史
+### 13. 查询余额历史
 
 ```bash
 GET /api/history/balance?project_id=abc123&days=7
@@ -140,7 +218,7 @@ GET /api/history/balance?project_id=abc123&days=7
 - `days`: 查询天数（默认7）
 - `limit`: 返回记录数（默认100）
 
-### 8. 获取趋势分析
+### 14. 获取趋势分析
 
 ```bash
 GET /api/history/trend/<project_id>?days=30
@@ -161,13 +239,13 @@ GET /api/history/trend/<project_id>?days=30
 }
 ```
 
-### 9. 查询告警历史
+### 15. 查询告警历史
 
 ```bash
 GET /api/history/alerts?days=7&limit=50
 ```
 
-### 10. 获取告警统计
+### 16. 获取告警统计
 
 ```bash
 GET /api/history/stats?days=30
@@ -193,29 +271,9 @@ GET /api/history/stats?days=30
 | 400 | 请求错误（参数验证失败） |
 | 401 | API Key 无效或未提供 |
 | 404 | 资源不存在 |
-| 429 | 请求过多（超出速率限制） |
+| 429 | 刷新过于频繁（冷却中） |
 | 503 | API Key 未配置或服务不可用 |
 | 500 | 服务器错误 |
-
-## 速率限制
-
-| 端点 | 限制 |
-|------|------|
-| 全局 | 100 请求/分钟 |
-| `/api/refresh` | 2 请求/分钟 + 30秒冷却 |
-| `/api/subscription/*` | 20 请求/分钟 |
-| `/api/history/*` | 50 请求/分钟 |
-
-**超出限制响应**：
-```
-HTTP/1.1 429 Too Many Requests
-X-RateLimit-Remaining: 0
-
-{
-  "status": "error",
-  "message": "Rate limit exceeded"
-}
-```
 
 ## Python 示例
 
@@ -253,20 +311,25 @@ for p in projects:
 ```bash
 # 健康检查
 curl http://localhost:8080/health
+curl http://localhost:8080/ready
+curl http://localhost:8080/live
+
+# 功能开关
+curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/features
 
 # 获取余额
-curl http://localhost:8080/api/credits
+curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
 
 # 刷新余额
-curl -X POST http://localhost:8080/api/refresh
+curl -X POST -H "X-API-Key: your-secret-key" http://localhost:8080/api/refresh
 
 # 添加订阅
-curl -X POST -H "Content-Type: application/json" \
+curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \
      -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"amount":99}' \
      http://localhost:8080/api/subscription/add
 
 # 查询趋势
-curl "http://localhost:8080/api/history/trend/abc123?days=30"
+curl -H "X-API-Key: your-secret-key" "http://localhost:8080/api/history/trend/abc123?days=30"
 ```
 
-**最后更新**: 2024-02-24
+**最后更新**: 2026-05-17

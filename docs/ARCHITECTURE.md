@@ -43,7 +43,7 @@ Balance Alert 是一个云原生的多平台余额监控系统。
 
 **工作流程**：
 ```
-1. 加载配置 (config.json + 环境变量)
+1. 加载配置 (CONFIG_PATH 指定的配置文件 + 环境变量)
 2. 过滤启用的项目
 3. 并发执行检查
    ├─ 检查缓存
@@ -58,9 +58,12 @@ Balance Alert 是一个云原生的多平台余额监控系统。
 **设计模式**：策略模式 + 工厂模式
 
 **支持的 Provider**：
-- OpenRouter, Anthropic, OpenAI, Azure
-- 火山云 (Volc), 阿里云 (Aliyun)
-- DeepSeek, Groq, TikHub, WxRank, UniAPI
+- OpenRouter
+- 火山云 (Volc)
+- 阿里云 (Aliyun)
+- TikHub
+- WxRank
+- UniAPI
 
 **统一接口**：
 ```python
@@ -84,8 +87,9 @@ class BaseProvider:
 - `GET /` - 仪表盘页面
 - `GET /health` / `GET /ready` - 就绪检查
 - `GET /live` - 存活检查
+- `GET /api/features` - 查询已启用的可选能力
 - `GET /api/credits` - 获取余额
-- `POST /api/refresh` - 手动刷新
+- `GET /api/refresh` / `POST /api/refresh` - 手动刷新（带 30 秒冷却）
 
 **订阅管理 API**：
 - `GET /api/subscriptions` - 获取订阅状态
@@ -118,16 +122,20 @@ SubscriptionHistory   # 订阅历史
 
 ### 5. 配置管理 (`config_loader.py` & `ConfigRepository`)
 
-**动静分离架构**：
-1. **静态配置 (只读)**：`.env` 或 `config.json` 提供系统基础参数（Webhook、邮箱、默认系统设置）。支持环境变量覆盖文件配置（混合模式）。
-2. **动态配置 (数据库)**：通过 `ConfigRepository` 管理。项目/订阅/邮箱配置的日常增删改由 Web UI 写入数据库，运行时优先使用数据库内容。
+**配置来源**：
+1. **配置文件**：`CONFIG_PATH` 指定（默认 `config.json`），支持 `${VAR}` 环境变量占位符替换。
+2. **环境变量**：`.env` 在首次加载配置时自动读取；敏感信息建议只放环境变量。部分运行参数会覆盖配置文件的 settings：
+   - `BALANCE_REFRESH_INTERVAL_SECONDS`
+   - `MAX_CONCURRENT_CHECKS`
+3. **数据库动态配置（可选）**：启用 `ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true` 后，运行时会从数据库读取并覆盖以下段落：
+   - `projects`
+   - `subscriptions`
+   - `email`
 
-**配置优先级（从低到高）**：
-1. `config.json`（基础配置；支持 `${VAR}` 占位符）
-2. 环境变量覆盖系统设置：`BALANCE_REFRESH_INTERVAL_SECONDS / MAX_CONCURRENT_CHECKS`
-3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
-
-`config.json` 与数据库配置中的字符串字段都支持 `${VAR}` 占位符替换（环境变量不存在则保留原样）。配置每次读取时生效，不做文件监听。
+**优先级（从低到高）**：
+1. 配置文件（含 `${VAR}` 替换）
+2. 环境变量覆盖 settings（仅覆盖指定字段）
+3. 数据库动态配置覆盖（数据库对应段落非空时生效）
 
 ### 6. Webhook 适配器 (`webhook_adapter.py`)
 

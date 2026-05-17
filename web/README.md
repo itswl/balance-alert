@@ -1,6 +1,6 @@
 # Web 模块化架构
 
-本目录包含重构后的 Flask Web 服务器模块化代码。
+本目录包含 Flask Web 服务器代码（Dashboard + REST API）。
 
 ## 架构概览
 
@@ -39,9 +39,10 @@ web/
 
 每个功能模块使用独立的 Blueprint：
 
-- `create_core_bp(state_manager)` - 核心功能（/, /health, /ready, /live, /api/credits, /api/refresh）
+- `create_core_bp(state_manager)` - 核心功能（/, /health, /ready, /live, /api/features, /api/credits, /api/refresh）
 - `create_subscription_bp(state_manager)` - 订阅管理（/api/subscription/*）
 - `history_bp` - 历史数据（/api/history/*，可选）
+ - `project_bp/email_bp` - 动态配置 API（/api/config/*，可选）
 
 优势：
 - 模块化组织代码
@@ -85,7 +86,7 @@ app = create_app(state_manager)
 python main.py
 ```
 
-这是推荐的方式，使用新的模块化架构。
+这是推荐的启动方式。
 
 ### 方式2：在代码中使用
 
@@ -99,14 +100,6 @@ app = create_app(state_mgr)
 
 # 运行
 app.run(host='0.0.0.0', port=8080)
-```
-
-### 方式3：兼容旧版
-
-原有的 `main.py` 仍然可用，保持向后兼容：
-
-```bash
-python main.py
 ```
 
 ## 模块说明
@@ -176,9 +169,12 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 | 路由 | 方法 | 说明 |
 |------|------|------|
 | / | GET | 首页（Dashboard）|
-| /health | GET | 健康检查 |
+| /health | GET | 就绪检查 |
+| /ready | GET | 就绪检查 |
+| /live | GET | 存活检查 |
+| /api/features | GET | 查询功能开关 |
 | /api/credits | GET | 获取余额 |
-| /api/refresh | POST | 刷新余额 |
+| /api/refresh | GET/POST | 刷新余额（30 秒冷却） |
 
 **subscription.py - 订阅管理 API**
 
@@ -186,9 +182,11 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 |------|------|------|
 | /api/subscriptions | GET | 获取订阅状态 |
 | /api/subscription/add | POST | 添加订阅 |
-| /api/config/subscription | POST | 更新订阅 |
+| /api/config/subscriptions | GET | 获取订阅配置（不含状态） |
+| /api/config/subscription | POST | 更新订阅配置 |
 | /api/subscription/delete | POST/DELETE | 删除订阅 |
 | /api/subscription/mark_renewed | POST | 标记已续费 |
+| /api/subscription/clear_renewed | POST | 清除续费标记 |
 
 **history.py - 历史数据 API（可选）**
 
@@ -199,6 +197,16 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 | /api/history/alerts | GET | 告警历史 |
 | /api/history/stats | GET | 告警统计 |
 | /api/history/projects | GET | 项目摘要 |
+
+**project.py / email.py - 动态配置 API（可选）**
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| /api/config/projects | GET | 获取项目配置 |
+| /api/config/threshold | POST | 更新项目阈值 |
+| /api/config/emails | GET | 获取邮箱配置 |
+| /api/config/email | POST | 添加/更新邮箱配置 |
+| /api/config/email/delete | POST | 删除邮箱配置 |
 
 ## 测试
 
@@ -295,61 +303,6 @@ def action():
     return jsonify(result)
 ```
 
-## 迁移计划
-
-当前状态：
-
-- ✅ 核心功能已模块化（core、subscription、history）
-- ✅ 中间件和工具函数已提取
-- ✅ 应用工厂模式已实现
-- ✅ 历史数据 API 已迁移为独立 Blueprint（history_bp）
-- ✅ 配置 API 已迁移为独立 Blueprint（project/email/subscription）
-
-下一步：
-
-1. 完整测试模块化版本
-2. 继续收敛路由导出与应用注册方式，减少散落 import
-3. 废弃旧版启动方式（在下一个大版本）
-
-## 性能对比
-
-模块化版本 vs 单体版本：
-
-| 指标 | 单体版本 | 模块化版本 |
-|------|----------|------------|
-| 文件数 | 1 (1200+ 行) | 10+ 文件 |
-| 代码组织 | 混合在一起 | 按功能分离 |
-| 可测试性 | 困难 | 容易 |
-| 维护性 | 中等 | 良好 |
-| 性能 | 基准 | 基本一致 |
-
-## 常见问题
-
-### Q: 为什么不一次性重构所有代码？
-
-A: 为了保持稳定性和向后兼容，采用渐进式重构策略。当前版本已经包含核心功能，剩余部分可以在后续版本中迁移。
-
-### Q: 如何切换回旧版？
-
-A: 运行 `python main.py` 即可使用旧版，配置和数据完全兼容。
-
-### Q: 性能会受影响吗？
-
-A: 模块化主要影响代码组织，运行时开销可忽略（< 1ms）。实际测试显示性能基本一致。
-
-### Q: 如何调试新版本？
-
-A: 使用相同的方法：
-
-```bash
-# 设置日志级别
-export LOG_LEVEL=DEBUG
-
-# 运行
-python main.py
-```
-
 ---
 
-**维护者**: 项目团队
-最后更新**: 2026-05-17
+**最后更新**: 2026-05-17
