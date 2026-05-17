@@ -22,11 +22,7 @@ def update_balance_cache(results: List[Dict[str, Any]], state_mgr: StateManager,
         is_partial: 是否为增量/局部更新
     """
     if is_partial:
-        current_state = state_mgr.get_balance_state()
-        proj_map = {p['project']: p for p in current_state.get('projects', [])}
-        for r in results:
-            proj_map[r['project']] = r
-        state_mgr.update_balance_state(list(proj_map.values()))
+        state_mgr.merge_balance_state(results)
     else:
         state_mgr.update_balance_state(results)
 

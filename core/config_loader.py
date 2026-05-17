@@ -14,6 +14,8 @@ from core.logger import get_logger
 
 logger = get_logger('config_loader')
 
+DEFAULT_REFRESH_INTERVAL_SECONDS = 3600
+
 def load_env_file(env_file: str = '.env') -> None:
     """加载 .env 文件"""
     if os.path.exists(env_file):
@@ -24,6 +26,22 @@ def load_env_file(env_file: str = '.env') -> None:
 def get_env(key: str, default=None) -> Optional[str]:
     """获取环境变量"""
     return os.environ.get(key, default)
+
+
+def get_enable_web_alarm() -> bool:
+    return get_env('ENABLE_WEB_ALARM', 'false').lower() == 'true'
+
+
+def get_refresh_interval(config_file: str = 'config.json') -> int:
+    config = load_config_with_env_vars(config_file, validate=False)
+    interval = (config.get('settings') or {}).get('balance_refresh_interval_seconds')
+    if interval is None:
+        return DEFAULT_REFRESH_INTERVAL_SECONDS
+    try:
+        parsed = int(interval)
+    except (ValueError, TypeError):
+        return DEFAULT_REFRESH_INTERVAL_SECONDS
+    return parsed if parsed > 0 else DEFAULT_REFRESH_INTERVAL_SECONDS
 
 
 # 全局配置缓存和锁

@@ -14,17 +14,12 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from flask import jsonify, make_response, request
 from core.logger import get_logger
-from core.config_loader import load_config_with_env_vars
+from core.config_loader import load_config_with_env_vars, get_enable_web_alarm as _get_enable_web_alarm, get_refresh_interval as _get_refresh_interval
 
 logger = get_logger('web.utils')
 
-# 配置常量
-DEFAULT_REFRESH_INTERVAL = 3600  # 默认刷新间隔（秒）
-
-
 def get_enable_web_alarm() -> bool:
-    """获取 Web 告警是否启用"""
-    return os.environ.get('ENABLE_WEB_ALARM', 'false').lower() == 'true'
+    return _get_enable_web_alarm()
 
 
 def get_refresh_interval() -> int:
@@ -36,26 +31,7 @@ def get_refresh_interval() -> int:
     2. config.json 中的 settings.balance_refresh_interval_seconds
     3. 默认值 3600 秒
     """
-    # 优先读取环境变量
-    env_interval = os.environ.get('BALANCE_REFRESH_INTERVAL_SECONDS')
-    if env_interval:
-        try:
-            interval = int(env_interval)
-            if interval > 0:
-                return interval
-        except ValueError:
-            pass
-
-    # 读取配置文件
-    try:
-        config = load_config_with_env_vars('config.json', validate=False)
-        interval = config.get('settings', {}).get('balance_refresh_interval_seconds')
-        if interval and interval > 0:
-            return interval
-    except Exception:
-        pass
-
-    return DEFAULT_REFRESH_INTERVAL
+    return _get_refresh_interval('config.json')
 
 
 def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any]]:

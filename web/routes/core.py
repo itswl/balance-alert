@@ -9,8 +9,9 @@ import time
 import threading
 from flask import Blueprint, jsonify, request, render_template, send_from_directory
 from pathlib import Path
-from ..utils import get_enable_web_alarm, make_etag_response
+from ..utils import make_etag_response
 from ..handlers import update_balance_cache, refresh_credits
+from core.config_loader import get_enable_web_alarm, get_refresh_interval
 from core.state_manager import StateManager
 from core.logger import get_logger
 
@@ -60,7 +61,6 @@ def health():
     - 503: 服务启动中或数据过期
     """
     from datetime import datetime, timedelta
-    from ..utils import get_refresh_interval
 
     # 获取状态
     balance_state = _state_manager.get_balance_state()

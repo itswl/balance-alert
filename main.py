@@ -12,8 +12,7 @@ from web import create_app
 from core.state_manager import StateManager
 from services.monitor import CreditMonitor
 from core.logger import get_logger
-from web.utils import get_enable_web_alarm, get_refresh_interval
-from web.handlers import update_balance_cache, update_subscription_cache
+from core.config_loader import get_enable_web_alarm, get_refresh_interval
 
 logger = get_logger('web_server')
 
@@ -28,19 +27,19 @@ global_state_manager = StateManager()
 def _update_balance(state_mgr: StateManager):
     monitor = CreditMonitor('config.json')
     monitor.run(dry_run=not get_enable_web_alarm())
-    update_balance_cache(monitor.results, state_mgr)
+    state_mgr.update_balance_state(monitor.results)
     return monitor.results
 
 
 def _update_subscriptions(state_mgr: StateManager):
     if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() != 'true':
-        update_subscription_cache([], state_mgr)
+        state_mgr.update_subscription_state([])
         return []
 
     from services.subscription_checker import SubscriptionChecker
     subscription_checker = SubscriptionChecker('config.json')
     subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
-    update_subscription_cache(subscription_results or [], state_mgr)
+    state_mgr.update_subscription_state(subscription_results or [])
     return subscription_results or []
 
 

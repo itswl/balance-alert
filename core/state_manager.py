@@ -95,6 +95,29 @@ class StateManager:
             self._notify_callbacks('balance', self._balance_state)
 
             logger.info(f"余额状态已更新: {self._balance_state.summary}")
+
+    def merge_balance_state(self, projects: List[Dict[str, Any]]) -> None:
+        with self._lock:
+            current_projects = self._balance_state.projects or []
+            proj_map = {p.get('project'): p for p in current_projects if p.get('project') is not None}
+            for r in projects:
+                proj_key = r.get('project')
+                if proj_key is None:
+                    continue
+                proj_map[proj_key] = r
+
+            merged = list(proj_map.values())
+            self._balance_state.last_update = time.strftime('%Y-%m-%d %H:%M:%S')
+            self._balance_state.projects = merged
+            self._balance_state.summary = {
+                'total': len(merged),
+                'success': sum(1 for r in merged if r['success']),
+                'failed': sum(1 for r in merged if not r['success']),
+                'need_alarm': sum(1 for r in merged if r.get('need_alarm', False)),
+            }
+            self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
+            self._notify_callbacks('balance', self._balance_state)
+            logger.info(f"余额状态已更新: {self._balance_state.summary}")
     
     def update_subscription_state(self, subscriptions: Optional[List[Dict[str, Any]]]) -> None:
         """更新订阅状态（线程安全）"""
