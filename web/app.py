@@ -82,22 +82,20 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    from .routes import create_core_bp
-
     if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true':
-        from .routes.subscription import create_subscription_bp
+        from .routes import create_subscription_bp
         app.register_blueprint(create_subscription_bp(state_manager))
 
     if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true':
-        from .routes.project import project_bp
-        from .routes.email import email_bp
+        from .routes import project_bp, email_bp
         app.register_blueprint(project_bp)
         app.register_blueprint(email_bp)
 
     if os.environ.get('ENABLE_HISTORY_API', 'false').lower() == 'true':
-        from .routes.history import history_bp
+        from .routes import history_bp
         app.register_blueprint(history_bp)
 
+    from .routes import create_core_bp
     app.register_blueprint(create_core_bp(state_manager))
 
     logger.info("蓝图注册完成")

@@ -151,15 +151,7 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         logger.info(f"[Config] 配置版本: {config_version}")
 
     if validate:
-        app_config = AppConfig.from_dict(config)
-        errors = app_config.validate()
-        if errors:
-            error_messages = []
-            for section, section_errors in errors.items():
-                error_messages.append(f"  {section}:")
-                for err in section_errors:
-                    error_messages.append(f"    - {err}")
-            logger.warning(f"配置验证发现以下问题:\n" + "\n".join(error_messages))
+        _validate_loaded_config(config)
 
     # 调试日志：输出脱敏配置
     logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
@@ -167,27 +159,41 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
     return config
 
 
+def _validate_loaded_config(config: Dict[str, Any]) -> None:
+    app_config = AppConfig.from_dict(config)
+    errors = app_config.validate()
+    if not errors:
+        return None
+
+    error_messages = []
+    for section, section_errors in errors.items():
+        error_messages.append(f"  {section}:")
+        for err in section_errors:
+            error_messages.append(f"    - {err}")
+    logger.warning(f"配置验证发现以下问题:\n" + "\n".join(error_messages))
+
+
 def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
     """加载配置，环境变量优先于配置文件（兼容旧接口）"""
     return load_config_with_env_vars(config_file)
 
 
-def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
+def get_config(config_file: str = 'config.json', use_cache: bool = True, validate: bool = True) -> Dict[str, Any]:
     """获取配置，带缓存和自动重载"""
-    # 如果使用缓存且缓存存在，直接返回
     if use_cache:
         with _config_lock:
             cached = _config_cache.get(config_file)
-            if cached is not None:
-                return cached
-    
-    # 加载新配置
-    config = load_config_with_env_vars(config_file)
-    
-    # 更新缓存
+            if cached is not None and cached.get('config') is not None:
+                config = cached['config']
+                if validate and not cached.get('validated', False):
+                    _validate_loaded_config(config)
+                    cached['validated'] = True
+                return config
+
+    config = load_config_with_env_vars(config_file, validate=validate)
     with _config_lock:
-        _config_cache[config_file] = config
-    
+        _config_cache[config_file] = {'config': config, 'validated': bool(validate)}
+
     return config
 
 
