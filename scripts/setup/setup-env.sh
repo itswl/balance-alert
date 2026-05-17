@@ -38,9 +38,6 @@ cat > .env << 'EOF'
 # ========================================
 BALANCE_REFRESH_INTERVAL_SECONDS=3600
 MAX_CONCURRENT_CHECKS=5
-MIN_REFRESH_INTERVAL_SECONDS=60
-ENABLE_SMART_REFRESH=false
-SMART_REFRESH_THRESHOLD_PERCENT=5
 
 # ========================================
 # 数据库配置

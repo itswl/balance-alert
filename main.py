@@ -15,9 +15,8 @@ from services.monitor import CreditMonitor
 from services.subscription_checker import SubscriptionChecker
 from services.prometheus_exporter import metrics_collector
 from core.logger import get_logger
-from web.utils import get_enable_web_alarm, get_refresh_interval, get_smart_refresh_config
+from web.utils import get_enable_web_alarm, get_refresh_interval
 from web.handlers import update_balance_cache, update_subscription_cache
-from pathlib import Path
 
 logger = get_logger('web_server')
 
@@ -26,8 +25,7 @@ _stop_event = threading.Event()
 _shutdown_signal_count = 0
 
 # 全局状态管理器和数据检测器
-from database.repository import BalanceRepository, SubscriptionRepository
-from sqlalchemy import desc, func, and_
+from sqlalchemy import func, and_
 from database.models import BalanceHistory, SubscriptionHistory
 from database.engine import get_session
 
@@ -105,68 +103,20 @@ def init_state_from_db(state_mgr: StateManager):
 
 global_state_manager = StateManager()
 
-
-class DataChangeDetector:
-    """数据变化检测器（用于智能刷新）"""
-
-    def __init__(self):
-        self._previous_data = {}
-        self._change_count = {}
-
-    def detect_changes(self, current_data, data_type: str) -> bool:
-        """检测数据是否有变化"""
-        import hashlib
-        import json
-
-        current_hash = hashlib.md5(json.dumps(current_data, sort_keys=True).encode()).hexdigest()
-        previous_hash = self._previous_data.get(data_type)
-
-        if previous_hash != current_hash:
-            self._previous_data[data_type] = current_hash
-            self._change_count[data_type] = self._change_count.get(data_type, 0) + 1
-            return True
-
-        return False
-
-    def should_force_refresh(self, data_type: str, threshold_percent: float) -> bool:
-        """判断是否需要强制刷新（基于变化率）"""
-        # 简化逻辑：暂时总是返回 False
-        return False
-
-
-data_detector = DataChangeDetector()
-
-
-
-
-
-def update_credits(state_mgr: StateManager = global_state_manager, detector: DataChangeDetector = None):
+def update_credits(state_mgr: StateManager = global_state_manager):
     """
     后台定时更新余额数据
 
     Args:
         state_mgr: 状态管理器实例
-        detector: 数据变化检测器
     """
-    if detector is None:
-        detector = data_detector
-
     while not _stop_event.is_set():
         try:
-            # 获取智能刷新配置
-            smart_config = get_smart_refresh_config()
-            smart_refresh_enabled = smart_config['enabled']
-
-            logger.info(f"开始更新数据 (智能刷新: {'启用' if smart_refresh_enabled else '禁用'})")
+            logger.info("开始更新数据")
 
             # 更新余额数据
             monitor = CreditMonitor('config.json')
             monitor.run(dry_run=not get_enable_web_alarm())
-
-            # 检测余额数据变化（智能刷新）
-            balance_changed = False
-            if smart_refresh_enabled:
-                balance_changed = detector.detect_changes(monitor.results, 'balance')
 
             # 更新缓存
             update_balance_cache(monitor.results, state_mgr)
@@ -175,22 +125,13 @@ def update_credits(state_mgr: StateManager = global_state_manager, detector: Dat
             subscription_checker = SubscriptionChecker('config.json')
             subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
 
-            # 检测订阅数据变化（智能刷新）
-            subscription_changed = False
-            if smart_refresh_enabled and subscription_results:
-                subscription_changed = detector.detect_changes(subscription_results, 'subscription')
-
             # 更新缓存
             update_subscription_cache(subscription_results or [], state_mgr)
 
             # 更新 Prometheus 指标
             metrics_collector.update_balance_metrics(monitor.results)
             metrics_collector.update_subscription_metrics(subscription_results or [])
-
-            # 智能刷新日志
-            if smart_refresh_enabled:
-                logger.info(f"数据更新完成 - 余额变化: {'是' if balance_changed else '否'}, "
-                           f"订阅变化: {'是' if subscription_changed else '否'}")
+            logger.info("数据更新完成")
 
         except Exception as e:
             logger.error(f"更新数据失败: {e}", exc_info=True)
@@ -198,25 +139,7 @@ def update_credits(state_mgr: StateManager = global_state_manager, detector: Dat
 
         # 根据配置间隔等待
         sleep_seconds = get_refresh_interval()
-
-        # 智能刷新逻辑
-        if smart_config['enabled']:
-            # 检查是否需要强制刷新
-            force_balance_refresh = detector.should_force_refresh(
-                'balance', smart_config['threshold_percent']
-            )
-            force_subscription_refresh = detector.should_force_refresh(
-                'subscription', smart_config['threshold_percent']
-            )
-
-            if force_balance_refresh or force_subscription_refresh:
-                logger.info(f"达到强制刷新阈值，下次将在 {sleep_seconds} 秒后更新")
-            elif balance_changed or subscription_changed:
-                logger.info(f"检测到数据变化，下次将在 {sleep_seconds} 秒后更新")
-            else:
-                logger.info(f"数据无变化，下次将在 {sleep_seconds} 秒后更新")
-        else:
-            logger.info(f"下次更新将在 {sleep_seconds} 秒后")
+        logger.info(f"下次更新将在 {sleep_seconds} 秒后")
 
         # 使用可中断的 sleep
         _stop_event.wait(sleep_seconds)

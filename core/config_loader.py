@@ -87,24 +87,6 @@ def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
         except (ValueError, TypeError):
             logger.warning(f"MAX_CONCURRENT_CHECKS 值无效: {max_concurrent}，忽略")
 
-    min_refresh = get_env('MIN_REFRESH_INTERVAL_SECONDS')
-    if min_refresh:
-        try:
-            settings['min_refresh_interval_seconds'] = int(min_refresh)
-        except (ValueError, TypeError):
-            logger.warning(f"MIN_REFRESH_INTERVAL_SECONDS 值无效: {min_refresh}，忽略")
-
-    enable_smart = get_env('ENABLE_SMART_REFRESH')
-    if enable_smart is not None:
-        settings['enable_smart_refresh'] = str(enable_smart).lower() == 'true'
-
-    smart_threshold = get_env('SMART_REFRESH_THRESHOLD_PERCENT')
-    if smart_threshold:
-        try:
-            settings['smart_refresh_threshold_percent'] = int(float(smart_threshold))
-        except (ValueError, TypeError):
-            logger.warning(f"SMART_REFRESH_THRESHOLD_PERCENT 值无效: {smart_threshold}，忽略")
-
     return settings
 
 

@@ -232,9 +232,6 @@ class SettingsConfig:
     """系统设置配置"""
     balance_refresh_interval_seconds: int = 3600
     max_concurrent_checks: int = 5
-    min_refresh_interval_seconds: int = 60
-    enable_smart_refresh: bool = False
-    smart_refresh_threshold_percent: int = 5
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SettingsConfig":
@@ -242,9 +239,6 @@ class SettingsConfig:
         return cls(
             balance_refresh_interval_seconds=_safe_int(data.get('balance_refresh_interval_seconds', 3600), 3600),
             max_concurrent_checks=_safe_int(data.get('max_concurrent_checks', 5), 5),
-            min_refresh_interval_seconds=_safe_int(data.get('min_refresh_interval_seconds', 60), 60),
-            enable_smart_refresh=bool(data.get('enable_smart_refresh', False)),
-            smart_refresh_threshold_percent=_safe_int(data.get('smart_refresh_threshold_percent', 5), 5)
         )
 
     def validate(self) -> List[str]:
@@ -254,8 +248,6 @@ class SettingsConfig:
             errors.append("balance_refresh_interval_seconds 必须大于 0")
         if self.max_concurrent_checks < 1 or self.max_concurrent_checks > 20:
             errors.append("max_concurrent_checks 必须在 1-20 之间")
-        if self.min_refresh_interval_seconds <= 0:
-            errors.append("min_refresh_interval_seconds 必须大于 0")
         return errors
 
 
