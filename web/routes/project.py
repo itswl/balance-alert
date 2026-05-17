@@ -8,28 +8,12 @@ from flask import Blueprint, jsonify, request
 from ..utils import load_config_safe, audit_log, mask_project_config
 from core.config_loader import clear_config_cache
 from services.config_service import upsert_project
-from ..handlers import refresh_subscription_cache
-from core.state_manager import StateManager
 from core.logger import get_logger
 
 logger = get_logger('web.routes.project')
 
 # 创建蓝图
 project_bp = Blueprint('project', __name__, url_prefix='/api')
-
-# 全局状态管理器（需要从外部注入）
-_state_manager: StateManager = None
-
-
-def init_project_routes(state_mgr: StateManager):
-    """
-    初始化项目路由（注入依赖）
-
-    Args:
-        state_mgr: 状态管理器实例
-    """
-    global _state_manager
-    _state_manager = state_mgr
 
 
 @project_bp.route('/config/projects', methods=['GET'])
