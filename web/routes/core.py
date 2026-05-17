@@ -27,6 +27,18 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
     last_refresh_time = {'value': 0.0}
     refresh_cooldown_seconds = 30
 
+    def _error(message: str, status_code: int = 500):
+        return jsonify({'status': 'error', 'message': message}), status_code
+
+    def _success(payload: dict, status_code: int = 200):
+        return jsonify(payload), status_code
+
+    def _uptime_seconds() -> int:
+        return int(time.time() - state_manager._start_time) if hasattr(state_manager, '_start_time') else 0
+
+    def _version() -> str:
+        return os.environ.get('APP_VERSION', '1.0.0')
+
     @core_bp.route('/')
     def index():
         """首页 - Dashboard"""
@@ -70,7 +82,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
             except Exception:
                 pass
 
-        uptime_seconds = int(time.time() - state_manager._start_time) if hasattr(state_manager, '_start_time') else 0
+        uptime_seconds = _uptime_seconds()
 
         response_data = {
             'status': 'healthy' if (has_data and not is_stale and cron_healthy) else 'degraded',
@@ -79,7 +91,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
             'cron_healthy': cron_healthy,
             'last_update': last_update if isinstance(last_update, str) else (last_update.isoformat() if last_update else None),
             'uptime_seconds': uptime_seconds,
-            'version': os.environ.get('APP_VERSION', '1.0.0')
+            'version': _version()
         }
 
         status_code = 200 if response_data['status'] == 'healthy' else 503
@@ -88,12 +100,11 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
     @core_bp.route('/live')
     def live():
         """存活检查端点：只验证进程能正常响应。"""
-        uptime_seconds = int(time.time() - state_manager._start_time) if hasattr(state_manager, '_start_time') else 0
-        return jsonify({
+        return _success({
             'status': 'alive',
-            'uptime_seconds': uptime_seconds,
-            'version': os.environ.get('APP_VERSION', '1.0.0')
-        })
+            'uptime_seconds': _uptime_seconds(),
+            'version': _version()
+        }, 200)
 
     @core_bp.route('/api/features')
     def get_features():
@@ -113,10 +124,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
         balance_state = state_manager.get_balance_state()
 
         if not balance_state or not balance_state.get('projects'):
-            return jsonify({
-                'status': 'error',
-                'message': '余额数据未初始化，请稍后重试'
-            }), 503
+            return _error('余额数据未初始化，请稍后重试', 503)
 
         return make_etag_response(balance_state)
 
@@ -132,15 +140,9 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
         required_fields = ['name', 'cycle_type', 'renewal_day', 'alert_days_before', 'amount']
         missing = [field for field in required_fields if data.get(field) in (None, '')]
         if missing:
-            return jsonify({
-                'status': 'error',
-                'message': f"缺少必要参数: {', '.join(missing)}"
-            }), 400
+            return _error(f"缺少必要参数: {', '.join(missing)}", 400)
 
-        return jsonify({
-            'status': 'error',
-            'message': '订阅功能未启用，请设置 ENABLE_SUBSCRIPTIONS=true'
-        }), 503
+        return _error('订阅功能未启用，请设置 ENABLE_SUBSCRIPTIONS=true', 503)
 
     @core_bp.route('/api/refresh', methods=['GET', 'POST'])
     def refresh_credits_route():
@@ -152,10 +154,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
 
             if time_since_last < refresh_cooldown_seconds:
                 wait_time = int(refresh_cooldown_seconds - time_since_last)
-                return jsonify({
-                    'status': 'error',
-                    'message': f'刷新过于频繁，请{wait_time}秒后重试'
-                }), 429
+                return _error(f'刷新过于频繁，请{wait_time}秒后重试', 429)
 
             last_refresh_time['value'] = current_time
 
@@ -164,10 +163,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
             data = request.get_json(silent=True) or {}
             project_name = data.get('project_name')
             if project_name is not None and not isinstance(project_name, str):
-                return jsonify({
-                    'status': 'error',
-                    'message': 'project_name 必须是字符串'
-                }), 400
+                return _error('project_name 必须是字符串', 400)
             if isinstance(project_name, str):
                 project_name = project_name.strip() or None
 
@@ -178,30 +174,24 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
             result = refresh_credits(get_default_config_path(), project_name, dry_run)
 
             if not result['success']:
-                return jsonify({
-                    'status': 'error',
-                    'message': f"刷新失败: {result.get('error', 'Unknown error')}"
-                }), 500
+                return _error(f"刷新失败: {result.get('error', 'Unknown error')}", 500)
 
             is_partial = project_name is not None
             update_balance_cache(result['results'], state_manager, is_partial=is_partial)
 
             execution_time = time.time() - start_time
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f"刷新完成{'（项目: ' + project_name + '）' if project_name else ''}",
                 'refreshed_count': result['count'],
                 'execution_time_seconds': round(execution_time, 2),
                 'dry_run': dry_run
-            })
+            }, 200)
 
         except Exception as e:
             logger.error(f"刷新失败: {e}", exc_info=True)
-            return jsonify({
-                'status': 'error',
-                'message': f'刷新失败: {str(e)}'
-            }), 500
+            return _error(f'刷新失败: {str(e)}', 500)
 
     @core_bp.route('/static/<path:filename>')
     def serve_static(filename):

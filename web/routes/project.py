@@ -15,6 +15,24 @@ logger = get_logger('web.routes.project')
 # 创建蓝图
 project_bp = Blueprint('project', __name__, url_prefix='/api')
 
+def _error(message: str, status_code: int = 500):
+    return jsonify({'status': 'error', 'message': message}), status_code
+
+
+def _success(payload: dict, status_code: int = 200):
+    return jsonify(payload), status_code
+
+
+def _require_json_fields(*fields: str):
+    data = request.get_json()
+    if not data:
+        return None, _error(f"缺少必要参数: {', '.join(fields)}", 400)
+    missing = [f for f in fields if f not in data]
+    if missing:
+        return None, _error(f"缺少必要参数: {', '.join(missing)}", 400)
+    return data, None
+
+
 
 @project_bp.route('/config/projects', methods=['GET'])
 def get_projects_config():
@@ -22,30 +40,25 @@ def get_projects_config():
     try:
         config = load_config_safe()
         projects = [mask_project_config(project) for project in config.get('projects', [])]
-        return jsonify({'status': 'success', 'projects': projects})
+        return _success({'status': 'success', 'projects': projects}, 200)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        logger.error(f"获取项目配置失败: {e}", exc_info=True)
+        return _error(str(e), 500)
 
 
 @project_bp.route('/config/threshold', methods=['POST'])
 def update_project_threshold():
     """更新项目阈值"""
     try:
-        data = request.get_json()
-        if not data or 'project_name' not in data or 'new_threshold' not in data:
-            return jsonify({
-                'status': 'error',
-                'message': '缺少必要参数: project_name 和 new_threshold'
-            }), 400
+        data, error_resp = _require_json_fields('project_name', 'new_threshold')
+        if error_resp:
+            return error_resp
 
         project_name = data['project_name']
         new_threshold = float(data['new_threshold'])
 
         if new_threshold < 0:
-            return jsonify({
-                'status': 'error',
-                'message': '阈值不能为负数'
-            }), 400
+            return _error('阈值不能为负数', 400)
 
         # 读取配置文件
         config = load_config_safe()
@@ -62,10 +75,7 @@ def update_project_threshold():
                 break
 
         if not project_found:
-            return jsonify({
-                'status': 'error',
-                'message': f'未找到项目: {project_name}'
-            }), 404
+            return _error(f'未找到项目: {project_name}', 404)
 
         # 保存到数据库
         success = upsert_project(target_project)
@@ -79,16 +89,13 @@ def update_project_threshold():
             'new_threshold': new_threshold
         })
 
-        return jsonify({
+        return _success({
             'status': 'success',
             'message': f'项目 [{project_name}] 阈值已更新为 {new_threshold}'
-        })
+        }, 200)
 
     except ValueError as e:
-        return jsonify({
-            'status': 'error',
-            'message': '阈值必须是有效的数字'
-        }), 400
+        return _error('阈值必须是有效的数字', 400)
     except Exception as e:
         logger.error(f"更新项目阈值失败: {e}", exc_info=True)
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return _error(str(e), 500)
