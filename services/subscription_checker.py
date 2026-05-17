@@ -103,7 +103,7 @@ class SubscriptionChecker:
                 status='sent'
             )
         except Exception as e:
-            logger.error(f"保存订阅提醒告警历史失败: {e}")
+            logger.error(f"保存订阅提醒告警历史失败: {e}", exc_info=True)
 
     def _save_subscription_history(self, subscription_id: str, name: str, cycle_type: str, days_until_renewal: int, amount: float, need_alert: bool) -> None:
         if not DB_AVAILABLE:
@@ -118,7 +118,7 @@ class SubscriptionChecker:
                 need_renewal=need_alert
             )
         except Exception as e:
-            logger.error(f"保存订阅历史失败: {e}")
+            logger.error(f"保存订阅历史失败: {e}", exc_info=True)
 
     def _check_subscription(self, sub, today, dry_run):
         """检查单个订阅"""

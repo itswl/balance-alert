@@ -143,7 +143,6 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
 
     config = _ensure_base_shape(config)
     config['settings'] = _overlay_settings_from_env(config.get('settings', {}) or {})
-    config = _substitute_env_placeholders(config)
 
     # 打印配置版本号
     config_version = config.get('version')

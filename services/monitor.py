@@ -211,7 +211,7 @@ class CreditMonitor:
                 need_alarm=need_alarm
             )
         except Exception as e:
-            logger.error(f"保存余额历史失败: {e}")
+            logger.error(f"保存余额历史失败: {e}", exc_info=True)
 
     def _should_skip_alarm(self, project_id: str, alert_type: str, cooldown_seconds: int) -> bool:
         if not DB_AVAILABLE:
@@ -235,7 +235,7 @@ class CreditMonitor:
                 status='sent'
             )
         except Exception as e:
-            logger.error(f"保存告警历史失败: {e}")
+            logger.error(f"保存告警历史失败: {e}", exc_info=True)
     
     def check_project(self, project_config: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """

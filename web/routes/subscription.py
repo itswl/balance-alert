@@ -7,7 +7,7 @@
 from flask import Blueprint, jsonify, request
 from datetime import date, datetime
 from ..middleware import validate_request
-from ..utils import load_config_safe, audit_log
+from ..utils import load_config_safe, audit_log, json_error, json_success
 from core.config_loader import clear_config_cache
 from services.config_service import delete_subscription, upsert_subscription
 from ..handlers import refresh_subscription_cache
@@ -24,12 +24,8 @@ logger = get_logger('web.routes.subscription')
 
 def create_subscription_bp(state_manager: StateManager) -> Blueprint:
     subscription_bp = Blueprint('subscription', __name__, url_prefix='/api')
-
-    def _error(message: str, status_code: int = 500):
-        return jsonify({'status': 'error', 'message': message}), status_code
-
-    def _success(payload: dict, status_code: int = 200):
-        return jsonify(payload), status_code
+    _error = json_error
+    _success = json_success
 
     def _refresh_cache() -> None:
         refresh_subscription_cache(get_default_config_path(), state_manager)
@@ -130,6 +126,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             }, 200)
 
         except Exception as e:
+            logger.error(f"更新订阅配置失败: {e}", exc_info=True)
             return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/add', methods=['POST'])
@@ -174,6 +171,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             }, 200)
 
         except Exception as e:
+            logger.error(f"添加订阅失败: {e}", exc_info=True)
             return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/delete', methods=['POST', 'DELETE'])
@@ -198,6 +196,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             }, 200)
 
         except Exception as e:
+            logger.error(f"删除订阅失败: {e}", exc_info=True)
             return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/mark_renewed', methods=['POST'])
@@ -226,7 +225,9 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             config = load_config_safe()
 
             from ..handlers import calculate_next_renewal_date
-            sub_data = next(s for s in config['subscriptions'] if s['name'] == subscription_name)
+            sub_data = next((s for s in config.get('subscriptions', []) if s.get('name') == subscription_name), None)
+            if not sub_data:
+                return _error('未找到订阅配置', 404)
             next_renewal = calculate_next_renewal_date(
                 sub_data['cycle_type'],
                 sub_data['renewal_day'],

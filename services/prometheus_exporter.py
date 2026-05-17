@@ -388,7 +388,7 @@ def load_cached_metrics():
     except FileNotFoundError:
         return False
     except Exception as e:
-        logger.error(f"加载缓存失败: {e}")
+        logger.error(f"加载缓存失败: {e}", exc_info=True)
         return False
 
 
