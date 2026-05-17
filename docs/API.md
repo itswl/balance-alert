@@ -269,14 +269,4 @@ curl -X POST -H "Content-Type: application/json" \
 curl "http://localhost:8080/api/history/trend/abc123?days=30"
 ```
 
-## Swagger 文档
-
-访问交互式 API 文档（如果已启用）：
-
-```
-http://localhost:8080/apidocs
-```
-
----
-
 **最后更新**: 2024-02-24
