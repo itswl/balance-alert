@@ -103,6 +103,7 @@ class CircuitBreaker:
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._last_failure_time: float = 0
+        self._half_open_probe_in_flight = False
         self._lock = threading.Lock()
 
     @property
@@ -116,17 +117,27 @@ class CircuitBreaker:
 
     def allow_request(self) -> bool:
         """检查是否允许请求通过"""
-        current = self.state
-        if current == CircuitState.CLOSED:
-            return True
-        if current == CircuitState.HALF_OPEN:
-            return True  # 允许一次试探请求
-        return False
+        with self._lock:
+            if self._state == CircuitState.OPEN:
+                if time.time() - self._last_failure_time >= self.open_timeout:
+                    self._state = CircuitState.HALF_OPEN
+                    self._half_open_probe_in_flight = False
+                    logger.info(f"[CircuitBreaker:{self.name}] OPEN -> HALF_OPEN")
+
+            if self._state == CircuitState.CLOSED:
+                return True
+            if self._state == CircuitState.HALF_OPEN:
+                if self._half_open_probe_in_flight:
+                    return False
+                self._half_open_probe_in_flight = True
+                return True
+            return False
 
     def record_success(self) -> None:
         """记录成功请求"""
         with self._lock:
             self._failure_count = 0
+            self._half_open_probe_in_flight = False
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.CLOSED
                 logger.info(f"[CircuitBreaker:{self.name}] HALF_OPEN -> CLOSED")
@@ -137,6 +148,7 @@ class CircuitBreaker:
             self._failure_count += 1
             self._last_failure_time = time.time()
             if self._state == CircuitState.HALF_OPEN:
+                self._half_open_probe_in_flight = False
                 self._state = CircuitState.OPEN
                 logger.warning(f"[CircuitBreaker:{self.name}] HALF_OPEN -> OPEN (试探失败)")
             elif self._failure_count >= self.failure_threshold:
@@ -264,7 +276,10 @@ class BaseProvider(ABC):
             if response.status_code >= 500 or response.status_code == 429:
                 breaker.record_failure()
             elif response.status_code in (401, 403):
-                breaker.record_success()
+                if breaker.state == CircuitState.HALF_OPEN:
+                    breaker.record_failure()
+                else:
+                    breaker.record_success()
             else:
                 breaker.record_success()
             return response

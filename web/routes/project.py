@@ -5,7 +5,7 @@
 包含项目的配置更新功能
 """
 from flask import Blueprint, jsonify, request
-from ..utils import load_config_safe, audit_log, mask_project_config, json_error, json_success, require_json_fields
+from ..utils import load_config_safe, audit_log, mask_project_config, json_error, json_success, require_json_fields, make_etag_response
 from core.config_loader import clear_config_cache
 from services.config_service import upsert_project
 from core.logger import get_logger
@@ -23,7 +23,7 @@ def get_projects_config():
     try:
         config = load_config_safe()
         projects = [mask_project_config(project) for project in config.get('projects', [])]
-        return json_success({'status': 'success', 'projects': projects}, 200)
+        return make_etag_response({'status': 'success', 'projects': projects})
     except Exception as e:
         logger.error(f"获取项目配置失败: {e}", exc_info=True)
         return json_error(str(e), 500)

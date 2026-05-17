@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from ..utils import audit_log, mask_email_config, json_error, json_success
+from ..utils import audit_log, mask_email_config, json_error, json_success, make_etag_response
 from core.config_loader import clear_config_cache
 from services.config_service import delete_email as delete_email_config, get_all_emails, upsert_email as upsert_email_config
 from core.logger import get_logger
@@ -19,7 +19,7 @@ def get_emails_config():
     """获取所有邮箱配置"""
     try:
         emails = [mask_email_config(email) for email in get_all_emails()]
-        return json_success({'status': 'success', 'emails': emails}, 200)
+        return make_etag_response({'status': 'success', 'emails': emails})
     except Exception as e:
         logger.error(f"获取邮箱配置失败: {e}", exc_info=True)
         return json_error(str(e), 500)

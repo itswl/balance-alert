@@ -11,6 +11,7 @@ import os
 import copy
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
 from core.logger import get_logger
 
 logger = get_logger('state_manager')
@@ -76,11 +77,14 @@ class StateManager:
                 callback(state_type, state_data)
             except Exception as e:
                 logger.error(f"回调函数执行失败: {e}", exc_info=True)
+
+    def _now_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     
     def update_balance_state(self, projects: List[Dict[str, Any]]) -> None:
         """更新余额状态（线程安全）"""
         with self._lock:
-            self._balance_state.last_update = time.strftime('%Y-%m-%d %H:%M:%S')
+            self._balance_state.last_update = self._now_iso()
             self._balance_state.projects = projects.copy()
             self._balance_state.summary = {
                 'total': len(projects),
@@ -107,7 +111,7 @@ class StateManager:
                 proj_map[proj_key] = r
 
             merged = list(proj_map.values())
-            self._balance_state.last_update = time.strftime('%Y-%m-%d %H:%M:%S')
+            self._balance_state.last_update = self._now_iso()
             self._balance_state.projects = merged
             self._balance_state.summary = {
                 'total': len(merged),
@@ -126,7 +130,7 @@ class StateManager:
             subscriptions = []
 
         with self._lock:
-            self._subscription_state.last_update = time.strftime('%Y-%m-%d %H:%M:%S')
+            self._subscription_state.last_update = self._now_iso()
             self._subscription_state.subscriptions = subscriptions.copy()
             self._subscription_state.summary = {
                 'total': len(subscriptions),
