@@ -13,14 +13,8 @@
 使用 `--no-cache` 重新构建：
 
 ```bash
-# 方法 1: 使用构建脚本（推荐）
-./build-docker.sh --no-cache
-
-# 方法 2: 直接使用 Docker 命令
+# 直接使用 Docker 命令
 docker build --no-cache -t balance-alert:latest .
-
-# 方法 3: 快速重建并测试
-./rebuild-and-test.sh
 ```
 
 ---
@@ -45,17 +39,7 @@ docker image prune -f
 
 ### 2. 构建新镜像
 
-#### 方法 A：使用构建脚本（推荐）
-
-```bash
-# 带缓存构建（快速）
-./build-docker.sh
-
-# 无缓存构建（确保最新）
-./build-docker.sh --no-cache
-```
-
-#### 方法 B：手动构建
+#### 手动构建
 
 ```bash
 # 基础构建
@@ -317,47 +301,6 @@ build:
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
     - docker push $CI_REGISTRY_IMAGE:latest
 ```
-
----
-
-## 📝 构建脚本说明
-
-### build-docker.sh
-
-全功能构建脚本：
-
-```bash
-# 带缓存构建
-./build-docker.sh
-
-# 无缓存构建
-./build-docker.sh --no-cache
-
-# 自定义镜像名和标签
-IMAGE_NAME=my-app IMAGE_TAG=v2.0 ./build-docker.sh
-```
-
-**功能**:
-- ✅ 自动清理悬空镜像
-- ✅ 添加构建元数据（版本、commit、时间）
-- ✅ 多标签支持
-- ✅ 彩色输出
-- ✅ 显示后续操作提示
-
-### rebuild-and-test.sh
-
-快速重建和测试：
-
-```bash
-./rebuild-and-test.sh
-```
-
-**功能**:
-- ✅ 停止旧容器
-- ✅ 无缓存重建
-- ✅ 自动启动测试容器
-- ✅ 健康检查
-- ✅ 显示日志
 
 ---
 
