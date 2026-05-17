@@ -52,7 +52,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
         try:
             config = load_config_safe()
             subscriptions = config.get('subscriptions', [])
-            return jsonify({'status': 'success', 'subscriptions': subscriptions})
+            return _success({'status': 'success', 'subscriptions': subscriptions}, 200)
         except Exception as e:
             logger.error(f"获取订阅配置失败: {e}", exc_info=True)
             return _error(str(e), 500)
