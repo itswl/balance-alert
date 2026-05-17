@@ -65,6 +65,22 @@ class _TTLCache(Generic[T]):
         with self._lock:
             self._data[key] = (time.time(), value)
 
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+    def keys(self):
+        with self._lock:
+            return list(self._data.keys())
+
+    def __getitem__(self, key: str):
+        with self._lock:
+            return self._data[key]
+
+    def __setitem__(self, key: str, value):
+        with self._lock:
+            self._data[key] = value
+
 
 _provider_cache: _TTLCache[Any] = _TTLCache()
 _response_cache: _TTLCache[Dict[str, Any]] = _TTLCache()
