@@ -77,7 +77,7 @@ config.json
 docker build --no-cache -t balance-alert:latest .
 
 # 或使用构建脚本
-./build-docker.sh --no-cache
+docker build --no-cache -t balance-alert:latest .
 ```
 
 ### 运行容器
