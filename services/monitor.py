@@ -31,36 +31,6 @@ except ImportError:
     DB_AVAILABLE = False
     logger.warning("数据库模块不可用，历史数据不会被保存")
 
-
-def get_balance_history(project_id: Optional[str] = None, provider: Optional[str] = None, days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
-    if not DB_AVAILABLE:
-        raise RuntimeError("数据库功能未启用")
-    return BalanceRepository.get_balance_history(project_id=project_id, provider=provider, days=days, limit=limit)
-
-
-def get_balance_trend(project_id: str, days: int = 30) -> Dict[str, Any]:
-    if not DB_AVAILABLE:
-        raise RuntimeError("数据库功能未启用")
-    return BalanceRepository.get_balance_trend(project_id, days)
-
-
-def get_recent_alerts(project_id: Optional[str] = None, alert_type: Optional[str] = None, days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
-    if not DB_AVAILABLE:
-        raise RuntimeError("数据库功能未启用")
-    return AlertRepository.get_recent_alerts(project_id=project_id, alert_type=alert_type, days=days, limit=limit)
-
-
-def get_alert_statistics(days: int = 30) -> Dict[str, Any]:
-    if not DB_AVAILABLE:
-        raise RuntimeError("数据库功能未启用")
-    return AlertRepository.get_alert_statistics(days)
-
-
-def get_all_projects_summary() -> List[Dict[str, Any]]:
-    if not DB_AVAILABLE:
-        raise RuntimeError("数据库功能未启用")
-    return BalanceRepository.get_all_projects_summary()
-
 # 并发检查常量
 DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
 MAX_CONCURRENT_UPPER_BOUND = 50  # 提升上限 from 20 to 50

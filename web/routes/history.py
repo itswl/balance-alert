@@ -13,7 +13,7 @@ history_bp = Blueprint('history', __name__, url_prefix='/api/history')
 
 def _get_history_services() -> Tuple[bool, Dict[str, Callable[..., Any]]]:
     try:
-        from services.monitor import (
+        from services.history_service import (
             DB_AVAILABLE as _DB_AVAILABLE,
             get_alert_statistics as _get_alert_statistics,
             get_all_projects_summary as _get_all_projects_summary,

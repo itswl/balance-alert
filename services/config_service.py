@@ -3,12 +3,15 @@ import copy
 import os
 from typing import Any, Dict, List, Optional
 
-from core.config_loader import load_config_with_env_vars as _load_file_config
-from core.config_loader import get_default_config_path
+from core.config_loader import get_config as _get_file_config
+from core.config_loader import get_default_config_path, load_config_with_env_vars as _load_file_config
 
 
 def load_config(config_file: str = 'config.json', validate: bool = True, use_cache: bool = True) -> Dict[str, Any]:
-    base = _load_file_config(config_file, validate=validate)
+    if use_cache:
+        base = _get_file_config(config_file, use_cache=True, validate=validate)
+    else:
+        base = _load_file_config(config_file, validate=validate)
     config = copy.deepcopy(base)
 
     if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() != 'true':
