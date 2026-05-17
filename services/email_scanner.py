@@ -11,12 +11,11 @@ import sys
 from email.header import decode_header
 import re
 from datetime import datetime, timedelta
-import json
 from collections import OrderedDict
 from contextlib import contextmanager
+from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.webhook_adapter import WebhookAdapter
-from services.prometheus_exporter import metrics_collector
 from core.logger import get_logger
 
 # 创建 logger
@@ -46,18 +45,39 @@ DEFAULT_ALERT_KEYWORDS = [
 ]
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((imaplib.IMAP4.error, ConnectionError, TimeoutError)),
+    reraise=True
+)
+def _open_imap(host: str, port: int, username: str, password: str, use_ssl: bool = True):
+    logger.info(f"正在连接IMAP服务器 {host}:{port} (SSL: {use_ssl})")
+    if use_ssl:
+        mail = imaplib.IMAP4_SSL(host, port)
+    else:
+        mail = imaplib.IMAP4(host, port)
+
+    mail.login(username, password)
+    mail.select('INBOX')
+    logger.info("✅ IMAP连接成功")
+    return mail
+
+
+def _record_email_scan_metrics(mailbox_name: str, total_emails: int, alert_count: int) -> None:
+    try:
+        from services.prometheus_exporter import metrics_collector
+        metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
+    except Exception:
+        return None
+
+
 @contextmanager
 def imap_connection(host: str, port: int, username: str, password: str, use_ssl: bool = True):
     """IMAP连接上下文管理器"""
     mail = None
     try:
-        if use_ssl:
-            mail = imaplib.IMAP4_SSL(host, port)
-        else:
-            mail = imaplib.IMAP4(host, port)
-        
-        mail.login(username, password)
-        mail.select('INBOX')
+        mail = _open_imap(host, port, username, password, use_ssl)
         logger.info(f"✅ 成功连接到邮箱 {username}@{host}")
         yield mail
     except Exception as e:
@@ -152,6 +172,14 @@ class EmailScanner:
             # 解码失败，返回原始字符串
             return str(s)
     
+    def _mark_seen(self, email_uid: str) -> bool:
+        if email_uid in self._seen_ids:
+            return False
+        self._seen_ids[email_uid] = None
+        if len(self._seen_ids) > MAX_SEEN_IDS:
+            self._seen_ids.popitem(last=False)
+        return True
+
     def _extract_text_from_email(self, msg):
         """从邮件中提取文本内容"""
         text_content = []
@@ -262,6 +290,37 @@ class EmailScanner:
                     pass
         
         return service_name, amount
+
+    def _get_webhook_adapter(self, default_source: str) -> Optional[WebhookAdapter]:
+        webhook_config = self.config.get('webhook', {})
+        webhook_url = webhook_config.get('url')
+        if not webhook_url:
+            return None
+
+        webhook_type = webhook_config.get('type', 'custom')
+        webhook_source = webhook_config.get('source', default_source)
+        return WebhookAdapter(webhook_url, webhook_type, webhook_source)
+
+    def _has_recent_email_alert(self, mailbox: str, sender: str, subject: str, date: str, days: int) -> bool:
+        try:
+            from database.repository import EmailRepository
+            return EmailRepository.has_recent_email_alert(
+                mailbox=mailbox,
+                sender=sender,
+                subject=subject,
+                date=date,
+                days=days
+            )
+        except Exception as e:
+            logger.error(f"查询邮件告警去重失败: {e}")
+            return False
+
+    def _parse_message(self, msg):
+        subject = self._decode_str(msg.get('Subject', ''))
+        sender = self._decode_str(msg.get('From', ''))
+        date = self._decode_str(msg.get('Date', ''))
+        body = self._extract_text_from_email(msg)
+        return subject, sender, date, body
     
     def scan_emails(self, days=1, dry_run=False):
         """
@@ -304,27 +363,6 @@ class EmailScanner:
         # 打印总汇总
         self._print_total_summary(total_emails, total_alerts)
     
-    @retry(
-        stop=stop_after_attempt(3),  # 最多重试3次
-        wait=wait_exponential(multiplier=1, min=4, max=10),  # 指数退避: 4s, 8s, 10s
-        retry=retry_if_exception_type((imaplib.IMAP4.error, ConnectionError, TimeoutError)),
-        reraise=True
-    )
-    def _connect_imap(self, host, port, username, password, use_ssl=True):
-        """连接IMAP服务器（带重试机制）"""
-        logger.info(f"正在连接IMAP服务器 {host}:{port} (SSL: {use_ssl})")
-        
-        if use_ssl:
-            mail = imaplib.IMAP4_SSL(host, port)
-        else:
-            mail = imaplib.IMAP4(host, port)
-        
-        mail.login(username, password)
-        mail.select('INBOX')
-        
-        logger.info("✅ IMAP连接成功")
-        return mail
-
     def _scan_single_mailbox(self, email_config, days=7, dry_run=False):
         """扫描单个邮箱中的告警邮件
         
@@ -394,20 +432,12 @@ class EmailScanner:
                     for msg in fetched_messages:
                         # 邮件去重
                         email_uid = self._get_email_id(msg)
-                        if email_uid in self._seen_ids:
+                        if not self._mark_seen(email_uid):
                             processed_count += 1
                             continue
-                        self._seen_ids[email_uid] = None
-                        if len(self._seen_ids) > MAX_SEEN_IDS:
-                            self._seen_ids.popitem(last=False)
 
                         # 获取邮件信息
-                        subject = self._decode_str(msg.get('Subject', ''))
-                        sender = self._decode_str(msg.get('From', ''))
-                        date = self._decode_str(msg.get('Date', ''))
-
-                        # 提取邮件正文
-                        body = self._extract_text_from_email(msg)
+                        subject, sender, date, body = self._parse_message(msg)
 
                         # 检查是否包含告警关键词
                         matched_keywords = self._check_alert_keywords(subject, body)
@@ -438,17 +468,13 @@ class EmailScanner:
 
                             duplicate_sent = False
                             if not dry_run:
-                                try:
-                                    from database.repository import EmailRepository
-                                    duplicate_sent = EmailRepository.has_recent_email_alert(
-                                        mailbox=mailbox_name,
-                                        sender=sender,
-                                        subject=subject,
-                                        date=date,
-                                        days=max(days, 1)
-                                    )
-                                except Exception as e:
-                                    logger.error(f"查询邮件告警去重失败: {e}")
+                                duplicate_sent = self._has_recent_email_alert(
+                                    mailbox=mailbox_name,
+                                    sender=sender,
+                                    subject=subject,
+                                    date=date,
+                                    days=max(days, 1)
+                                )
 
                             if duplicate_sent:
                                 result['duplicate'] = True
@@ -476,7 +502,7 @@ class EmailScanner:
                 self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
                 
                 # 更新 Prometheus 指标
-                metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
+                _record_email_scan_metrics(mailbox_name, total_emails, alert_count)
                 
                 return total_emails, alert_count
                 
@@ -528,31 +554,20 @@ class EmailScanner:
 
     def _send_error_alert(self, mailbox_name, error_msg):
         """发送邮箱扫描错误告警"""
-        webhook_config = self.config.get('webhook', {})
-        webhook_url = webhook_config.get('url')
-        webhook_type = webhook_config.get('type', 'custom')
-        webhook_source = webhook_config.get('source', 'email-scanner')
-        
-        if not webhook_url:
+        adapter = self._get_webhook_adapter(default_source='email-scanner')
+        if adapter is None:
             return False
-            
-        adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)
+
         title = "❌ 邮箱连接失败告警"
         content = f"**邮箱**: {mailbox_name}\n**错误信息**: {error_msg}\n**时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         return adapter.send_custom_alert(title, content)
 
     def _send_alert(self, email_info):
         """发送告警通知"""
-        webhook_config = self.config.get('webhook', {})
-        webhook_url = webhook_config.get('url')
-        webhook_type = webhook_config.get('type', 'custom')
-        webhook_source = webhook_config.get('source', 'email-scanner')
-        
-        if not webhook_url:
+        adapter = self._get_webhook_adapter(default_source='email-scanner')
+        if adapter is None:
             logger.error("❌ 未配置 webhook 地址")
             return False
-        
-        adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)
         
         # 构建告警消息
         title = f"📧 邮件告警: {email_info['subject']}"
