@@ -198,7 +198,7 @@ class VolcProvider(BaseProvider):
             logger.debug(f"火山云响应内容: {response.text[:200]}...")
             return response
         except Exception as e:
-            logger.error(f"火山云请求失败: {e}")
+            logger.error(f"火山云请求失败: {e}", exc_info=True)
             raise
     
     @staticmethod

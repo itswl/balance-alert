@@ -92,7 +92,7 @@ def imap_connection(host: str, port: int, username: str, password: str, use_ssl:
         logger.info(f"✅ 成功连接到邮箱 {username}@{host}")
         yield mail
     except Exception as e:
-        logger.error(f"❌ 邮箱连接失败: {e}")
+        logger.error(f"❌ 邮箱连接失败: {e}", exc_info=True)
         raise
     finally:
         if mail:
@@ -100,7 +100,7 @@ def imap_connection(host: str, port: int, username: str, password: str, use_ssl:
                 mail.logout()
                 logger.info(f"   已断开邮箱连接 {username}@{host}")
             except Exception as e:
-                logger.warning(f"   断开连接时出错: {e}")
+                logger.warning(f"   断开连接时出错: {e}", exc_info=True)
 
 
 class EmailScanner:
@@ -323,7 +323,7 @@ class EmailScanner:
                 days=days
             )
         except Exception as e:
-            logger.error(f"查询邮件告警去重失败: {e}")
+            logger.error(f"查询邮件告警去重失败: {e}", exc_info=True)
             return False
 
     def _parse_message(self, msg):
@@ -425,7 +425,7 @@ class EmailScanner:
                     total_emails += emails
                     total_alerts += alerts
                 except Exception as e:
-                    logger.error(f"❌ 扫描邮箱 {cfg.get('username', 'Unknown')} 失败: {e}")
+                    logger.error(f"❌ 扫描邮箱 {cfg.get('username', 'Unknown')} 失败: {e}", exc_info=True)
         
         # 打印总汇总
         self._print_total_summary(total_emails, total_alerts)
@@ -614,7 +614,7 @@ class EmailScanner:
                 alert_sent=alert_sent
             )
         except Exception as e:
-            logger.error(f"保存邮件告警记录失败: {e}")
+            logger.error(f"保存邮件告警记录失败: {e}", exc_info=True)
 
         return alert_sent
     

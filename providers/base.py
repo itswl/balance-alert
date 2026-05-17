@@ -239,7 +239,7 @@ class BaseProvider(ABC):
             }
             
         except Exception as e:
-            logger.error(f"处理响应时发生错误: {e}")
+            logger.error(f"处理响应时发生错误: {e}", exc_info=True)
             return {
                 'success': False,
                 'credits': None,

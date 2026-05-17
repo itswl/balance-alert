@@ -75,7 +75,7 @@ class StateManager:
             try:
                 callback(state_type, state_data)
             except Exception as e:
-                logger.error(f"回调函数执行失败: {e}")
+                logger.error(f"回调函数执行失败: {e}", exc_info=True)
     
     def update_balance_state(self, projects: List[Dict[str, Any]]) -> None:
         """更新余额状态（线程安全）"""

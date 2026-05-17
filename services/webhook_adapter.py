@@ -355,7 +355,7 @@ class WebhookAdapter:
             handler = handlers.get(self.webhook_type, self._send_custom_webhook_custom)
             return handler(title, content)
         except Exception as e:
-            logger.error(f"发送自定义告警失败: {e}")
+            logger.error(f"发送自定义告警失败: {e}", exc_info=True)
             return False
     
     def _send_feishu_custom(self, title, content):

@@ -35,7 +35,32 @@ def get_refresh_interval() -> int:
     return _get_refresh_interval(get_default_config_path())
 
 
-def load_config_safe(config_path: str = None) -> Optional[Dict[str, Any]]:
+def json_error(message: str, status_code: int = 500):
+    return jsonify({'status': 'error', 'message': message}), status_code
+
+
+def json_success(payload: Dict[str, Any], status_code: int = 200):
+    return jsonify(payload), status_code
+
+
+def parse_int_arg(name: str, default: int, min_value: int, max_value: int) -> int:
+    value = int(request.args.get(name, default))
+    if value < min_value or value > max_value:
+        raise ValueError(f'{name} 必须在 {min_value}-{max_value} 之间')
+    return value
+
+
+def require_json_fields(*fields: str):
+    data = request.get_json()
+    if not data:
+        return None, json_error(f"缺少必要参数: {', '.join(fields)}", 400)
+    missing = [f for f in fields if f not in data]
+    if missing:
+        return None, json_error(f"缺少必要参数: {', '.join(missing)}", 400)
+    return data, None
+
+
+def load_config_safe(config_path: str = None) -> Dict[str, Any]:
     """
     安全加载配置文件
 
@@ -43,13 +68,13 @@ def load_config_safe(config_path: str = None) -> Optional[Dict[str, Any]]:
         config_path: 配置文件路径
 
     Returns:
-        配置字典，失败返回 None
+        配置字典，失败返回空 dict
     """
     try:
-        return _load_config(config_path or get_default_config_path(), validate=False)
+        return _load_config(config_path or get_default_config_path(), validate=False) or {}
     except Exception as e:
-        logger.error(f"加载配置失败: {e}")
-        return None
+        logger.error(f"加载配置失败: {e}", exc_info=True)
+        return {}
 
 
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
 from core.state_manager import StateManager
 from core.logger import get_logger
-from ..utils import make_etag_response
+from ..utils import make_etag_response, json_error, json_success
 from ..handlers import update_balance_cache, refresh_credits
 
 logger = get_logger('web.routes.core')
@@ -26,12 +26,8 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
     refresh_lock = threading.Lock()
     last_refresh_time = {'value': 0.0}
     refresh_cooldown_seconds = 30
-
-    def _error(message: str, status_code: int = 500):
-        return jsonify({'status': 'error', 'message': message}), status_code
-
-    def _success(payload: dict, status_code: int = 200):
-        return jsonify(payload), status_code
+    _error = json_error
+    _success = json_success
 
     def _uptime_seconds() -> int:
         return int(time.time() - state_manager._start_time) if hasattr(state_manager, '_start_time') else 0
@@ -73,12 +69,10 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
                 is_stale = False
 
         cron_healthy = True
-        if Path(CRON_FAILURE_LOG).exists():
+        cron_failure_path = Path(CRON_FAILURE_LOG)
+        if cron_failure_path.exists():
             try:
-                with open(CRON_FAILURE_LOG, 'r') as f:
-                    lines = f.readlines()
-                    if lines:
-                        cron_healthy = False
+                cron_healthy = cron_failure_path.stat().st_size == 0
             except Exception:
                 pass
 
