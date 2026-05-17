@@ -9,11 +9,9 @@ from unittest.mock import patch, MagicMock
 from core.config_loader import (
     load_config_with_env_vars,
     get_config,
-    get_api_key_from_env,
     mask_sensitive_data,
     load_env_file,
     clear_config_cache,
-    get_email_password_from_env,
 )
 
 
@@ -81,82 +79,40 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch.dict(os.environ, {}, clear=True)
-    def test_webhook_env_not_override(self, mock_load_env):
-        """测试无 webhook 环境变量时不覆盖"""
+    def test_webhook_placeholder_substitution(self, mock_load_env):
+        """webhook 使用 ${VAR} 时会被环境变量替换"""
         config_data = {
             'projects': [],
             'subscriptions': [],
             'email': [],
             'settings': {'balance_refresh_interval_seconds': 3600},
-            'webhook': {'url': 'https://original.com/hook', 'type': 'feishu'}
+            'webhook': {'url': '${WEBHOOK_URL}', 'type': 'feishu'}
         }
         config_path = self._create_config_file(config_data)
         try:
-            config = load_config_with_env_vars(config_path, validate=False)
-            assert config['webhook']['url'] == 'https://original.com/hook'
+            with patch.dict(os.environ, {'WEBHOOK_URL': 'https://env.com/hook'}, clear=True):
+                config = load_config_with_env_vars(config_path, validate=False)
+                assert config['webhook']['url'] == 'https://env.com/hook'
         finally:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch.dict(os.environ, {
-        'WEBHOOK_URL': 'https://env.com/hook',
-        'WEBHOOK_ENABLED': 'true',
-        'WEBHOOK_PLATFORM': 'dingtalk'
-    }, clear=True)
-    def test_webhook_env_override(self, mock_load_env):
-        """测试 webhook 环境变量覆盖配置"""
-        config_data = {
-            'projects': [],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600},
-            'webhook': {'url': 'https://original.com/hook', 'type': 'feishu'}
-        }
-        config_path = self._create_config_file(config_data)
-        try:
-            config = load_config_with_env_vars(config_path, validate=False)
-            assert config['webhook']['url'] == 'https://env.com/hook'
-        finally:
-            os.unlink(config_path)
-
-    @patch('core.config_loader.load_env_file')
-    def test_email_password_env_override(self, mock_load_env):
-        """测试邮箱密码环境变量覆盖"""
+    def test_email_password_placeholder_substitution(self, mock_load_env):
+        """邮箱 password 使用 ${VAR} 时会被环境变量替换"""
         config_data = {
             'projects': [],
             'subscriptions': [],
             'email': [
                 {'name': 'work', 'host': 'imap.example.com', 'port': 993,
-                 'username': 'user', 'password': 'old_pass'}
+                 'username': 'user', 'password': '${EMAIL_PASSWORD}'}
             ],
             'settings': {'balance_refresh_interval_seconds': 3600}
         }
         config_path = self._create_config_file(config_data)
         try:
-            with patch.dict(os.environ, {'EMAIL_WORK_PASSWORD': 'env_pass'}, clear=True):
+            with patch.dict(os.environ, {'EMAIL_PASSWORD': 'env_pass'}, clear=True):
                 config = load_config_with_env_vars(config_path, validate=False)
                 assert config['email'][0]['password'] == 'env_pass'
-        finally:
-            os.unlink(config_path)
-
-    @patch('core.config_loader.load_env_file')
-    def test_api_key_env_override_in_projects(self, mock_load_env):
-        """测试项目 API Key 环境变量覆盖"""
-        config_data = {
-            'projects': [
-                {'name': 'MyApp', 'provider': 'openrouter', 'api_key': 'old-key',
-                 'threshold': 5.0, 'type': 'credits', 'enabled': True}
-            ],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600}
-        }
-        config_path = self._create_config_file(config_data)
-        try:
-            with patch.dict(os.environ, {'MYAPP_API_KEY': 'env-api-key'}, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
-                assert config['projects'][0]['api_key'] == 'env-api-key'
         finally:
             os.unlink(config_path)
 
@@ -182,92 +138,6 @@ class TestLoadConfigWithEnvVars:
         config = load_config_with_env_vars('/nonexistent/config.json', validate=False)
         assert 'settings' in config
         assert 'projects' in config
-
-
-class TestGetApiKeyFromEnv:
-    """从环境变量获取 API Key 测试"""
-
-    def test_specific_project_key(self):
-        """测试特定项目环境变量"""
-        with patch.dict(os.environ, {'MYPROJECT_API_KEY': 'specific-key'}, clear=True):
-            result = get_api_key_from_env('MyProject')
-            assert result == 'specific-key'
-
-    def test_generic_key_fallback(self):
-        """测试回退到项目通用 PROJECT_API_KEY"""
-        with patch.dict(os.environ, {'PROJECT_API_KEY': 'generic-key'}, clear=True):
-            result = get_api_key_from_env('TestApp')
-            assert result == 'generic-key'
-
-    def test_specific_key_priority_over_generic(self):
-        """测试特定键优先于通用键"""
-        with patch.dict(os.environ, {
-            'MYAPP_API_KEY': 'specific',
-            'PROJECT_API_KEY': 'generic'
-        }, clear=True):
-            result = get_api_key_from_env('MyApp')
-            assert result == 'specific'
-
-    def test_api_key_prefix_project_key(self):
-        """测试 API_KEY_<PROJECT> 形式的项目密钥"""
-        with patch.dict(os.environ, {'API_KEY_MYAPP': 'specific-prefix'}, clear=True):
-            result = get_api_key_from_env('MyApp')
-            assert result == 'specific-prefix'
-
-    def test_legacy_api_key_requires_opt_in(self):
-        """旧版 API_KEY 只有显式开启兼容开关才作为项目密钥"""
-        with patch.dict(os.environ, {
-            'API_KEY': 'legacy-key',
-            'ALLOW_LEGACY_PROJECT_API_KEY': 'true'
-        }, clear=True):
-            result = get_api_key_from_env('TestApp')
-            assert result == 'legacy-key'
-
-    def test_no_key_returns_none(self):
-        """测试均不存在时返回 None"""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_api_key_from_env('missing_project')
-            assert result is None
-
-    def test_project_name_with_hyphens(self):
-        """测试项目名包含连字符"""
-        with patch.dict(os.environ, {'MY_APP_API_KEY': 'hyphen-key'}, clear=True):
-            result = get_api_key_from_env('my-app')
-            assert result == 'hyphen-key'
-
-    def test_project_name_with_spaces(self):
-        """测试项目名包含空格"""
-        with patch.dict(os.environ, {'MY_APP_API_KEY': 'space-key'}, clear=True):
-            result = get_api_key_from_env('my app')
-            assert result == 'space-key'
-
-
-class TestGetEmailPasswordFromEnv:
-    """从环境变量获取邮箱密码测试"""
-
-    def test_specific_email_password(self):
-        """测试特定邮箱密码"""
-        with patch.dict(os.environ, {'EMAIL_WORK_PASSWORD': 'work-pass'}, clear=True):
-            result = get_email_password_from_env('work')
-            assert result == 'work-pass'
-
-    def test_generic_email_password_fallback(self):
-        """测试回退到通用密码"""
-        env = os.environ.copy()
-        env.pop('EMAIL_PERSONAL_PASSWORD', None)
-        env['EMAIL_PASSWORD'] = 'generic-pass'
-        with patch.dict(os.environ, env, clear=True):
-            result = get_email_password_from_env('personal')
-            assert result == 'generic-pass'
-
-    def test_no_password_returns_none(self):
-        """测试均不存在时返回 None"""
-        env = os.environ.copy()
-        env.pop('EMAIL_UNKNOWN_PASSWORD', None)
-        env.pop('EMAIL_PASSWORD', None)
-        with patch.dict(os.environ, env, clear=True):
-            result = get_email_password_from_env('unknown')
-            assert result is None
 
 
 class TestMaskSensitiveData:

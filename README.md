@@ -45,17 +45,21 @@ open http://localhost:8080
 ```bash
 # Webhook 告警
 WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
-WEBHOOK_TYPE=feishu  # 或设置 WEBHOOK_PLATFORM=feishu/dingtalk/wecom/custom
+WEBHOOK_TYPE=feishu
+WEBHOOK_SOURCE=credit-monitor
 
-# 项目 API Key（推荐：按“项目名”设置，自动匹配；项目名会被转成大写+下划线）
-# 例如：项目名 "OpenRouter Main" -> 环境变量 OPENROUTER_MAIN_API_KEY
-OPENROUTER_MAIN_API_KEY=sk-or-v1-xxx          # OpenRouter
-WXRANK_API_KEY=wxrank-key-xxx                 # 微信排名（示例：项目名 "WxRank"）
-VOLC_API_KEY=AK-xxx:SK-xxx                    # 火山云（用冒号分隔）
-ALIYUN_API_KEY=LTAI-xxx:secret-xxx            # 阿里云（用冒号分隔）
+# 项目 API Key（与 config.json 中的 ${VAR} 对应）
+OPENROUTER_API_KEY=sk-or-v1-xxx
+UNIAPI_API_KEY=uniapi-key-xxx
+WXRANK_API_KEY=wxrank-key-xxx
+VOLC_1_API_KEY=AK-xxx:SK-xxx
+VOLC_2_API_KEY=AK-xxx:SK-xxx
+ALIYUN_1_API_KEY=LTAI-xxx:secret-xxx
+ALIYUN_2_API_KEY=LTAI-xxx:secret-xxx
+TIKHUB_API_KEY=tikhub-token-xxx
 
-# 可选：通用默认 Key（当某个项目没有单独配置时会回退使用）
-PROJECT_API_KEY=sk-or-v1-default-xxx
+# 邮箱密码（如启用邮箱扫描，建议只放 env）
+EMAIL_PASSWORD=your-password
 ```
 
 **API Key 格式要求**：
@@ -89,7 +93,7 @@ pip install -r requirements.txt
 
 # 2. 配置环境变量
 export WEBHOOK_URL="https://your-webhook-url"
-export OPENROUTER_MAIN_API_KEY="your-api-key"
+export OPENROUTER_API_KEY="your-api-key"
 
 # 3. 运行 Web 服务
 python main.py
@@ -137,12 +141,11 @@ WEBHOOK_TYPE=feishu
 
 ### 配置优先级（从低到高）
 
-1. `config.json`（如果存在，且未开启 `USE_ENV_CONFIG=true`）
-2. 环境变量覆盖（`settings/webhook` 以及敏感字段：邮箱密码、项目 API Key）
+1. `config.json`（基础配置；支持 `${VAR}` 占位符）
+2. 环境变量覆盖系统设置：`BALANCE_REFRESH_INTERVAL_SECONDS / MAX_CONCURRENT_CHECKS / MIN_REFRESH_INTERVAL_SECONDS / ENABLE_SMART_REFRESH / SMART_REFRESH_THRESHOLD_PERCENT`
 3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
-4. 最后再做一遍敏感字段环境变量覆盖（便于“结构在 DB，密钥在 env”）
 
-> `USE_ENV_CONFIG=true` 时：直接忽略 `config.json`，只使用“环境变量 + 数据库”。
+`config.json` 与数据库配置中的字符串字段都支持 `${VAR}` 占位符替换（环境变量不存在则保留原样）。
 
 ### 2. 动态配置 (数据库)
 为了兼容 Kubernetes/Docker 的只读挂载规范，并支持高并发的页面修改：

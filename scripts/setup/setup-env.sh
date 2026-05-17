@@ -77,19 +77,11 @@ echo "2. 邮箱配置（可选）"
 echo "=========================================="
 read -p "是否配置邮箱？(y/n): " config_email
 if [ "$config_email" = "y" ] || [ "$config_email" = "Y" ]; then
-    read -p "邮箱地址: " email_addr
     read -sp "邮箱密码: " email_pass
     echo ""
-    echo "EMAIL_1_NAME=邮箱1" >> .env
-    echo "EMAIL_1_HOST=imap.feishu.cn" >> .env
-    echo "EMAIL_1_PORT=993" >> .env
-    echo "EMAIL_1_USERNAME=$email_addr" >> .env
-    echo "EMAIL_1_PASSWORD=$email_pass" >> .env
-    echo "EMAIL_1_USE_SSL=true" >> .env
-    echo "EMAIL_1_ENABLED=true" >> .env
+    echo "EMAIL_PASSWORD=$email_pass" >> .env
 else
-    echo "# EMAIL_1_USERNAME=your-email@example.com" >> .env
-    echo "# EMAIL_1_PASSWORD=your-password" >> .env
+    echo "# EMAIL_PASSWORD=your-password" >> .env
 fi
 
 # 项目 API Key
@@ -102,65 +94,65 @@ echo "=========================================="
 echo "3. 配置项目 API Key"
 echo "=========================================="
 
-# 项目1 - OpenRouter
-read -p "OpenRouter API Key（留空跳过）: " project1_key
-if [ -n "$project1_key" ]; then
-    echo "PROJECT_1_API_KEY=$project1_key" >> .env
-else
-    echo "# PROJECT_1_API_KEY=sk-or-v1-your-key" >> .env
-fi
-
-# 项目2 - WxRank
-read -p "WxRank API Key（留空跳过）: " project2_key
-if [ -n "$project2_key" ]; then
-    echo "PROJECT_2_API_KEY=$project2_key" >> .env
-else
-    echo "# PROJECT_2_API_KEY=wxrank-your-key" >> .env
-fi
-
-# 项目3 - 火山引擎1
 echo ""
 echo "火山引擎 API Key 格式：AK-xxx:SK-xxx"
-read -p "火山引擎-自然选择 (AK:SK格式，留空跳过): " project3_key
-if [ -n "$project3_key" ]; then
-    echo "PROJECT_3_API_KEY=$project3_key" >> .env
+read -p "OpenRouter API Key（留空跳过）: " openrouter_key
+if [ -n "$openrouter_key" ]; then
+    echo "OPENROUTER_API_KEY=$openrouter_key" >> .env
 else
-    echo "# PROJECT_3_API_KEY=AK-xxx:SK-xxx" >> .env
+    echo "# OPENROUTER_API_KEY=sk-or-v1-your-key" >> .env
 fi
 
-# 项目4 - 火山引擎2
-read -p "火山引擎-陌玉 (AK:SK格式，留空跳过): " project4_key
-if [ -n "$project4_key" ]; then
-    echo "PROJECT_4_API_KEY=$project4_key" >> .env
+read -p "UniAPI API Key（留空跳过）: " uniapi_key
+if [ -n "$uniapi_key" ]; then
+    echo "UNIAPI_API_KEY=$uniapi_key" >> .env
 else
-    echo "# PROJECT_4_API_KEY=AK-xxx:SK-xxx" >> .env
+    echo "# UNIAPI_API_KEY=uniapi-your-key" >> .env
 fi
 
-# 项目5 - 阿里云1
+read -p "WxRank API Key（留空跳过）: " wxrank_key
+if [ -n "$wxrank_key" ]; then
+    echo "WXRANK_API_KEY=$wxrank_key" >> .env
+else
+    echo "# WXRANK_API_KEY=wxrank-your-key" >> .env
+fi
+
+read -p "火山引擎-1 (AK:SK格式，留空跳过): " volc1_key
+if [ -n "$volc1_key" ]; then
+    echo "VOLC_1_API_KEY=$volc1_key" >> .env
+else
+    echo "# VOLC_1_API_KEY=AK-xxx:SK-xxx" >> .env
+fi
+
+read -p "火山引擎-2 (AK:SK格式，留空跳过): " volc2_key
+if [ -n "$volc2_key" ]; then
+    echo "VOLC_2_API_KEY=$volc2_key" >> .env
+else
+    echo "# VOLC_2_API_KEY=AK-xxx:SK-xxx" >> .env
+fi
+
 echo ""
 echo "阿里云 API Key 格式：AccessKeyId:AccessKeySecret"
-read -p "阿里云-1 (KeyId:Secret格式，留空跳过): " project5_key
-if [ -n "$project5_key" ]; then
-    echo "PROJECT_5_API_KEY=$project5_key" >> .env
+read -p "阿里云-1 (KeyId:Secret格式，留空跳过): " aliyun1_key
+if [ -n "$aliyun1_key" ]; then
+    echo "ALIYUN_1_API_KEY=$aliyun1_key" >> .env
 else
-    echo "# PROJECT_5_API_KEY=LTAI-xxx:secret-xxx" >> .env
+    echo "# ALIYUN_1_API_KEY=LTAI-xxx:secret-xxx" >> .env
 fi
 
-# 项目6 - 阿里云2
-read -p "阿里云-2 (KeyId:Secret格式，留空跳过): " project6_key
-if [ -n "$project6_key" ]; then
-    echo "PROJECT_6_API_KEY=$project6_key" >> .env
+read -p "阿里云-2 (KeyId:Secret格式，留空跳过): " aliyun2_key
+if [ -n "$aliyun2_key" ]; then
+    echo "ALIYUN_2_API_KEY=$aliyun2_key" >> .env
 else
-    echo "# PROJECT_6_API_KEY=LTAI-xxx:secret-xxx" >> .env
+    echo "# ALIYUN_2_API_KEY=LTAI-xxx:secret-xxx" >> .env
 fi
 
-# 项目7 - TikHub
 echo ""
-read -p "TikHub API Key（留空跳过）: " project7_key
-if [ -n "$project7_key" ]; then
-    echo "PROJECT_7_API_KEY=$project7_key" >> .env
+read -p "TikHub API Key（留空跳过）: " tikhub_key
+if [ -n "$tikhub_key" ]; then
+    echo "TIKHUB_API_KEY=$tikhub_key" >> .env
 else
-    echo "# PROJECT_7_API_KEY=tikhub-your-key" >> .env
+    echo "# TIKHUB_API_KEY=tikhub-your-key" >> .env
 fi
 
 echo ""

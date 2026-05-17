@@ -354,9 +354,7 @@ cat > .env << EOF
 ENABLE_DATABASE=true
 DATABASE_URL=sqlite:///./data/balance_alert.db
 WEBHOOK_URL=https://...
-PROJECT_1_NAME=MyProject
-PROJECT_1_PROVIDER=openrouter
-PROJECT_1_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-...
 EOF
 
 # 运行容器
