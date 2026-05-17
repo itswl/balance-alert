@@ -123,12 +123,11 @@ SubscriptionHistory   # 订阅历史
 2. **动态配置 (数据库)**：通过 `ConfigRepository` 管理。项目/订阅/邮箱配置的日常增删改由 Web UI 写入数据库，运行时优先使用数据库内容。
 
 **配置优先级（从低到高）**：
-1. `config.json`（如果存在，且未开启 `USE_ENV_CONFIG=true`）
-2. 环境变量覆盖（`settings/webhook` 以及敏感字段：邮箱密码、项目 API Key）
+1. `config.json`（基础配置；支持 `${VAR}` 占位符）
+2. 环境变量覆盖系统设置：`BALANCE_REFRESH_INTERVAL_SECONDS / MAX_CONCURRENT_CHECKS / MIN_REFRESH_INTERVAL_SECONDS / ENABLE_SMART_REFRESH / SMART_REFRESH_THRESHOLD_PERCENT`
 3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
-4. 最后再做一遍敏感字段环境变量覆盖（便于“结构在 DB，密钥在 env”）
 
-配置每次读取时生效，不做文件监听。
+`config.json` 与数据库配置中的字符串字段都支持 `${VAR}` 占位符替换（环境变量不存在则保留原样）。配置每次读取时生效，不做文件监听。
 
 ### 6. Webhook 适配器 (`webhook_adapter.py`)
 

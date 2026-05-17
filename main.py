@@ -14,7 +14,6 @@ from core.state_manager import StateManager
 from services.monitor import CreditMonitor
 from services.subscription_checker import SubscriptionChecker
 from services.prometheus_exporter import metrics_collector
-from core.config_loader import start_config_watcher, stop_config_watcher
 from core.logger import get_logger
 from web.utils import get_enable_web_alarm, get_refresh_interval, get_smart_refresh_config
 from web.handlers import update_balance_cache, update_subscription_cache
@@ -244,9 +243,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
-    # 启动配置文件监听器
-    start_config_watcher('config.json')
-
     # 初始化数据库（如果启用）
     update_thread = None
 
@@ -299,6 +295,4 @@ if __name__ == '__main__':
         _stop_event.set()
         if update_thread and update_thread.is_alive():
             update_thread.join(timeout=5)
-        # 停止配置文件监听器
-        stop_config_watcher()
         logger.info("服务已关闭")

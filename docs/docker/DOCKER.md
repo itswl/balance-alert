@@ -21,13 +21,21 @@ docker-compose logs -f
 ```bash
 # Webhook 告警
 WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
-WEBHOOK_TYPE=feishu  # 或设置 WEBHOOK_PLATFORM=feishu/dingtalk/wecom/custom
+WEBHOOK_TYPE=feishu
+WEBHOOK_SOURCE=credit-monitor
 
-# 项目 API Key（推荐：按“项目名”设置，自动匹配；项目名会被转成大写+下划线）
-# 例如：项目名 "OpenRouter Main" -> 环境变量 OPENROUTER_MAIN_API_KEY
-OPENROUTER_MAIN_API_KEY=sk-or-v1-xxx
+# 项目 API Key（与 config.json 中的 ${VAR} 对应）
+OPENROUTER_API_KEY=sk-or-v1-xxx
+UNIAPI_API_KEY=uniapi-key-xxx
 WXRANK_API_KEY=wxrank-key-xxx
-VOLC_API_KEY=AK-xxx:SK-xxx
+VOLC_1_API_KEY=AK-xxx:SK-xxx
+VOLC_2_API_KEY=AK-xxx:SK-xxx
+ALIYUN_1_API_KEY=LTAI-xxx:secret-xxx
+ALIYUN_2_API_KEY=LTAI-xxx:secret-xxx
+TIKHUB_API_KEY=tikhub-token-xxx
+
+# 邮箱密码（如启用邮箱扫描，建议只放 env）
+EMAIL_PASSWORD=your-password
 ```
 
 ### API Key 格式
@@ -44,9 +52,7 @@ VOLC_API_KEY=AK-xxx:SK-xxx
 
 ```bash
 # 邮箱配置（如需邮箱扫描功能）
-EMAIL_1_HOST=imap.feishu.cn
-EMAIL_1_USERNAME=user@example.com
-EMAIL_1_PASSWORD=your-password
+EMAIL_PASSWORD=your-password
 
 # 系统配置
 BALANCE_REFRESH_INTERVAL_SECONDS=3600  # 刷新间隔
@@ -62,7 +68,7 @@ ENABLE_DATABASE=true                   # 启用数据库
 # 检查容器中的环境变量
 docker exec credit-monitor env | grep -E 'API_KEY|WEBHOOK'
 
-# 应该看到实际值，而不是占位符（例如 ${OPENROUTER_MAIN_API_KEY}）
+# 应该看到实际值，而不是占位符（例如 ${OPENROUTER_API_KEY}）
 ```
 
 ### API Key 格式错误
@@ -71,10 +77,10 @@ docker exec credit-monitor env | grep -E 'API_KEY|WEBHOOK'
 
 ```bash
 # ✅ 正确
-VOLC_API_KEY=AK-123:SK-456
+VOLC_1_API_KEY=AK-123:SK-456
 
 # ❌ 错误
-VOLC_API_KEY=AK-123
+VOLC_1_API_KEY=AK-123
 ```
 
 ### Webhook 无法发送
@@ -106,7 +112,7 @@ volumes:
    ```
 
 2. **使用环境变量存储敏感信息**
-   - config.json 中使用占位符：`${OPENROUTER_MAIN_API_KEY}`（示例）
+   - config.json 中使用占位符：`${OPENROUTER_API_KEY}`（示例）
    - .env 文件中填入真实值
 
 3. **限制文件权限**
