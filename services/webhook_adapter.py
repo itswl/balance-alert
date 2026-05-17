@@ -83,13 +83,27 @@ class WebhookAdapter:
             self._session = None
     
     @staticmethod
+    def _payload_preview(payload: Any, limit: int = 500) -> str:
+        try:
+            return json.dumps(payload, ensure_ascii=False)[:limit]
+        except Exception:
+            return str(payload)[:limit]
+
+    @staticmethod
     def _format_days_text(days: int) -> str:
         """格式化天数文本"""
-        if days == 0:
-            return "今天"
-        elif days == 1:
-            return "明天"
-        return f"{days} 天后"
+        return {0: "今天", 1: "明天"}.get(days, f"{days} 天后")
+
+    @staticmethod
+    def _format_dingtalk_markdown(text: str) -> str:
+        lines = []
+        for line in text.split('\n'):
+            if ': ' in line:
+                key, value = line.split(': ', 1)
+                lines.append(f"- **{key}**: {value}")
+            else:
+                lines.append(f"- {line}")
+        return "\n".join(lines)
 
     @staticmethod
     def _format_subscription_cycle(cycle_type: str, renewal_day: int) -> str:
@@ -152,19 +166,16 @@ class WebhookAdapter:
                 "msg_type": "text",
                 "content": {"text": f"【{title}】\n\n{text}\n来源: {self.source}"}
             }
-        elif self.webhook_type == 'dingtalk':
-            md_text = "\n".join(f"- **{line.split(': ', 1)[0]}**: {line.split(': ', 1)[1]}"
-                                if ': ' in line else f"- {line}"
-                                for line in text.split('\n'))
+        if self.webhook_type == 'dingtalk':
+            md_text = self._format_dingtalk_markdown(text)
             return {
                 "msgtype": "markdown",
                 "markdown": {"title": title, "text": f"## {title}\n\n{md_text}"}
             }
-        else:  # wecom
-            return {
-                "msgtype": "text",
-                "text": {"content": f"【{title}】\n{text}"}
-            }
+        return {
+            "msgtype": "text",
+            "text": {"content": f"【{title}】\n{text}"}
+        }
 
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
                           threshold: float, unit: str = '', owner_project: str = None) -> bool:
@@ -275,7 +286,7 @@ class WebhookAdapter:
             bool: 是否发送成功
         """
         logger.info(f"准备发送 Webhook | URL: {_mask_webhook_url(self.webhook_url)} | 类型: {self.webhook_type}")
-        logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:500]}")
+        logger.debug(f"请求体: {self._payload_preview(payload)}")
 
         try:
             return self._send_request_with_retry(payload)
@@ -336,14 +347,13 @@ class WebhookAdapter:
             bool: 是否发送成功
         """
         try:
-            if self.webhook_type == 'feishu':
-                return self._send_feishu_custom(title, content)
-            elif self.webhook_type == 'dingtalk':
-                return self._send_dingtalk_custom(title, content)
-            elif self.webhook_type == 'wecom':
-                return self._send_wecom_custom(title, content)
-            else:
-                return self._send_custom_webhook_custom(title, content)
+            handlers = {
+                'feishu': self._send_feishu_custom,
+                'dingtalk': self._send_dingtalk_custom,
+                'wecom': self._send_wecom_custom,
+            }
+            handler = handlers.get(self.webhook_type, self._send_custom_webhook_custom)
+            return handler(title, content)
         except Exception as e:
             logger.error(f"发送自定义告警失败: {e}")
             return False
