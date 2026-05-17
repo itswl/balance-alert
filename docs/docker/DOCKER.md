@@ -21,12 +21,13 @@ docker-compose logs -f
 ```bash
 # Webhook 告警
 WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
-WEBHOOK_TYPE=feishu  # 或 dingtalk, wecom
+WEBHOOK_TYPE=feishu  # 或设置 WEBHOOK_PLATFORM=feishu/dingtalk/wecom/custom
 
-# 项目 API Key（根据 config.json 中的项目配置）
-PROJECT_1_API_KEY=sk-or-v1-xxx
-PROJECT_2_API_KEY=wxrank-key-xxx
-PROJECT_3_API_KEY=AK-xxx:SK-xxx
+# 项目 API Key（推荐：按“项目名”设置，自动匹配；项目名会被转成大写+下划线）
+# 例如：项目名 "OpenRouter Main" -> 环境变量 OPENROUTER_MAIN_API_KEY
+OPENROUTER_MAIN_API_KEY=sk-or-v1-xxx
+WXRANK_API_KEY=wxrank-key-xxx
+VOLC_API_KEY=AK-xxx:SK-xxx
 ```
 
 ### API Key 格式
@@ -59,9 +60,9 @@ ENABLE_DATABASE=true                   # 启用数据库
 
 ```bash
 # 检查容器中的环境变量
-docker exec credit-monitor env | grep PROJECT
+docker exec credit-monitor env | grep -E 'API_KEY|WEBHOOK'
 
-# 应该看到实际值，而不是 ${PROJECT_X_API_KEY}
+# 应该看到实际值，而不是占位符（例如 ${OPENROUTER_MAIN_API_KEY}）
 ```
 
 ### API Key 格式错误
@@ -70,10 +71,10 @@ docker exec credit-monitor env | grep PROJECT
 
 ```bash
 # ✅ 正确
-PROJECT_3_API_KEY=AK-123:SK-456
+VOLC_API_KEY=AK-123:SK-456
 
 # ❌ 错误
-PROJECT_3_API_KEY=AK-123
+VOLC_API_KEY=AK-123
 ```
 
 ### Webhook 无法发送
@@ -105,7 +106,7 @@ volumes:
    ```
 
 2. **使用环境变量存储敏感信息**
-   - config.json 中使用占位符：`${PROJECT_1_API_KEY}`
+   - config.json 中使用占位符：`${OPENROUTER_MAIN_API_KEY}`（示例）
    - .env 文件中填入真实值
 
 3. **限制文件权限**

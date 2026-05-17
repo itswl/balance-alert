@@ -85,7 +85,7 @@ nano .env  # 编辑配置
 kubectl create secret generic balance-alert-secret \
   --from-literal=WEBHOOK_URL='https://...' \
   --from-literal=DATABASE_URL='sqlite:///./data/balance_alert.db' \
-  --from-literal=PROJECT_1_API_KEY='your-key' \
+  --from-literal=OPENROUTER_MAIN_API_KEY='your-key' \
   -n balance-alert
 ```
 

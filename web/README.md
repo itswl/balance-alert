@@ -150,8 +150,9 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 
 - `get_enable_web_alarm()` - 获取 Web 告警是否启用
 - `get_refresh_interval()` - 获取刷新间隔配置
+- `get_min_refresh_interval()` - 获取最小刷新间隔
+- `get_smart_refresh_config()` - 获取智能刷新配置
 - `load_config_safe()` - 安全加载配置文件
-- `write_config()` - 写入配置文件（带文件锁）
 - `make_etag_response()` - 创建带 ETag 的响应
 - `audit_log()` - 记录审计日志
 
