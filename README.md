@@ -67,6 +67,8 @@ python services/monitor.py --dry-run
 - `CONFIG_PATH` 指定的配置文件（默认 `config.json`）：项目、阈值、平台类型等结构化配置
 - `.env`：API Key、Webhook URL 等敏感信息
 
+当启用 `ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true` 时，`projects/subscriptions/email` 会从数据库读取并覆盖配置文件中的对应段落（数据库该段有数据时生效）。
+
 配置文件支持 `${VAR}` 环境变量占位符，例如：
 
 ```json
