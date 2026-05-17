@@ -1,7 +1,7 @@
 """
 火山云余额查询适配器
 """
-from .base import BaseProvider
+from .base import BaseProvider, mask_headers, mask_url
 import datetime
 import hashlib
 import hmac
@@ -182,8 +182,8 @@ class VolcProvider(BaseProvider):
     def _make_volc_request(self, request_params, headers):
         """发起 HTTP 请求"""
         url = f"https://{request_params['host']}{request_params['path']}?{self._norm_query(request_params['query'])}"
-        logger.debug(f"火山云请求 URL: {url}")
-        logger.debug(f"请求头: {headers}")
+        logger.debug(f"火山云请求 URL: {mask_url(url)}")
+        logger.debug(f"请求头: {mask_headers(headers)}")
         logger.debug(f"超时设置: {self.timeout}秒")
         
         try:
