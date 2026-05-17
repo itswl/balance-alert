@@ -13,8 +13,6 @@ from ..utils import get_enable_web_alarm, make_etag_response
 from ..handlers import update_balance_cache, refresh_credits
 from core.state_manager import StateManager
 from core.logger import get_logger
-from models.api_models import RefreshRequest
-from pydantic import ValidationError
 
 logger = get_logger('web.routes.core')
 
@@ -123,6 +121,19 @@ def live():
     })
 
 
+@core_bp.route('/api/features')
+def get_features():
+    """返回当前启用的可选能力，前端据此隐藏高级入口。"""
+    return jsonify({
+        'status': 'success',
+        'features': {
+            'subscriptions': os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true',
+            'dynamic_config': os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true',
+            'history': os.environ.get('ENABLE_HISTORY_API', 'false').lower() == 'true',
+        }
+    })
+
+
 @core_bp.route('/api/credits')
 def get_credits():
     """获取所有项目的余额信息"""
@@ -136,6 +147,30 @@ def get_credits():
 
     # 使用 ETag 支持缓存
     return make_etag_response(balance_state)
+
+
+@core_bp.route('/api/subscriptions')
+def get_subscriptions_disabled():
+    """核心版保留空响应，避免前端在未启用订阅功能时失败。"""
+    return make_etag_response(_state_manager.get_subscription_state())
+
+
+@core_bp.route('/api/subscription/add', methods=['POST'])
+def add_subscription_disabled():
+    """订阅功能关闭时的兼容响应。"""
+    data = request.get_json(silent=True) or {}
+    required_fields = ['name', 'cycle_type', 'renewal_day', 'alert_days_before', 'amount']
+    missing = [field for field in required_fields if data.get(field) in (None, '')]
+    if missing:
+        return jsonify({
+            'status': 'error',
+            'message': f"缺少必要参数: {', '.join(missing)}"
+        }), 400
+
+    return jsonify({
+        'status': 'error',
+        'message': '订阅功能未启用，请设置 ENABLE_SUBSCRIPTIONS=true'
+    }), 503
 
 
 @core_bp.route('/api/refresh', methods=['GET', 'POST'])
@@ -174,16 +209,15 @@ def refresh_credits_route():
     # 解析请求参数
     project_name = None
     if request.method == 'POST':
-        try:
-            data = request.get_json() or {}
-            validated = RefreshRequest(**data)
-            project_name = validated.project_name
-        except ValidationError as e:
+        data = request.get_json(silent=True) or {}
+        project_name = data.get('project_name')
+        if project_name is not None and not isinstance(project_name, str):
             return jsonify({
                 'status': 'error',
-                'errors': [f"{' -> '.join(str(loc) for loc in error['loc'])}: {error['msg']}"
-                          for error in e.errors()]
+                'message': 'project_name 必须是字符串'
             }), 400
+        if isinstance(project_name, str):
+            project_name = project_name.strip() or None
 
     # 执行刷新
     try:

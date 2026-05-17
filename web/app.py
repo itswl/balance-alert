@@ -6,7 +6,6 @@ Flask 应用工厂
 """
 import os
 from flask import Flask
-from flask_cors import CORS
 from pathlib import Path
 from core.state_manager import StateManager
 from core.logger import get_logger
@@ -46,11 +45,17 @@ def create_app(state_manager: StateManager = None) -> Flask:
 
     # 按需启用 CORS；同源前端无需开启，生产环境建议通过 CORS_ORIGINS 白名单控制。
     if os.environ.get('WEB_ENABLE_CORS', 'false').lower() == 'true':
+        try:
+            from flask_cors import CORS
+        except ImportError:
+            logger.warning("WEB_ENABLE_CORS=true 但未安装 flask-cors，已跳过 CORS 开启")
+            CORS = None
+
         raw_origins = os.environ.get('CORS_ORIGINS', '')
         origins = [origin.strip() for origin in raw_origins.split(',') if origin.strip()]
-        if origins:
+        if CORS and origins:
             CORS(app, origins=origins)
-        else:
+        elif CORS:
             logger.warning("WEB_ENABLE_CORS=true 但未设置 CORS_ORIGINS，已跳过 CORS 开启")
 
     from .middleware import protect_api_endpoints
@@ -79,17 +84,23 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    from .routes import core_bp, subscription_bp, project_bp, email_bp, init_core_routes, init_subscription_routes
+    from .routes import core_bp, init_core_routes
 
     # 初始化路由（注入依赖）
     init_core_routes(state_manager)
-    init_subscription_routes(state_manager)
 
-    # 注册蓝图
+    if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true':
+        from .routes.subscription import subscription_bp, init_subscription_routes
+        init_subscription_routes(state_manager)
+        app.register_blueprint(subscription_bp)
+
+    if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true':
+        from .routes.project import project_bp
+        from .routes.email import email_bp
+        app.register_blueprint(project_bp)
+        app.register_blueprint(email_bp)
+
     app.register_blueprint(core_bp)
-    app.register_blueprint(subscription_bp)
-    app.register_blueprint(project_bp)
-    app.register_blueprint(email_bp)
 
     logger.info("蓝图注册完成")
 
@@ -105,8 +116,10 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
         state_manager: 状态管理器实例
     """
     from flask import jsonify, request
-    from .utils import load_config_safe, audit_log
-    from .handlers import update_balance_cache, refresh_credits
+
+    if os.environ.get('ENABLE_HISTORY_API', 'false').lower() != 'true':
+        logger.info("历史数据 API 未启用")
+        return
 
     # ==========推历史数据 API ==========
     try:

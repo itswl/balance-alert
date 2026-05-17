@@ -8,7 +8,11 @@ import hmac
 import os
 from functools import wraps
 from flask import request, jsonify
-from pydantic import ValidationError
+
+try:
+    from pydantic import ValidationError
+except ImportError:  # Optional routes use Pydantic; the core dashboard does not.
+    ValidationError = None
 
 
 def _get_api_key() -> str:
@@ -98,6 +102,12 @@ def validate_request(model_class):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            if ValidationError is None:
+                return jsonify({
+                    'status': 'error',
+                    'message': '请求验证依赖未安装，请安装可选依赖 pydantic'
+                }), 503
+
             try:
                 # 获取请求数据
                 data = request.get_json()

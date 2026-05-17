@@ -91,6 +91,9 @@ def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _load_dynamic_from_db(config: Dict[str, Any]) -> Dict[str, Any]:
+    if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() != 'true':
+        return config
+
     try:
         from database.repository import ConfigRepository
 
