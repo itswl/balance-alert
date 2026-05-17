@@ -17,7 +17,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.monitor import CreditMonitor
-from core.state_manager import state_manager
 from core.config_loader import load_config_with_env_vars
 
 
@@ -308,13 +307,10 @@ class TestE2EIntegration:
         }
         
         with patch('providers.openrouter.OpenRouterProvider.get_credits', return_value=mock_response):
-            # 清空状态
-            state_manager._balance_state = {}
-            
             monitor = CreditMonitor(test_config_file)
             monitor.run(dry_run=True)
             
-            # 注意：monitor.run() 不会直接更新 state_manager
+            # 注意：monitor.run() 不会直接更新 StateManager
             # 在实际应用中，web_server 会调用 update_balance_cache()
             # 这里我们验证 monitor 的结果格式正确
             assert len(monitor.results) > 0
