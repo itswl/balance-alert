@@ -14,6 +14,9 @@ web/
 │   ├── __init__.py
 │   ├── core.py              # 核心 API（健康检查、余额查询、刷新）
 │   ├── subscription.py      # 订阅管理 API
+│   ├── history.py           # 历史数据 API（可选）
+│   ├── project.py           # 项目配置 API（可选）
+│   ├── email.py             # 邮箱配置 API（可选）
 │   └── ...（未来扩展）
 ├── handlers/                # 业务逻辑处理器
 │   ├── __init__.py
@@ -36,8 +39,9 @@ web/
 
 每个功能模块使用独立的 Blueprint：
 
-- `core_bp` - 核心功能（/, /health, /ready, /live, /api/credits, /api/refresh）
-- `subscription_bp` - 订阅管理（/api/subscription/*）
+- `create_core_bp(state_manager)` - 核心功能（/, /health, /ready, /live, /api/credits, /api/refresh）
+- `create_subscription_bp(state_manager)` - 订阅管理（/api/subscription/*）
+- `history_bp` - 历史数据（/api/history/*，可选）
 
 优势：
 - 模块化组织代码
@@ -46,14 +50,13 @@ web/
 
 ### 3. 依赖注入
 
-使用 `init_*_routes()` 函数注入依赖（如 StateManager）：
+使用“蓝图工厂（Blueprint Factory）”通过闭包注入依赖（如 StateManager），避免模块级全局变量：
 
 ```python
 # 在 app.py 中
-from .routes import core_bp, init_core_routes
+from .routes import create_core_bp
 
-init_core_routes(state_manager)  # 注入依赖
-app.register_blueprint(core_bp)   # 注册蓝图
+app.register_blueprint(create_core_bp(state_manager))
 ```
 
 优势：
@@ -88,7 +91,7 @@ python main.py
 
 ```python
 from web import create_app
-from state_manager import StateManager
+from core.state_manager import StateManager
 
 # 创建应用
 state_mgr = StateManager()
@@ -123,7 +126,6 @@ python main.py
 **功能**：
 - 配置 Flask（CORS、JSON、请求大小限制）
 - 注册所有 Blueprint
-- 注册额外路由（历史数据、配置）
 - 注册错误处理器
 
 ### middleware.py - 中间件
@@ -188,6 +190,16 @@ def add_subscription(validated_data: AddSubscriptionRequest):
 | /api/subscription/delete | POST/DELETE | 删除订阅 |
 | /api/subscription/mark_renewed | POST | 标记已续费 |
 
+**history.py - 历史数据 API（可选）**
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| /api/history/balance | GET | 余额历史 |
+| /api/history/trend/<project_id> | GET | 余额趋势 |
+| /api/history/alerts | GET | 告警历史 |
+| /api/history/stats | GET | 告警统计 |
+| /api/history/projects | GET | 项目摘要 |
+
 ## 测试
 
 ### 单元测试
@@ -203,7 +215,7 @@ assert result['success'] is True
 
 # 测试 Blueprint
 from web import create_app
-from state_manager import StateManager
+from core.state_manager import StateManager
 
 state_mgr = StateManager()
 app = create_app(state_mgr)
@@ -287,17 +299,17 @@ def action():
 
 当前状态：
 
-- ✅ 核心功能已模块化（core、subscription）
+- ✅ 核心功能已模块化（core、subscription、history）
 - ✅ 中间件和工具函数已提取
 - ✅ 应用工厂模式已实现
-- ⏸️ 历史数据API暂时保留在 app.py（未来可拆分为 history_bp）
-- ⏸️ 配置API暂时保留在 app.py（未来可拆分为 config_bp）
+- ✅ 历史数据 API 已迁移为独立 Blueprint（history_bp）
+- ✅ 配置 API 已迁移为独立 Blueprint（project/email/subscription）
 
 下一步：
 
 1. 完整测试模块化版本
-2. 逐步迁移历史数据和配置 API 到独立 Blueprint
-3. 废弃旧版 `main.py`（在下一个大版本）
+2. 继续收敛路由导出与应用注册方式，减少散落 import
+3. 废弃旧版启动方式（在下一个大版本）
 
 ## 性能对比
 
@@ -340,4 +352,4 @@ python main.py
 ---
 
 **维护者**: 项目团队
-最后更新**: 2024-02-24
+最后更新**: 2026-05-17
