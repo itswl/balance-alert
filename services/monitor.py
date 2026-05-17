@@ -103,6 +103,28 @@ def _safe_metrics_call(action: Callable[[], None]) -> None:
         return None
 
 
+def _get_metrics_collector():
+    try:
+        from services.prometheus_exporter import metrics_collector
+        return metrics_collector
+    except Exception:
+        return None
+
+
+def _set_active_projects_count(count: int) -> None:
+    collector = _get_metrics_collector()
+    if collector is None:
+        return None
+    _safe_metrics_call(lambda: collector.active_projects_count.set(count))
+
+
+def _observe_monitor_execution_time(seconds: float) -> None:
+    collector = _get_metrics_collector()
+    if collector is None:
+        return None
+    _safe_metrics_call(lambda: collector.monitor_execution_time.observe(seconds))
+
+
 def _project_id(provider_name: str, project_name: str) -> str:
     return hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
 
@@ -163,6 +185,57 @@ class CreditMonitor:
             return max(1, min(max_concurrent, MAX_CONCURRENT_UPPER_BOUND))
         except (TypeError, ValueError):
             return DEFAULT_MAX_CONCURRENT
+
+    def _failure_result(self, project_name: str, owner_project: Optional[str], provider_name: Optional[str], error_msg: str) -> Dict[str, Any]:
+        return {
+            'project': project_name,
+            'owner_project': owner_project,
+            'provider': provider_name,
+            'success': False,
+            'error': error_msg,
+            'alarm_sent': False
+        }
+
+    def _save_balance_history(self, provider_name: str, project_name: str, credits: float, threshold: float, project_config: Dict[str, Any], need_alarm: bool) -> None:
+        if not DB_AVAILABLE:
+            return None
+        try:
+            project_id = _project_id(provider_name, project_name)
+            BalanceRepository.save_balance_record(
+                project_id=project_id,
+                project_name=project_name,
+                provider=provider_name,
+                balance=credits,
+                threshold=threshold,
+                balance_type=project_config.get('type', 'credits'),
+                need_alarm=need_alarm
+            )
+        except Exception as e:
+            logger.error(f"保存余额历史失败: {e}")
+
+    def _should_skip_alarm(self, project_id: str, alert_type: str, cooldown_seconds: int) -> bool:
+        if not DB_AVAILABLE:
+            return False
+        try:
+            return AlertRepository.has_recent_alert(project_id, alert_type, cooldown_seconds)
+        except Exception:
+            return False
+
+    def _save_alert_history(self, project_id: str, project_name: str, alert_type: str, message: str, credits: float, threshold: float) -> None:
+        if not DB_AVAILABLE:
+            return None
+        try:
+            AlertRepository.save_alert_record(
+                project_id=project_id,
+                project_name=project_name,
+                alert_type=alert_type,
+                message=message,
+                balance_value=credits,
+                threshold_value=threshold,
+                status='sent'
+            )
+        except Exception as e:
+            logger.error(f"保存告警历史失败: {e}")
     
     def check_project(self, project_config: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """
@@ -183,19 +256,12 @@ class CreditMonitor:
         
         logger.info(f"检查项目: {project_name} | 服务商: {provider_name} | 告警阈值: {threshold}")
         
-        # 获取服务商适配器（复用缓存实例）
         try:
             provider = _get_or_create_provider(provider_name, api_key)
         except ValueError as e:
             error_msg = str(e)
             logger.error(f"❌ {error_msg}")
-            return {
-                'project': project_name,
-                'owner_project': owner_project,
-                'success': False,
-                'error': error_msg,
-                'alarm_sent': False
-            }
+            return self._failure_result(project_name, owner_project, provider_name, error_msg)
         
         cache_ttl = int(self.config.get('settings', {}).get('response_cache_ttl', DEFAULT_RESPONSE_CACHE_TTL) or 0)
         cache_key = _provider_cache_key(provider_name, api_key)
@@ -208,13 +274,7 @@ class CreditMonitor:
         
         if not result['success']:
             logger.error(f"❌ 获取余额失败: {result['error']}")
-            return {
-                'project': project_name,
-                'owner_project': owner_project,
-                'success': False,
-                'error': result['error'],
-                'alarm_sent': False
-            }
+            return self._failure_result(project_name, owner_project, provider_name, result['error'])
         
         credits = result['credits']
         logger.info(f"[{project_name}] 当前余额: {credits}")
@@ -227,21 +287,7 @@ class CreditMonitor:
         need_alarm = credits < threshold
         alarm_sent = False
 
-        # 保存余额历史到数据库
-        if DB_AVAILABLE:
-            try:
-                project_id = _project_id(provider_name, project_name)
-                BalanceRepository.save_balance_record(
-                    project_id=project_id,
-                    project_name=project_name,
-                    provider=provider_name,
-                    balance=credits,
-                    threshold=threshold,
-                    balance_type=project_config.get('type', 'credits'),
-                    need_alarm=need_alarm
-                )
-            except Exception as e:
-                logger.error(f"保存余额历史失败: {e}")
+        self._save_balance_history(provider_name, project_name, credits, threshold, project_config, need_alarm)
         
         if need_alarm:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
@@ -249,26 +295,13 @@ class CreditMonitor:
             if not dry_run:
                 project_id = _project_id(provider_name, project_name)
                 alert_cooldown = _get_alert_cooldown_seconds(self.config)
-                if DB_AVAILABLE and AlertRepository.has_recent_alert(project_id, 'low_balance', alert_cooldown):
+                if self._should_skip_alarm(project_id, 'low_balance', alert_cooldown):
                     logger.info(f"[{project_name}] 告警仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
                 else:
                     alarm_sent = self._send_alarm(project_config, credits)
 
-                    # 保存告警历史到数据库
-                    if DB_AVAILABLE and alarm_sent:
-                        try:
-                            balance_type = '余额'
-                            AlertRepository.save_alert_record(
-                                project_id=project_id,
-                                project_name=project_name,
-                                alert_type='low_balance',
-                                message=f"{balance_type}不足: {credits} < {threshold}",
-                                balance_value=credits,
-                                threshold_value=threshold,
-                                status='sent'
-                            )
-                        except Exception as e:
-                            logger.error(f"保存告警历史失败: {e}")
+                    if alarm_sent:
+                        self._save_alert_history(project_id, project_name, 'low_balance', f"余额不足: {credits} < {threshold}", credits, threshold)
             else:
                 logger.info(f"[{project_name}] [测试模式] 跳过发送告警")
         else:
@@ -359,7 +392,7 @@ class CreditMonitor:
         if dry_run:
             logger.info("[测试模式] 不会发送实际告警")
 
-        _safe_metrics_call(lambda: __import__('services.prometheus_exporter', fromlist=['metrics_collector']).metrics_collector.active_projects_count.set(len(projects)))
+        _set_active_projects_count(len(projects))
 
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
@@ -384,19 +417,14 @@ class CreditMonitor:
                 except Exception as e:
                     logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
                     with self._results_lock:
-                        self.results.append({
-                            'project': project.get('name', 'Unknown'),
-                            'success': False,
-                            'error': str(e),
-                            'alarm_sent': False
-                        })
+                        self.results.append(self._failure_result(project.get('name', 'Unknown'), project.get('owner_project') or project.get('project'), project.get('provider'), str(e)))
         
         # 输出汇总
         self._print_summary()
 
         # 记录执行时间（Prometheus 指标）
         execution_time = time.time() - start_time
-        _safe_metrics_call(lambda: __import__('services.prometheus_exporter', fromlist=['metrics_collector']).metrics_collector.monitor_execution_time.observe(execution_time))
+        _observe_monitor_execution_time(execution_time)
         logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
     
     def _print_summary(self) -> None:
@@ -445,8 +473,7 @@ def run_credit_monitor(config_path: str, project_name: Optional[str] = None, dry
         }
 
 
-def main() -> None:
-    """主函数"""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='多项目余额监控工具',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -461,62 +488,40 @@ def main() -> None:
   %(prog)s --check-email --email-days 3  # 扫描最近3天的邮件
         """
     )
-    
-    parser.add_argument(
-        '--config',
-        default='config.json',
-        help='配置文件路径 (默认: config.json)'
-    )
-    
-    parser.add_argument(
-        '--project',
-        help='指定要检查的项目名称'
-    )
-    
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='测试模式，只显示余额不发送告警'
-    )
-    
-    parser.add_argument(
-        '--check-subscriptions',
-        action='store_true',
-        help='检查订阅续费提醒'
-    )
-    
-    parser.add_argument(
-        '--check-email',
-        action='store_true',
-        help='扫描邮箱告警邮件'
-    )
-    
-    parser.add_argument(
-        '--email-days',
-        type=int,
-        default=1,
-        help='扫描最近几天的邮件 (默认: 1天)'
-    )
-    
+
+    from core.config_loader import get_default_config_path
+    default_config = get_default_config_path()
+
+    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
+    parser.add_argument('--project', help='指定要检查的项目名称')
+    parser.add_argument('--dry-run', action='store_true', help='测试模式，只显示余额不发送告警')
+    parser.add_argument('--check-subscriptions', action='store_true', help='检查订阅续费提醒')
+    parser.add_argument('--check-email', action='store_true', help='扫描邮箱告警邮件')
+    parser.add_argument('--email-days', type=int, default=1, help='扫描最近几天的邮件 (默认: 1天)')
+    return parser
+
+
+def _run_from_args(args) -> None:
+    monitor = CreditMonitor(args.config)
+    monitor.run(project_name=args.project, dry_run=args.dry_run)
+
+    if args.check_subscriptions or args.project is None:
+        subscription_checker = SubscriptionChecker(args.config)
+        subscription_checker.check_subscriptions(dry_run=args.dry_run)
+
+    if args.check_email:
+        email_scanner = EmailScanner(args.config)
+        email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
+
+
+def main() -> None:
+    """主函数"""
+    parser = _build_arg_parser()
     args = parser.parse_args()
-    
     try:
-        # 检查余额
-        monitor = CreditMonitor(args.config)
-        monitor.run(project_name=args.project, dry_run=args.dry_run)
-        
-        # 检查订阅续费（默认启用）
-        if args.check_subscriptions or args.project is None:
-            subscription_checker = SubscriptionChecker(args.config)
-            subscription_checker.check_subscriptions(dry_run=args.dry_run)
-        
-        # 扫描邮箱（如果指定）
-        if args.check_email:
-            email_scanner = EmailScanner(args.config)
-            email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
-            
+        _run_from_args(args)
     except Exception as e:
-        logger.error(f"错误: {e}")
+        logger.error(f"错误: {e}", exc_info=True)
         sys.exit(1)
 
 
