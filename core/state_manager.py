@@ -191,5 +191,4 @@ class StateManager:
             logger.info("状态已清空")
 
 
-# 全局状态管理器实例
-state_manager = StateManager()
+ 
