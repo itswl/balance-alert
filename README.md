@@ -64,10 +64,10 @@ python services/monitor.py --dry-run
 
 核心版只使用两种配置来源：
 
-- `config.json`：项目、阈值、平台类型等结构化配置
+- `CONFIG_PATH` 指定的配置文件（默认 `config.json`）：项目、阈值、平台类型等结构化配置
 - `.env`：API Key、Webhook URL 等敏感信息
 
-`config.json` 支持 `${VAR}` 环境变量占位符，例如：
+配置文件支持 `${VAR}` 环境变量占位符，例如：
 
 ```json
 {
@@ -88,6 +88,7 @@ python services/monitor.py --dry-run
 | `WEB_API_KEY` | 无 | `/api/*` 接口访问密钥 |
 | `WEBHOOK_URL` | 无 | 告警机器人地址 |
 | `WEBHOOK_TYPE` | `custom` | `feishu` / `dingtalk` / `wecom` / `custom` |
+| `CONFIG_PATH` | `config.json` | 配置文件路径 |
 | `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | 后台刷新间隔 |
 | `MAX_CONCURRENT_CHECKS` | 配置文件值 | 并发检查数 |
 | `ENABLE_WEB_ALARM` | `false` | Web 后台刷新是否发送真实告警 |
