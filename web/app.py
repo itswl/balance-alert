@@ -67,6 +67,7 @@ def create_app(state_manager: StateManager = None) -> Flask:
 
     # 注册蓝图
     _register_blueprints(app, state_manager)
+    _register_error_handlers(app)
 
     logger.info("Flask 应用创建完成")
 

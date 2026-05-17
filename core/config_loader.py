@@ -27,6 +27,9 @@ def get_env(key: str, default=None) -> Optional[str]:
     """获取环境变量"""
     return os.environ.get(key, default)
 
+def get_default_config_path() -> str:
+    return get_env('CONFIG_PATH', 'config.json')
+
 
 def get_enable_web_alarm() -> bool:
     return get_env('ENABLE_WEB_ALARM', 'false').lower() == 'true'

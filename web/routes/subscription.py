@@ -5,12 +5,14 @@
 包含订阅的增删改查、标记续费等功能
 """
 from flask import Blueprint, jsonify, request
+from datetime import date, datetime
 from ..middleware import validate_request
 from ..utils import load_config_safe, audit_log
 from core.config_loader import clear_config_cache
 from services.config_service import delete_subscription, upsert_subscription
 from ..handlers import refresh_subscription_cache
 from core.state_manager import StateManager
+from core.config_loader import get_default_config_path
 from models.api_models import (
     AddSubscriptionRequest,
     UpdateSubscriptionRequest,
@@ -103,7 +105,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 'fields': updated_fields
             })
 
-            refresh_subscription_cache('config.json', state_manager)
+            refresh_subscription_cache(get_default_config_path(), state_manager)
 
             return jsonify({
                 'status': 'success',
@@ -152,7 +154,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 'amount': validated_data.amount
             })
 
-            refresh_subscription_cache('config.json', state_manager)
+            refresh_subscription_cache(get_default_config_path(), state_manager)
 
             return jsonify({
                 'status': 'success',
@@ -180,7 +182,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 clear_config_cache()
 
             audit_log('delete_subscription', {'subscription': validated_data.name})
-            refresh_subscription_cache('config.json', state_manager)
+            refresh_subscription_cache(get_default_config_path(), state_manager)
 
             return jsonify({
                 'status': 'success',
@@ -206,7 +208,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
 
             success = upsert_subscription({
                 'name': subscription_name,
-                'last_renewed_date': renewed_date or __import__('datetime').date.today().isoformat()
+                'last_renewed_date': renewed_date or date.today().isoformat()
             })
 
             if not success:
@@ -217,12 +219,11 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
 
             clear_config_cache()
             audit_log('mark_renewed', {'subscription': subscription_name})
-            refresh_subscription_cache('config.json', state_manager)
+            refresh_subscription_cache(get_default_config_path(), state_manager)
 
             config = load_config_safe()
 
             from ..handlers import calculate_next_renewal_date
-            from datetime import datetime
             sub_data = next(s for s in config['subscriptions'] if s['name'] == subscription_name)
             next_renewal = calculate_next_renewal_date(
                 sub_data['cycle_type'],
@@ -266,7 +267,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
 
             clear_config_cache()
             audit_log('unmark_renewed', {'subscription': subscription_name})
-            refresh_subscription_cache('config.json', state_manager)
+            refresh_subscription_cache(get_default_config_path(), state_manager)
 
             return jsonify({
                 'status': 'success',

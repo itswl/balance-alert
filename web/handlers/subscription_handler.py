@@ -4,11 +4,12 @@
 
 处理订阅管理相关的业务逻辑
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from services.subscription_checker import SubscriptionChecker
 from core.state_manager import StateManager
 from core.logger import get_logger
+from core.config_loader import get_default_config_path
 
 logger = get_logger('web.handlers.subscription')
 
@@ -28,7 +29,7 @@ def update_subscription_cache(results: List[Dict[str, Any]], state_mgr: StateMan
     logger.info("订阅缓存更新完成")
 
 
-def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> None:
+def refresh_subscription_cache(config_path: Optional[str], state_mgr: StateManager) -> None:
     """
     刷新订阅缓存
 
@@ -38,7 +39,7 @@ def refresh_subscription_cache(config_path: str, state_mgr: StateManager) -> Non
     """
     try:
         # 创建新的 checker 实例会重新加载配置
-        checker = SubscriptionChecker(config_path)
+        checker = SubscriptionChecker(config_path or get_default_config_path())
         # 强制重新加载配置（确保获取最新数据）
         checker.config = checker._load_config()
         results = checker.check_subscriptions()

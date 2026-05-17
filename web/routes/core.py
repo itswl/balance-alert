@@ -9,7 +9,7 @@ import time
 import threading
 from flask import Blueprint, jsonify, request, render_template, send_from_directory
 from pathlib import Path
-from core.config_loader import get_enable_web_alarm, get_refresh_interval
+from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
 from core.state_manager import StateManager
 from core.logger import get_logger
 from ..utils import make_etag_response
@@ -175,7 +175,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
             start_time = time.time()
             dry_run = not get_enable_web_alarm()
 
-            result = refresh_credits('config.json', project_name, dry_run)
+            result = refresh_credits(get_default_config_path(), project_name, dry_run)
 
             if not result['success']:
                 return jsonify({

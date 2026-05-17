@@ -14,7 +14,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from flask import jsonify, make_response, request
 from core.logger import get_logger
-from core.config_loader import get_enable_web_alarm as _get_enable_web_alarm, get_refresh_interval as _get_refresh_interval
+from core.config_loader import get_default_config_path, get_enable_web_alarm as _get_enable_web_alarm, get_refresh_interval as _get_refresh_interval
 from services.config_service import load_config as _load_config
 
 logger = get_logger('web.utils')
@@ -32,10 +32,10 @@ def get_refresh_interval() -> int:
     2. config.json 中的 settings.balance_refresh_interval_seconds
     3. 默认值 3600 秒
     """
-    return _get_refresh_interval('config.json')
+    return _get_refresh_interval(get_default_config_path())
 
 
-def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any]]:
+def load_config_safe(config_path: str = None) -> Optional[Dict[str, Any]]:
     """
     安全加载配置文件
 
@@ -46,7 +46,7 @@ def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any
         配置字典，失败返回 None
     """
     try:
-        return _load_config(config_path, validate=False)
+        return _load_config(config_path or get_default_config_path(), validate=False)
     except Exception as e:
         logger.error(f"加载配置失败: {e}")
         return None
