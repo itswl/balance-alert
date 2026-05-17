@@ -25,6 +25,25 @@ logger = get_logger('web.routes.subscription')
 def create_subscription_bp(state_manager: StateManager) -> Blueprint:
     subscription_bp = Blueprint('subscription', __name__, url_prefix='/api')
 
+    def _error(message: str, status_code: int = 500):
+        return jsonify({'status': 'error', 'message': message}), status_code
+
+    def _success(payload: dict, status_code: int = 200):
+        return jsonify(payload), status_code
+
+    def _refresh_cache() -> None:
+        refresh_subscription_cache(get_default_config_path(), state_manager)
+
+    def _clear_config_cache_if(success: bool) -> None:
+        if success:
+            clear_config_cache()
+
+    def _get_name_from_json():
+        data = request.get_json()
+        if not data or 'name' not in data:
+            return None, _error('缺少订阅名称', 400)
+        return data['name'], None
+
     @subscription_bp.route('/subscriptions')
     def get_subscriptions():
         """获取订阅状态数据"""
@@ -39,7 +58,8 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             subscriptions = config.get('subscriptions', [])
             return jsonify({'status': 'success', 'subscriptions': subscriptions})
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            logger.error(f"获取订阅配置失败: {e}", exc_info=True)
+            return _error(str(e), 500)
 
     @subscription_bp.route('/config/subscription', methods=['POST'])
     @validate_request(UpdateSubscriptionRequest)
@@ -90,31 +110,27 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                         updated_fields.append('last_renewed_date')
 
                     success = upsert_subscription(dyn_sub)
-                    if success:
-                        clear_config_cache()
+                    _clear_config_cache_if(success)
                     break
 
             if not subscription_found:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'未找到订阅: {validated_data.name}'
-                }), 404
+                return _error(f'未找到订阅: {validated_data.name}', 404)
 
             audit_log('update_subscription', {
                 'subscription': validated_data.name,
                 'fields': updated_fields
             })
 
-            refresh_subscription_cache(get_default_config_path(), state_manager)
+            _refresh_cache()
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f'订阅 [{validated_data.name}] 配置已更新',
                 'updated_fields': updated_fields
-            })
+            }, 200)
 
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/add', methods=['POST'])
     @validate_request(AddSubscriptionRequest)
@@ -126,10 +142,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             subscriptions = config.get('subscriptions', [])
             for sub in subscriptions:
                 if sub.get('name') == validated_data.name:
-                    return jsonify({
-                        'status': 'error',
-                        'message': f'订阅名称 [{validated_data.name}] 已存在'
-                    }), 400
+                    return _error(f'订阅名称 [{validated_data.name}] 已存在', 400)
 
             new_subscription = {
                 'name': validated_data.name,
@@ -145,8 +158,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 new_subscription['last_renewed_date'] = validated_data.last_renewed_date
 
             success = upsert_subscription(new_subscription)
-            if success:
-                clear_config_cache()
+            _clear_config_cache_if(success)
 
             audit_log('add_subscription', {
                 'subscription': validated_data.name,
@@ -154,15 +166,15 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 'amount': validated_data.amount
             })
 
-            refresh_subscription_cache(get_default_config_path(), state_manager)
+            _refresh_cache()
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f'订阅 [{validated_data.name}] 已成功添加'
-            })
+            }, 200)
 
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/delete', methods=['POST', 'DELETE'])
     @validate_request(DeleteSubscriptionRequest)
@@ -172,38 +184,31 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             config = load_config_safe()
             subscriptions = config.get('subscriptions', [])
             if not any(sub.get('name') == validated_data.name for sub in subscriptions):
-                return jsonify({
-                    'status': 'error',
-                    'message': f'未找到订阅: {validated_data.name}'
-                }), 404
+                return _error(f'未找到订阅: {validated_data.name}', 404)
 
             success = delete_subscription(validated_data.name)
-            if success:
-                clear_config_cache()
+            _clear_config_cache_if(success)
 
             audit_log('delete_subscription', {'subscription': validated_data.name})
-            refresh_subscription_cache(get_default_config_path(), state_manager)
+            _refresh_cache()
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f'订阅 [{validated_data.name}] 已删除'
-            })
+            }, 200)
 
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/mark_renewed', methods=['POST'])
     def mark_subscription_renewed():
         """标记订阅已续费"""
         try:
-            data = request.get_json()
-            if not data or 'name' not in data:
-                return jsonify({
-                    'status': 'error',
-                    'message': '缺少订阅名称'
-                }), 400
+            subscription_name, error_response = _get_name_from_json()
+            if error_response:
+                return error_response
 
-            subscription_name = data['name']
+            data = request.get_json() or {}
             renewed_date = data.get('renewed_date')
 
             success = upsert_subscription({
@@ -212,14 +217,11 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             })
 
             if not success:
-                return jsonify({
-                    'status': 'error',
-                    'message': '更新订阅失败'
-                }), 500
+                return _error('更新订阅失败', 500)
 
             clear_config_cache()
             audit_log('mark_renewed', {'subscription': subscription_name})
-            refresh_subscription_cache(get_default_config_path(), state_manager)
+            _refresh_cache()
 
             config = load_config_safe()
 
@@ -231,28 +233,23 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
                 datetime.fromisoformat(sub_data['last_renewed_date'])
             )
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f'订阅 [{subscription_name}] 已标记为已续费',
                 'next_renewal_date': next_renewal.isoformat()
-            })
+            }, 200)
 
         except Exception as e:
             logger.error(f"标记续费失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            return _error(str(e), 500)
 
     @subscription_bp.route('/subscription/clear_renewed', methods=['POST'])
     def clear_subscription_renewed():
         """清除订阅的续费标记"""
         try:
-            data = request.get_json()
-            if not data or 'name' not in data:
-                return jsonify({
-                    'status': 'error',
-                    'message': '缺少订阅名称'
-                }), 400
-
-            subscription_name = data['name']
+            subscription_name, error_response = _get_name_from_json()
+            if error_response:
+                return error_response
 
             success = upsert_subscription({
                 'name': subscription_name,
@@ -260,22 +257,19 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
             })
 
             if not success:
-                return jsonify({
-                    'status': 'error',
-                    'message': '更新订阅失败'
-                }), 500
+                return _error('更新订阅失败', 500)
 
             clear_config_cache()
             audit_log('unmark_renewed', {'subscription': subscription_name})
-            refresh_subscription_cache(get_default_config_path(), state_manager)
+            _refresh_cache()
 
-            return jsonify({
+            return _success({
                 'status': 'success',
                 'message': f'订阅 [{subscription_name}] 的续费标记已清除'
-            })
+            }, 200)
 
         except Exception as e:
             logger.error(f"清除续费标记失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            return _error(str(e), 500)
 
     return subscription_bp
