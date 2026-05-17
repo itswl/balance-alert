@@ -4,6 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from core.config_loader import load_config_with_env_vars as _load_file_config
+from core.config_loader import get_default_config_path
 
 
 def load_config(config_file: str = 'config.json', validate: bool = True, use_cache: bool = True) -> Dict[str, Any]:
@@ -45,17 +46,17 @@ def load_config(config_file: str = 'config.json', validate: bool = True, use_cac
 
 
 def get_all_projects() -> List[Dict[str, Any]]:
-    config = load_config(validate=False)
+    config = load_config(get_default_config_path(), validate=False)
     return list(config.get('projects', []) or [])
 
 
 def get_all_subscriptions() -> List[Dict[str, Any]]:
-    config = load_config(validate=False)
+    config = load_config(get_default_config_path(), validate=False)
     return list(config.get('subscriptions', []) or [])
 
 
 def get_all_emails() -> List[Dict[str, Any]]:
-    config = load_config(validate=False)
+    config = load_config(get_default_config_path(), validate=False)
     return list(config.get('email', []) or [])
 
 
