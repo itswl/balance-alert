@@ -11,7 +11,7 @@ Balance Alert 是一个云原生的多平台余额监控系统。
                  │
 ┌────────────────┴────────────────────────┐
 │         Web Server (Flask)              │
-│  REST API + WebSocket + Metrics         │
+│  REST API + Metrics                     │
 └────────────────┬────────────────────────┘
                  │
 ┌────────────────┴────────────────────────┐
@@ -26,7 +26,7 @@ Balance Alert 是一个云原生的多平台余额监控系统。
 │           Data Layer                    │
 │  ├─ State Manager (内存缓存)            │
 │  ├─ SQLite/PostgreSQL (历史数据)        │
-│  └─ Config Loader (配置热重载)          │
+│  └─ Config Loader (配置加载/优先级)     │
 └─────────────────────────────────────────┘
 ```
 
@@ -119,14 +119,16 @@ SubscriptionHistory   # 订阅历史
 ### 5. 配置管理 (`config_loader.py` & `ConfigRepository`)
 
 **动静分离架构**：
-1. **静态配置 (只读)**：`.env` 或 `config.json` 提供系统基础参数（Webhook、邮箱、默认系统设置）。支持环境变量覆盖文件配置（混合模式）和热重载。
-2. **动态配置 (数据库)**：通过 `ConfigRepository` 管理。所有项目配置（API Key, 阈值）和订阅提醒配置均保存至 SQLite 数据库。
+1. **静态配置 (只读)**：`.env` 或 `config.json` 提供系统基础参数（Webhook、邮箱、默认系统设置）。支持环境变量覆盖文件配置（混合模式）。
+2. **动态配置 (数据库)**：通过 `ConfigRepository` 管理。项目/订阅/邮箱配置的日常增删改由 Web UI 写入数据库，运行时优先使用数据库内容。
 
-**热重载机制**：
-- watchdog 监听文件变化
-- 1秒防抖
-- 异步通知 Web Server 更新缓存
-- 数据访问优先从数据库加载，并在内存中无缝覆盖默认静态文件配置。
+**配置优先级（从低到高）**：
+1. `config.json`（如果存在，且未开启 `USE_ENV_CONFIG=true`）
+2. 环境变量覆盖（`settings/webhook` 以及敏感字段：邮箱密码、项目 API Key）
+3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
+4. 最后再做一遍敏感字段环境变量覆盖（便于“结构在 DB，密钥在 env”）
+
+配置每次读取时生效，不做文件监听。
 
 ### 6. Webhook 适配器 (`webhook_adapter.py`)
 

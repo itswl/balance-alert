@@ -45,13 +45,17 @@ open http://localhost:8080
 ```bash
 # Webhook 告警
 WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
-WEBHOOK_TYPE=feishu
+WEBHOOK_TYPE=feishu  # 或设置 WEBHOOK_PLATFORM=feishu/dingtalk/wecom/custom
 
-# 项目 API Key（根据 config.json 中的项目数量配置）
-PROJECT_1_API_KEY=sk-or-v1-xxx          # OpenRouter
-PROJECT_2_API_KEY=wxrank-key-xxx        # 微信排名
-PROJECT_3_API_KEY=AK-xxx:SK-xxx         # 火山云（用冒号分隔）
-PROJECT_4_API_KEY=LTAI-xxx:secret-xxx   # 阿里云（用冒号分隔）
+# 项目 API Key（推荐：按“项目名”设置，自动匹配；项目名会被转成大写+下划线）
+# 例如：项目名 "OpenRouter Main" -> 环境变量 OPENROUTER_MAIN_API_KEY
+OPENROUTER_MAIN_API_KEY=sk-or-v1-xxx          # OpenRouter
+WXRANK_API_KEY=wxrank-key-xxx                 # 微信排名（示例：项目名 "WxRank"）
+VOLC_API_KEY=AK-xxx:SK-xxx                    # 火山云（用冒号分隔）
+ALIYUN_API_KEY=LTAI-xxx:secret-xxx            # 阿里云（用冒号分隔）
+
+# 可选：通用默认 Key（当某个项目没有单独配置时会回退使用）
+PROJECT_API_KEY=sk-or-v1-default-xxx
 ```
 
 **API Key 格式要求**：
@@ -71,7 +75,7 @@ PROJECT_4_API_KEY=LTAI-xxx:secret-xxx   # 阿里云（用冒号分隔）
 docker-compose logs -f
 
 # 检查环境变量是否生效
-docker exec credit-monitor env | grep PROJECT
+docker exec credit-monitor env | grep -E 'API_KEY|WEBHOOK'
 
 # 验证配置文件
 docker exec credit-monitor cat /app/config.json
@@ -85,13 +89,13 @@ pip install -r requirements.txt
 
 # 2. 配置环境变量
 export WEBHOOK_URL="https://your-webhook-url"
-export PROJECT_1_API_KEY="your-api-key"
+export OPENROUTER_MAIN_API_KEY="your-api-key"
 
 # 3. 运行 Web 服务
 python main.py
 
 # 或执行一次检查
-python monitor.py
+python services/monitor.py
 ```
 
 ## 📧 Webhook 告警配置
@@ -131,12 +135,21 @@ WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
 WEBHOOK_TYPE=feishu
 ```
 
+### 配置优先级（从低到高）
+
+1. `config.json`（如果存在，且未开启 `USE_ENV_CONFIG=true`）
+2. 环境变量覆盖（`settings/webhook` 以及敏感字段：邮箱密码、项目 API Key）
+3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
+4. 最后再做一遍敏感字段环境变量覆盖（便于“结构在 DB，密钥在 env”）
+
+> `USE_ENV_CONFIG=true` 时：直接忽略 `config.json`，只使用“环境变量 + 数据库”。
+
 ### 2. 动态配置 (数据库)
 为了兼容 Kubernetes/Docker 的只读挂载规范，并支持高并发的页面修改：
 **项目配置（API 密钥、告警阈值）**和**订阅配置（续费提醒）**均已迁移至 SQLite 数据库 (`data/balance_alert.db`) 中管理。
 
-- **初始化**：第一次启动时，系统仍会读取 `.env` 或 `config.json` 中的初始项目，并将其自动迁移到数据库中。
-- **日常管理**：此后，你可以直接通过 Web UI 界面修改各项目的**告警阈值**，或自由地**增删改订阅**。所有的修改会实时持久化到数据库中。
+- **初始化**：数据库表会在 Web 服务器启动时自动创建。若数据库配置表为空，则会使用静态配置（`.env`/`config.json`）作为运行时配置来源。
+- **日常管理**：通过 Web UI 增删改项目/订阅/邮箱配置后，会写入数据库；此后运行时会优先使用数据库中的 `projects/subscriptions/email`。
 
 > 💡 **版本升级提示**：如果你是从旧版本升级上来的，请在拉取最新代码后进入容器执行 `alembic upgrade head`，或直接执行 `python scripts/migrate_config_to_db.py` 自动完成数据的无缝迁移。
 
@@ -151,8 +164,8 @@ docker-compose down           # 停止
 
 # 本地运行
 python main.py          # 启动 Web 服务
-python monitor.py             # 执行检查
-python monitor.py --dry-run   # 测试模式（不发送告警）
+python services/monitor.py             # 执行检查
+python services/monitor.py --dry-run   # 测试模式（不发送告警）
 ```
 
 ## 🌐 Web 界面
@@ -169,7 +182,7 @@ python monitor.py --dry-run   # 测试模式（不发送告警）
 
 ```bash
 # 每 6 小时运行一次
-0 */6 * * * cd /app && python monitor.py >> /app/logs/cron.log 2>&1
+0 */6 * * * cd /app && python services/monitor.py >> /app/logs/cron.log 2>&1
 ```
 
 ## 📊 监控集成
