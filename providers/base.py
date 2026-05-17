@@ -4,13 +4,17 @@
 定义统一的接口规范和基础实现
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TypedDict
 from enum import Enum
 import json
 import time
 import threading
+import atexit
+import weakref
+import hashlib
+import hmac
 import requests
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, quote
 from core.logger import get_logger
 
 logger = get_logger('provider_base')
@@ -24,6 +28,8 @@ DEFAULT_MAX_RETRIES = 3
 # 熔断器常量
 CIRCUIT_FAILURE_THRESHOLD = 3  # 连续失败次数阈值
 CIRCUIT_OPEN_TIMEOUT = 60  # 熔断打开持续时间（秒）
+
+_active_providers: "weakref.WeakSet[BaseProvider]" = weakref.WeakSet()
 
 _SENSITIVE_QUERY_KEYS = {
     'access_token',
@@ -44,6 +50,14 @@ _SENSITIVE_HEADER_KEYS = {
     'api-key',
     'token',
 }
+
+
+class ProviderBalanceResult(TypedDict, total=False):
+    success: bool
+    balance: float
+    currency: str
+    message: str
+    raw: Any
 
 
 def mask_url(url: str) -> str:
@@ -84,6 +98,30 @@ def mask_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
         else:
             masked[key] = v
     return masked
+
+
+def percent_encode_aliyun(value: Any) -> str:
+    if value is None:
+        return ''
+    encoded = quote(str(value), safe='')
+    encoded = encoded.replace('+', '%20')
+    encoded = encoded.replace('*', '%2A')
+    encoded = encoded.replace('%7E', '~')
+    return encoded
+
+
+def percent_encode_rfc3986(value: Any) -> str:
+    if value is None:
+        return ''
+    return quote(str(value), safe='-_.~')
+
+
+def sha256_hexdigest(value: str) -> str:
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
+def hmac_sha256(key: bytes, message: str) -> bytes:
+    return hmac.new(key, message.encode('utf-8'), hashlib.sha256).digest()
 
 
 class CircuitState(Enum):
@@ -185,6 +223,7 @@ class BaseProvider(ABC):
         self.api_key = api_key
         self.timeout = DEFAULT_TIMEOUT
         self.session = self._create_session()
+        _active_providers.add(self)
     
     def _create_session(self) -> requests.Session:
         """创建带连接池的 HTTP Session"""
@@ -435,9 +474,27 @@ class BaseProvider(ABC):
         if hasattr(self, 'session') and self.session:
             self.session.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
     def __del__(self):
         """析构函数，关闭 session"""
         self.close()
+
+
+def _close_active_providers() -> None:
+    for provider in list(_active_providers):
+        try:
+            provider.close()
+        except Exception:
+            pass
+
+
+atexit.register(_close_active_providers)
 
 
 # 异常类定义

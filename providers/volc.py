@@ -5,7 +5,7 @@ from .base import BaseProvider, mask_headers, mask_url
 import datetime
 import hashlib
 import hmac
-from urllib.parse import quote
+from .base import percent_encode_rfc3986, sha256_hexdigest, hmac_sha256
 import json
 from core.logger import get_logger
 
@@ -208,20 +208,20 @@ class VolcProvider(BaseProvider):
         for key in sorted(params.keys()):
             if isinstance(params[key], list):
                 for item in params[key]:
-                    query_items.append(f"{quote(key, safe='-_.~')}={quote(str(item), safe='-_.~')}")
+                    query_items.append(f"{percent_encode_rfc3986(key)}={percent_encode_rfc3986(str(item))}")
             else:
-                query_items.append(f"{quote(key, safe='-_.~')}={quote(str(params[key]), safe='-_.~')}")
-        return '&'.join(query_items).replace('+', '%20')
+                query_items.append(f"{percent_encode_rfc3986(key)}={percent_encode_rfc3986(str(params[key]))}")
+        return '&'.join(query_items)
     
     @staticmethod
     def _hash_sha256(content):
         """SHA256 哈希"""
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+        return sha256_hexdigest(content)
     
     @staticmethod
     def _hmac_sha256(key, content):
         """HMAC-SHA256"""
-        return hmac.new(key, content.encode('utf-8'), hashlib.sha256).digest()
+        return hmac_sha256(key, content)
     
     @classmethod
     def get_provider_name(cls):

@@ -6,6 +6,7 @@
 import os
 import json
 import re
+import hashlib
 from typing import Dict, Any, Optional
 from threading import Lock
 from dotenv import load_dotenv
@@ -29,6 +30,14 @@ def get_env(key: str, default=None) -> Optional[str]:
 
 def get_default_config_path() -> str:
     return get_env('CONFIG_PATH', 'config.json')
+
+
+def make_project_id(provider_name: str, project_name: str) -> str:
+    return hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+
+
+def make_subscription_id(name: str) -> str:
+    return hashlib.md5(f"subscription:{name}".encode()).hexdigest()
 
 
 def get_enable_web_alarm() -> bool:
