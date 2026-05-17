@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from ..utils import audit_log, mask_email_config
 from core.config_loader import clear_config_cache
-from database.repository import ConfigRepository
+from services.config_service import delete_email, get_all_emails, upsert_email
 from core.logger import get_logger
 
 logger = get_logger('web.routes.email')
@@ -11,7 +11,7 @@ email_bp = Blueprint('email', __name__, url_prefix='/api')
 def get_emails_config():
     """获取所有邮箱配置"""
     try:
-        emails = [mask_email_config(email) for email in ConfigRepository.get_all_emails()]
+        emails = [mask_email_config(email) for email in get_all_emails()]
         return jsonify({'status': 'success', 'emails': emails})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -24,7 +24,7 @@ def save_email():
         if not data or 'name' not in data:
             return jsonify({'status': 'error', 'message': '缺少必要参数: name'}), 400
 
-        success = ConfigRepository.upsert_email(data)
+        success = upsert_email(data)
         if success:
             clear_config_cache()
             audit_log('save_email', {'email': data['name']})
@@ -44,7 +44,7 @@ def delete_email():
             return jsonify({'status': 'error', 'message': '缺少必要参数: name'}), 400
 
         name = data['name']
-        success = ConfigRepository.delete_email(name)
+        success = delete_email(name)
         if success:
             clear_config_cache()
             audit_log('delete_email', {'email': name})

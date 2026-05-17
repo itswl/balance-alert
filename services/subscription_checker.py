@@ -41,8 +41,8 @@ class SubscriptionChecker:
     
     def _load_config(self):
         """加载配置文件"""
-        from core.config_loader import load_config_with_env_vars
-        return load_config_with_env_vars(self.config_path)
+        from services.config_service import load_config
+        return load_config(self.config_path)
     
     def check_subscriptions(self, dry_run=False):
         """

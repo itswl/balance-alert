@@ -123,10 +123,15 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
 
     # ==========推历史数据 API ==========
     try:
-        from database import init_database
-        from database.repository import BalanceRepository, AlertRepository
-        DB_AVAILABLE = True
-        logger.info("数据库模块可用")
+        from services.monitor import (
+            DB_AVAILABLE as _DB_AVAILABLE,
+            get_alert_statistics as _get_alert_statistics,
+            get_all_projects_summary as _get_all_projects_summary,
+            get_balance_history as _get_balance_history,
+            get_balance_trend as _get_balance_trend,
+            get_recent_alerts as _get_recent_alerts,
+        )
+        DB_AVAILABLE = _DB_AVAILABLE
     except (ImportError, Exception) as e:
         DB_AVAILABLE = False
         logger.warning(f"数据库模块不可用: {e}")
@@ -148,7 +153,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             if limit < 1 or limit > 1000:
                 return jsonify({'status': 'error', 'message': 'limit 必须在 1-1000 之间'}), 400
 
-            history = BalanceRepository.get_balance_history(
+            history = _get_balance_history(
                 project_id=project_id,
                 provider=provider,
                 days=days,
@@ -181,7 +186,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             else:
                 actual_project_id = project_id
 
-            trend = BalanceRepository.get_balance_trend(actual_project_id, days)
+            trend = _get_balance_trend(actual_project_id, days)
             if 'error' in trend:
                 return jsonify({'status': 'error', 'message': trend['error']}), 404
 
@@ -210,7 +215,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             if limit < 1 or limit > 1000:
                 return jsonify({'status': 'error', 'message': 'limit 必须在 1-1000 之间'}), 400
 
-            alerts = AlertRepository.get_recent_alerts(
+            alerts = _get_recent_alerts(
                 project_id=project_id,
                 alert_type=alert_type,
                 days=days,
@@ -236,7 +241,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             if days < 1 or days > 365:
                 return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
 
-            stats = AlertRepository.get_alert_statistics(days)
+            stats = _get_alert_statistics(days)
             if 'error' in stats:
                 return jsonify({'status': 'error', 'message': stats['error']}), 500
 
@@ -255,7 +260,7 @@ def _register_additional_routes(app: Flask, state_manager: StateManager):
             return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
 
         try:
-            summary = BalanceRepository.get_all_projects_summary()
+            summary = _get_all_projects_summary()
             return jsonify({'status': 'success', 'count': len(summary), 'data': summary})
 
         except Exception as e:

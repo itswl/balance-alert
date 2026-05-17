@@ -129,8 +129,8 @@ class EmailScanner:
     
     def _load_config(self):
         """加载配置文件"""
-        from core.config_loader import load_config_with_env_vars
-        return load_config_with_env_vars(self.config_path)
+        from services.config_service import load_config
+        return load_config(self.config_path)
     
     def _parse_email_configs(self):
         """解析邮箱配置，支持单个或多个邮箱"""

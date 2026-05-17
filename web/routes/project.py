@@ -7,7 +7,7 @@
 from flask import Blueprint, jsonify, request
 from ..utils import load_config_safe, audit_log, mask_project_config
 from core.config_loader import clear_config_cache
-from database.repository import ConfigRepository
+from services.config_service import upsert_project
 from ..handlers import refresh_subscription_cache
 from core.state_manager import StateManager
 from core.logger import get_logger
@@ -84,7 +84,7 @@ def update_project_threshold():
             }), 404
 
         # 保存到数据库
-        success = ConfigRepository.upsert_project(target_project)
+        success = upsert_project(target_project)
         
         if success:
             clear_config_cache()

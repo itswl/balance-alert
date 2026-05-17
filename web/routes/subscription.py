@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, request
 from ..middleware import validate_request
 from ..utils import load_config_safe, audit_log
 from core.config_loader import clear_config_cache
-from database.repository import ConfigRepository
+from services.config_service import delete_subscription, upsert_subscription
 from ..handlers import update_subscription_cache, refresh_subscription_cache
 from core.state_manager import StateManager
 from models.api_models import (
@@ -77,7 +77,7 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
                     dyn_sub['name'] = validated_data.new_name
                     updated_fields.append('name')
                     # 如果改名了，需要删除旧的
-                    ConfigRepository.delete_subscription(validated_data.name)
+                    delete_subscription(validated_data.name)
 
                 if validated_data.cycle_type is not None:
                     dyn_sub['cycle_type'] = validated_data.cycle_type
@@ -107,7 +107,7 @@ def update_subscription(validated_data: UpdateSubscriptionRequest):
                     dyn_sub['last_renewed_date'] = validated_data.last_renewed_date
                     updated_fields.append('last_renewed_date')
 
-                success = ConfigRepository.upsert_subscription(dyn_sub)
+                success = upsert_subscription(dyn_sub)
                 if success:
                     clear_config_cache()
                 break
@@ -168,7 +168,7 @@ def add_subscription(validated_data: AddSubscriptionRequest):
             new_subscription['last_renewed_date'] = validated_data.last_renewed_date
 
         # 保存到数据库
-        success = ConfigRepository.upsert_subscription(new_subscription)
+        success = upsert_subscription(new_subscription)
         if success:
             clear_config_cache()
             
@@ -214,7 +214,7 @@ def delete_subscription(validated_data: DeleteSubscriptionRequest):
             }), 404
 
         # 删除
-        success = ConfigRepository.delete_subscription(validated_data.name)
+        success = delete_subscription(validated_data.name)
         if success:
             clear_config_cache()
             
@@ -247,7 +247,7 @@ def mark_subscription_renewed():
         renewed_date = data.get('renewed_date')  # 可选，默认今天
 
         # 查找订阅并更新数据库
-        success = ConfigRepository.upsert_subscription({
+        success = upsert_subscription({
             'name': subscription_name,
             'last_renewed_date': renewed_date or __import__('datetime').date.today().isoformat()
         })
@@ -301,7 +301,7 @@ def clear_subscription_renewed():
         subscription_name = data['name']
 
         # 取消标记续费日期
-        success = ConfigRepository.upsert_subscription({
+        success = upsert_subscription({
             'name': subscription_name,
             'last_renewed_date': None
         })

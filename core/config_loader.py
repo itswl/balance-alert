@@ -108,38 +108,6 @@ def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
     return settings
 
 
-def _load_dynamic_from_db(config: Dict[str, Any]) -> Dict[str, Any]:
-    if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() != 'true':
-        return config
-
-    try:
-        from database.repository import ConfigRepository
-
-        db_projects = ConfigRepository.get_all_projects()
-        db_subscriptions = ConfigRepository.get_all_subscriptions()
-        db_emails = ConfigRepository.get_all_emails()
-
-        if db_projects:
-            config['projects'] = [
-                {k: v for k, v in p.items() if k not in ['id', 'created_at', 'updated_at']}
-                for p in db_projects
-            ]
-        if db_subscriptions:
-            config['subscriptions'] = [
-                {k: v for k, v in s.items() if k not in ['id', 'created_at', 'updated_at']}
-                for s in db_subscriptions
-            ]
-        if db_emails:
-            config['email'] = [
-                {k: v for k, v in e.items() if k not in ['id', 'created_at', 'updated_at']}
-                for e in db_emails
-            ]
-    except Exception as e:
-        logger.warning(f"从数据库读取配置失败: {e}")
-
-    return config
-
-
 def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
 
@@ -170,7 +138,6 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
 
     config = _ensure_base_shape(config)
     config['settings'] = _overlay_settings_from_env(config.get('settings', {}) or {})
-    config = _load_dynamic_from_db(config)
     config = _substitute_env_placeholders(config)
 
     # 打印配置版本号
