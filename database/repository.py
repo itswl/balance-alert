@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from sqlalchemy import func, desc
 from core.logger import get_logger
+from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
 from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
 import json
 from .engine import get_session, ENABLE_DATABASE
@@ -40,6 +41,36 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _decrypt_field(data: Dict[str, Any], field: str) -> Dict[str, Any]:
+    if field in data:
+        data[field] = decrypt_secret(data[field])
+    return data
+
+
+def _encrypt_model_field(model: Any, field: str) -> bool:
+    current_value = getattr(model, field, None)
+    encrypted_value = encrypt_secret(current_value)
+    if encrypted_value != current_value:
+        setattr(model, field, encrypted_value)
+        return True
+    return False
+
+
+def _encrypt_data_field(data: Dict[str, Any], field: str) -> Dict[str, Any]:
+    if field in data and data[field] != '***':
+        data = data.copy()
+        data[field] = encrypt_secret(data[field])
+    return data
+
+
+def _project_to_dict(project: ProjectConfig) -> Dict[str, Any]:
+    return _decrypt_field(project.to_dict(), 'api_key')
+
+
+def _email_to_dict(email: EmailConfig) -> Dict[str, Any]:
+    return _decrypt_field(email.to_dict(), 'password')
+
+
 class ConfigRepository:
     """配置数据访问"""
     
@@ -54,7 +85,13 @@ class ConfigRepository:
                 if session is None:
                     return []
                 emails = session.query(EmailConfig).all()
-                return [e.to_dict() for e in emails]
+                if encryption_enabled():
+                    changed = False
+                    for email in emails:
+                        changed = _encrypt_model_field(email, 'password') or changed
+                    if changed:
+                        session.commit()
+                return [_email_to_dict(e) for e in emails]
         except Exception as e:
             logger.error(f"获取邮箱配置失败: {e}")
             return []
@@ -70,6 +107,7 @@ class ConfigRepository:
                 if session is None:
                     return False
 
+                email_data = _encrypt_data_field(email_data, 'password')
                 email = session.query(EmailConfig).filter_by(name=email_data['name']).first()
                 if email:
                     for k, v in email_data.items():
@@ -114,7 +152,13 @@ class ConfigRepository:
                 if session is None:
                     return []
                 projects = session.query(ProjectConfig).all()
-                return [p.to_dict() for p in projects]
+                if encryption_enabled():
+                    changed = False
+                    for project in projects:
+                        changed = _encrypt_model_field(project, 'api_key') or changed
+                    if changed:
+                        session.commit()
+                return [_project_to_dict(p) for p in projects]
         except Exception as e:
             logger.error(f"获取项目配置失败: {e}")
             return []
@@ -146,6 +190,7 @@ class ConfigRepository:
                 if session is None:
                     return False
 
+                project_data = _encrypt_data_field(project_data, 'api_key')
                 project = session.query(ProjectConfig).filter_by(name=project_data['name']).first()
                 if project:
                     for k, v in project_data.items():
