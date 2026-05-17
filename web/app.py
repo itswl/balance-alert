@@ -68,9 +68,6 @@ def create_app(state_manager: StateManager = None) -> Flask:
     # 注册蓝图
     _register_blueprints(app, state_manager)
 
-    # 注册剩余路由（历史数据、配置等）
-    _register_additional_routes(app, state_manager)
-
     logger.info("Flask 应用创建完成")
 
     return app
@@ -84,15 +81,11 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    from .routes import core_bp, init_core_routes
-
-    # 初始化路由（注入依赖）
-    init_core_routes(state_manager)
+    from .routes import create_core_bp
 
     if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true':
-        from .routes.subscription import subscription_bp, init_subscription_routes
-        init_subscription_routes(state_manager)
-        app.register_blueprint(subscription_bp)
+        from .routes.subscription import create_subscription_bp
+        app.register_blueprint(create_subscription_bp(state_manager))
 
     if os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true':
         from .routes.project import project_bp
@@ -100,178 +93,13 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app.register_blueprint(project_bp)
         app.register_blueprint(email_bp)
 
-    app.register_blueprint(core_bp)
+    if os.environ.get('ENABLE_HISTORY_API', 'false').lower() == 'true':
+        from .routes.history import history_bp
+        app.register_blueprint(history_bp)
+
+    app.register_blueprint(create_core_bp(state_manager))
 
     logger.info("蓝图注册完成")
-
-
-def _register_additional_routes(app: Flask, state_manager: StateManager):
-    """
-    注册额外的路由（历史数据、配置等）
-
-    这些路由暂时保留为函数形式，未来可以重构为蓝图
-
-    Args:
-        app: Flask 应用实例
-        state_manager: 状态管理器实例
-    """
-    from flask import jsonify, request
-
-    if os.environ.get('ENABLE_HISTORY_API', 'false').lower() != 'true':
-        logger.info("历史数据 API 未启用")
-        return
-
-    # ==========推历史数据 API ==========
-    try:
-        from services.monitor import (
-            DB_AVAILABLE as _DB_AVAILABLE,
-            get_alert_statistics as _get_alert_statistics,
-            get_all_projects_summary as _get_all_projects_summary,
-            get_balance_history as _get_balance_history,
-            get_balance_trend as _get_balance_trend,
-            get_recent_alerts as _get_recent_alerts,
-        )
-        DB_AVAILABLE = _DB_AVAILABLE
-    except (ImportError, Exception) as e:
-        DB_AVAILABLE = False
-        logger.warning(f"数据库模块不可用: {e}")
-
-    @app.route('/api/history/balance', methods=['GET'])
-    def get_balance_history():
-        """查询余额历史"""
-        if not DB_AVAILABLE:
-            return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
-
-        try:
-            project_id = request.args.get('project_id')
-            provider = request.args.get('provider')
-            days = int(request.args.get('days', 7))
-            limit = int(request.args.get('limit', 100))
-
-            if days < 1 or days > 365:
-                return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
-            if limit < 1 or limit > 1000:
-                return jsonify({'status': 'error', 'message': 'limit 必须在 1-1000 之间'}), 400
-
-            history = _get_balance_history(
-                project_id=project_id,
-                provider=provider,
-                days=days,
-                limit=limit
-            )
-
-            return jsonify({'status': 'success', 'count': len(history), 'data': history})
-
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
-        except Exception as e:
-            logger.error(f"查询余额历史失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    @app.route('/api/history/trend/<project_id>', methods=['GET'])
-    def get_balance_trend(project_id: str):
-        """获取余额趋势分析"""
-        if not DB_AVAILABLE:
-            return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
-
-        try:
-            days = int(request.args.get('days', 30))
-            if days < 1 or days > 365:
-                return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
-
-            # 如果 project_id 包含冒号，说明是 provider:project_name 格式，需要转换为 MD5
-            import hashlib
-            if ':' in project_id:
-                actual_project_id = hashlib.md5(project_id.encode()).hexdigest()
-            else:
-                actual_project_id = project_id
-
-            trend = _get_balance_trend(actual_project_id, days)
-            if 'error' in trend:
-                return jsonify({'status': 'error', 'message': trend['error']}), 404
-
-            return jsonify({'status': 'success', 'data': trend})
-
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
-        except Exception as e:
-            logger.error(f"获取余额趋势失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    @app.route('/api/history/alerts', methods=['GET'])
-    def get_alert_history():
-        """查询告警历史"""
-        if not DB_AVAILABLE:
-            return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
-
-        try:
-            project_id = request.args.get('project_id')
-            alert_type = request.args.get('alert_type')
-            days = int(request.args.get('days', 7))
-            limit = int(request.args.get('limit', 50))
-
-            if days < 1 or days > 365:
-                return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
-            if limit < 1 or limit > 1000:
-                return jsonify({'status': 'error', 'message': 'limit 必须在 1-1000 之间'}), 400
-
-            alerts = _get_recent_alerts(
-                project_id=project_id,
-                alert_type=alert_type,
-                days=days,
-                limit=limit
-            )
-
-            return jsonify({'status': 'success', 'count': len(alerts), 'data': alerts})
-
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
-        except Exception as e:
-            logger.error(f"查询告警历史失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    @app.route('/api/history/stats', methods=['GET'])
-    def get_alert_statistics():
-        """获取告警统计"""
-        if not DB_AVAILABLE:
-            return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
-
-        try:
-            days = int(request.args.get('days', 30))
-            if days < 1 or days > 365:
-                return jsonify({'status': 'error', 'message': 'days 必须在 1-365 之间'}), 400
-
-            stats = _get_alert_statistics(days)
-            if 'error' in stats:
-                return jsonify({'status': 'error', 'message': stats['error']}), 500
-
-            return jsonify({'status': 'success', 'data': stats})
-
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'参数错误: {e}'}), 400
-        except Exception as e:
-            logger.error(f"获取告警统计失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    @app.route('/api/history/projects', methods=['GET'])
-    def get_all_projects_summary():
-        """获取所有项目摘要"""
-        if not DB_AVAILABLE:
-            return jsonify({'status': 'error', 'message': '数据库功能未启用'}), 503
-
-        try:
-            summary = _get_all_projects_summary()
-            return jsonify({'status': 'success', 'count': len(summary), 'data': summary})
-
-        except Exception as e:
-            logger.error(f"获取项目摘要失败: {e}", exc_info=True)
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-
-    # ========== 配置 API ==========
-
-
-
-    logger.info("额外路由注册完成")
 
 
 def _register_error_handlers(app: Flask):

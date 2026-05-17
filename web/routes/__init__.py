@@ -3,9 +3,8 @@
 
 组织所有 Flask Blueprint 路由
 """
-from .core import core_bp, init_core_routes
+from .core import create_core_bp
 
 __all__ = [
-    'core_bp',
-    'init_core_routes',
+    'create_core_bp',
 ]
