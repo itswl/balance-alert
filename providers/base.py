@@ -49,8 +49,16 @@ _SENSITIVE_HEADER_KEYS = {
 def mask_url(url: str) -> str:
     try:
         parts = urlsplit(url)
-        if not parts.query:
-            return url
+        path = parts.path or ''
+        for marker in ('/hook/', '/token/', '/access_token/'):
+            if marker in path:
+                prefix, _, rest = path.partition(marker)
+                token, sep, tail = rest.partition('/')
+                if token:
+                    masked_token = f"{token[:4]}***{token[-4:]}" if len(token) > 8 else "***"
+                    path = f"{prefix}{marker}{masked_token}{sep}{tail}"
+                break
+
         pairs = parse_qsl(parts.query, keep_blank_values=True)
         masked_pairs = []
         for k, v in pairs:
@@ -59,7 +67,7 @@ def mask_url(url: str) -> str:
             else:
                 masked_pairs.append((k, v))
         query = urlencode(masked_pairs, doseq=True)
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+        return urlunsplit((parts.scheme, parts.netloc, path, query, parts.fragment))
     except Exception:
         return url
 
@@ -181,7 +189,7 @@ class BaseProvider(ABC):
                 status=DEFAULT_MAX_RETRIES,
                 backoff_factor=0.5,
                 status_forcelist=(429, 500, 502, 503, 504),
-                allowed_methods=frozenset({'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'}),
+                allowed_methods=frozenset({'GET', 'HEAD', 'OPTIONS'}),
                 raise_on_status=False,
                 respect_retry_after_header=True,
             )
@@ -255,6 +263,8 @@ class BaseProvider(ABC):
 
             if response.status_code >= 500 or response.status_code == 429:
                 breaker.record_failure()
+            elif response.status_code in (401, 403):
+                breaker.record_success()
             else:
                 breaker.record_success()
             return response
@@ -268,7 +278,7 @@ class BaseProvider(ABC):
         
         Args:
             response: HTTP 响应对象
-            success_condition: 成功条件判断函数，接受 response 参数
+            success_condition: 成功条件判断函数，优先传入 data(dict)，兼容传入 response
             
         Returns:
             dict: 标准化的响应字典
