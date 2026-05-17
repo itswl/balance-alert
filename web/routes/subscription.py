@@ -7,7 +7,7 @@
 from flask import Blueprint, jsonify, request
 from datetime import date, datetime
 from ..middleware import validate_request
-from ..utils import load_config_safe, audit_log, json_error, json_success
+from ..utils import load_config_safe, audit_log, json_error, json_success, make_etag_response
 from core.config_loader import clear_config_cache
 from services.config_service import delete_subscription, upsert_subscription
 from ..handlers import refresh_subscription_cache
@@ -43,7 +43,6 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
     @subscription_bp.route('/subscriptions')
     def get_subscriptions():
         """获取订阅状态数据"""
-        from ..utils import make_etag_response
         return make_etag_response(state_manager.get_subscription_state())
 
     @subscription_bp.route('/config/subscriptions', methods=['GET'])
@@ -52,7 +51,7 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
         try:
             config = load_config_safe()
             subscriptions = config.get('subscriptions', [])
-            return _success({'status': 'success', 'subscriptions': subscriptions}, 200)
+            return make_etag_response({'status': 'success', 'subscriptions': subscriptions})
         except Exception as e:
             logger.error(f"获取订阅配置失败: {e}", exc_info=True)
             return _error(str(e), 500)
