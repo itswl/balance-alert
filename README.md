@@ -142,7 +142,7 @@ WEBHOOK_TYPE=feishu
 ### 配置优先级（从低到高）
 
 1. `config.json`（基础配置；支持 `${VAR}` 占位符）
-2. 环境变量覆盖系统设置：`BALANCE_REFRESH_INTERVAL_SECONDS / MAX_CONCURRENT_CHECKS / MIN_REFRESH_INTERVAL_SECONDS / ENABLE_SMART_REFRESH / SMART_REFRESH_THRESHOLD_PERCENT`
+2. 环境变量覆盖系统设置：`BALANCE_REFRESH_INTERVAL_SECONDS / MAX_CONCURRENT_CHECKS`
 3. 数据库动态配置覆盖：`projects/subscriptions/email`（数据库有数据则整段以数据库为准）
 
 `config.json` 与数据库配置中的字符串字段都支持 `${VAR}` 占位符替换（环境变量不存在则保留原样）。

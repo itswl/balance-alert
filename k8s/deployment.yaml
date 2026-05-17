@@ -48,10 +48,6 @@ spec:
               value: "3600"
             - name: MAX_CONCURRENT_CHECKS
               value: "5"
-            - name: MIN_REFRESH_INTERVAL_SECONDS
-              value: "60"
-            - name: ENABLE_SMART_REFRESH
-              value: "false"
 
           # 从 Secret 加载敏感环境变量
           envFrom:

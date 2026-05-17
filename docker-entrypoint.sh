@@ -26,10 +26,7 @@ if [ ! -s /app/config.json ]; then
 {
   "settings": {
     "balance_refresh_interval_seconds": 3600,
-    "max_concurrent_checks": 5,
-    "min_refresh_interval_seconds": 60,
-    "enable_smart_refresh": false,
-    "smart_refresh_threshold_percent": 5
+    "max_concurrent_checks": 5
   },
   "webhook": {
     "url": "",

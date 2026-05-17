@@ -20,7 +20,6 @@ logger = get_logger('web.utils')
 
 # 配置常量
 DEFAULT_REFRESH_INTERVAL = 3600  # 默认刷新间隔（秒）
-DEFAULT_MIN_REFRESH_INTERVAL = 60  # 默认最小刷新间隔（秒）
 
 
 def get_enable_web_alarm() -> bool:
@@ -57,54 +56,6 @@ def get_refresh_interval() -> int:
         pass
 
     return DEFAULT_REFRESH_INTERVAL
-
-
-def get_min_refresh_interval() -> int:
-    """获取最小刷新间隔"""
-    env_min_interval = os.environ.get('MIN_REFRESH_INTERVAL_SECONDS')
-    if env_min_interval:
-        try:
-            return max(int(env_min_interval), 60)
-        except ValueError:
-            pass
-
-    try:
-        config = load_config_with_env_vars('config.json', validate=False)
-        min_interval = config.get('settings', {}).get('min_refresh_interval_seconds')
-        if min_interval and min_interval > 0:
-            return max(min_interval, 60)
-    except Exception:
-        pass
-
-    return DEFAULT_MIN_REFRESH_INTERVAL
-
-
-def get_smart_refresh_config() -> Dict[str, Any]:
-    """
-    获取智能刷新配置
-
-    Returns:
-        dict: {
-            'enabled': bool,
-            'threshold_percent': float,
-            'min_interval': int
-        }
-    """
-    enabled = os.environ.get('ENABLE_SMART_REFRESH', 'false').lower() == 'true'
-
-    threshold = 5.0  # 默认 5% 变化率
-    env_threshold = os.environ.get('SMART_REFRESH_THRESHOLD_PERCENT')
-    if env_threshold:
-        try:
-            threshold = float(env_threshold)
-        except ValueError:
-            pass
-
-    return {
-        'enabled': enabled,
-        'threshold_percent': threshold,
-        'min_interval': get_min_refresh_interval()
-    }
 
 
 def load_config_safe(config_path: str = 'config.json') -> Optional[Dict[str, Any]]:

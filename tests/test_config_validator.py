@@ -379,12 +379,10 @@ class TestSafeTypeConversion:
         data = {
             'balance_refresh_interval_seconds': 'abc',
             'max_concurrent_checks': None,
-            'min_refresh_interval_seconds': '',
         }
         config = SettingsConfig.from_dict(data)
         assert config.balance_refresh_interval_seconds == 3600  # 默认值
         assert config.max_concurrent_checks == 5  # 默认值
-        assert config.min_refresh_interval_seconds == 60  # 默认值
 
 
 if __name__ == '__main__':
