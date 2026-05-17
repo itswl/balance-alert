@@ -19,7 +19,7 @@ def get_emails_config():
     """获取所有邮箱配置"""
     try:
         emails = [mask_email_config(email) for email in get_all_emails()]
-        return jsonify({'status': 'success', 'emails': emails})
+        return json_success({'status': 'success', 'emails': emails}, 200)
     except Exception as e:
         logger.error(f"获取邮箱配置失败: {e}", exc_info=True)
         return json_error(str(e), 500)

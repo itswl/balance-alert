@@ -10,6 +10,7 @@ import json
 import time
 import threading
 import requests
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from core.logger import get_logger
 
 logger = get_logger('provider_base')
@@ -23,6 +24,58 @@ DEFAULT_MAX_RETRIES = 3
 # 熔断器常量
 CIRCUIT_FAILURE_THRESHOLD = 3  # 连续失败次数阈值
 CIRCUIT_OPEN_TIMEOUT = 60  # 熔断打开持续时间（秒）
+
+_SENSITIVE_QUERY_KEYS = {
+    'access_token',
+    'ak',
+    'api_key',
+    'authorization',
+    'key',
+    'secret',
+    'signature',
+    'sk',
+    'token',
+}
+
+_SENSITIVE_HEADER_KEYS = {
+    'authorization',
+    'x-api-key',
+    'x-auth-token',
+    'api-key',
+    'token',
+}
+
+
+def mask_url(url: str) -> str:
+    try:
+        parts = urlsplit(url)
+        if not parts.query:
+            return url
+        pairs = parse_qsl(parts.query, keep_blank_values=True)
+        masked_pairs = []
+        for k, v in pairs:
+            if k.lower() in _SENSITIVE_QUERY_KEYS and v:
+                masked_pairs.append((k, f"{v[:4]}***{v[-4:]}" if len(v) > 8 else "***"))
+            else:
+                masked_pairs.append((k, v))
+        query = urlencode(masked_pairs, doseq=True)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    except Exception:
+        return url
+
+
+def mask_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(headers, dict):
+        return {}
+    masked: Dict[str, Any] = {}
+    for k, v in headers.items():
+        key = str(k)
+        if key.lower() in _SENSITIVE_HEADER_KEYS and v:
+            text = str(v)
+            masked[key] = f"{text[:4]}***{text[-4:]}" if len(text) > 8 else "***"
+        else:
+            masked[key] = v
+    return masked
 
 
 class CircuitState(Enum):
@@ -118,10 +171,27 @@ class BaseProvider(ABC):
         session = requests.Session()
         
         # 配置连接池
+        max_retries = DEFAULT_MAX_RETRIES
+        try:
+            from urllib3.util.retry import Retry
+            max_retries = Retry(
+                total=DEFAULT_MAX_RETRIES,
+                connect=DEFAULT_MAX_RETRIES,
+                read=DEFAULT_MAX_RETRIES,
+                status=DEFAULT_MAX_RETRIES,
+                backoff_factor=0.5,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset({'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'}),
+                raise_on_status=False,
+                respect_retry_after_header=True,
+            )
+        except Exception:
+            max_retries = DEFAULT_MAX_RETRIES
+
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=DEFAULT_POOL_CONNECTIONS,
             pool_maxsize=DEFAULT_POOL_MAXSIZE,
-            max_retries=DEFAULT_MAX_RETRIES
+            max_retries=max_retries
         )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
@@ -176,15 +246,17 @@ class BaseProvider(ABC):
         if 'timeout' not in kwargs:
             kwargs['timeout'] = self.timeout
 
-        logger.debug(f"发送 {method} 请求到 {url}")
+        logger.debug(f"发送 {method} 请求到 {mask_url(url)}")
         try:
             response = self.session.request(method, url, **kwargs)
 
             if response.status_code != 200:
                 logger.warning(f"HTTP {response.status_code}: {response.text[:200]}")
 
-            # 成功响应（包括非 200 但连接成功的）记录成功
-            breaker.record_success()
+            if response.status_code >= 500 or response.status_code == 429:
+                breaker.record_failure()
+            else:
+                breaker.record_success()
             return response
         except requests.RequestException:
             breaker.record_failure()
@@ -223,13 +295,18 @@ class BaseProvider(ABC):
                 }
             
             # 检查自定义成功条件
-            if success_condition and not success_condition(response):
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': "API 返回业务错误",
-                    'raw_data': data
-                }
+            if success_condition:
+                try:
+                    ok = bool(success_condition(data))
+                except (TypeError, AttributeError):
+                    ok = bool(success_condition(response))
+                if not ok:
+                    return {
+                        'success': False,
+                        'credits': None,
+                        'error': "API 返回业务错误",
+                        'raw_data': data
+                    }
             
             return {
                 'success': True,
