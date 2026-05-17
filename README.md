@@ -111,6 +111,28 @@ pip install -r requirements-optional.txt
 | `ENABLE_PROMETHEUS=true` | 启动 Prometheus metrics 服务 |
 | `WEB_ENABLE_CORS=true` | 启用 CORS，需配合 `CORS_ORIGINS` |
 
+### 数据库敏感字段加密
+
+如果启用了数据库动态配置，建议同时设置 `CONFIG_ENCRYPTION_KEY`。设置后，`project_config.api_key` 和 `email_config.password` 会以 `enc:v1:...` 形式加密存储，应用读取时自动解密。
+
+生成密钥：
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+写入 `.env`：
+
+```bash
+CONFIG_ENCRYPTION_KEY=生成出来的密钥
+```
+
+已有明文数据会在下次通过配置仓库读取时自动回写为密文；如果使用 Alembic 管理数据库，先执行：
+
+```bash
+alembic upgrade head
+```
+
 ## Docker
 
 ```bash
