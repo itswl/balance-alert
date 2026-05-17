@@ -2,7 +2,6 @@
 """
 配置加载模块
 支持从环境变量读取敏感配置，优先于配置文件
-支持配置文件变化监听和自动重载
 """
 import os
 import json
@@ -10,9 +9,7 @@ import re
 import hashlib
 from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
-from threading import Lock, Thread
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from threading import Lock
 from dotenv import load_dotenv
 from core.config_validator import AppConfig
 from core.logger import get_logger
@@ -182,128 +179,163 @@ def load_subscriptions_from_env() -> List[Dict[str, Any]]:
 # 全局配置缓存和锁
 _config_cache: Optional[Dict[str, Any]] = None
 _config_lock = Lock()
-_config_observer: Optional[Observer] = None
-_config_callback: Optional[Callable] = None
-_config_listeners: List[Callable[[Dict[str, Any]], None]] = []
-_last_config_hash: Optional[str] = None
-
-
-def register_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
-    """注册配置变更监听器"""
-    global _config_listeners
-    with _config_lock:
-        if listener not in _config_listeners:
-            _config_listeners.append(listener)
-            logger.debug(f"[Config] 已注册配置监听器: {listener.__name__}")
-
-
-def unregister_config_listener(listener: Callable[[Dict[str, Any]], None]) -> None:
-    """注销配置变更监听器"""
-    global _config_listeners
-    with _config_lock:
-        if listener in _config_listeners:
-            _config_listeners.remove(listener)
-            logger.debug(f"[Config] 已注销配置监听器: {listener.__name__}")
-
-
-def _notify_config_listeners(config: Dict[str, Any]) -> None:
-    """通知所有配置监听器（仅在配置实际变化时）"""
-    global _last_config_hash
-    config_str = json.dumps(config, sort_keys=True, ensure_ascii=False)
-    config_hash = hashlib.md5(config_str.encode()).hexdigest()
-
-    if config_hash == _last_config_hash:
-        logger.debug("[Config] 配置未变化，跳过通知监听器")
-        return
-
-    _last_config_hash = config_hash
-    listeners_copy = _config_listeners[:]  # 复制列表避免在迭代时修改
-    for listener in listeners_copy:
-        try:
-            listener(config)
-        except Exception as e:
-            logger.error(f"[Config] 监听器 {listener.__name__} 执行失败: {e}")
-
-
-class ConfigFileHandler(FileSystemEventHandler):
-    """配置文件变化处理器"""
-    
-    def __init__(self, config_file: str, callback):
-        self.config_file = Path(config_file).resolve()
-        self.callback = callback
-    
-    def on_modified(self, event):
-        """文件修改事件"""
-        if event.is_directory:
-            return
-
-        event_path = Path(event.src_path).resolve()
-        if event_path == self.config_file:
-            logger.info(f"[Config] 检测到配置文件变化: {event_path}")
-            self.callback()
-
-    def on_created(self, event):
-        """文件创建事件"""
-        if event.is_directory:
-            return
-
-        event_path = Path(event.src_path).resolve()
-        if event_path == self.config_file:
-            logger.info(f"[Config] 检测到配置文件创建: {event_path}")
-            self.callback()
-
-
 def start_config_watcher(config_file: str = 'config.json', callback: Optional[Callable] = None) -> None:
-    """启动配置文件监听器"""
-    global _config_observer, _config_callback
-    
-    if _config_observer is not None:
-        # 如果已经在运行，先停止
-        stop_config_watcher()
-    
-    _config_callback = callback or clear_config_cache
-    
-    # 创建观察者
-    _config_observer = Observer()
-    handler = ConfigFileHandler(config_file, _config_callback)
-    
-    # 监听配置文件所在目录
-    config_path = Path(config_file)
-    watch_path = config_path.parent.resolve()
-    
-    _config_observer.schedule(handler, str(watch_path), recursive=False)
-    _config_observer.start()
-
-    logger.info(f"[Config] 开始监听配置文件: {config_path}")
+    if callback:
+        logger.warning("[Config] 配置监听已简化，不再支持文件变更回调")
+    logger.info(f"[Config] 配置监听已禁用: {Path(config_file)}")
 
 
 def stop_config_watcher() -> None:
-    """停止配置文件监听器"""
-    global _config_observer
-
-    if _config_observer is not None:
-        _config_observer.stop()
-        _config_observer.join()
-        _config_observer = None
-        logger.info("[Config] 已停止配置文件监听")
+    return None
 
 
 def clear_config_cache() -> None:
     """清除配置缓存"""
-    global _config_cache, _last_config_hash
+    global _config_cache
     with _config_lock:
         _config_cache = None
-        _last_config_hash = None
         logger.debug("[Config] 配置缓存已清除")
+
+
+def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
+    if config.get('settings') is None:
+        config['settings'] = {}
+    config.setdefault('settings', {})
+    config.setdefault('projects', [])
+    config.setdefault('subscriptions', [])
+    config.setdefault('email', [])
+    return config
+
+
+def _load_json_with_env_substitution(config_file: str) -> Dict[str, Any]:
+    with open(config_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    pattern = r'\$\{([^}]+)\}'
+
+    def replace_env(match):
+        var_name = match.group(1)
+        return os.environ.get(var_name, match.group(0))
+
+    content = re.sub(pattern, replace_env, content)
+    return json.loads(content)
+
+
+def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
+    refresh_interval = get_env('BALANCE_REFRESH_INTERVAL_SECONDS')
+    if refresh_interval:
+        try:
+            settings['balance_refresh_interval_seconds'] = int(refresh_interval)
+        except (ValueError, TypeError):
+            logger.warning(f"BALANCE_REFRESH_INTERVAL_SECONDS 值无效: {refresh_interval}，忽略")
+
+    max_concurrent = get_env('MAX_CONCURRENT_CHECKS')
+    if max_concurrent:
+        try:
+            settings['max_concurrent_checks'] = int(max_concurrent)
+        except (ValueError, TypeError):
+            logger.warning(f"MAX_CONCURRENT_CHECKS 值无效: {max_concurrent}，忽略")
+
+    min_refresh = get_env('MIN_REFRESH_INTERVAL_SECONDS')
+    if min_refresh:
+        try:
+            settings['min_refresh_interval_seconds'] = int(min_refresh)
+        except (ValueError, TypeError):
+            logger.warning(f"MIN_REFRESH_INTERVAL_SECONDS 值无效: {min_refresh}，忽略")
+
+    enable_smart = get_env('ENABLE_SMART_REFRESH')
+    if enable_smart is not None:
+        settings['enable_smart_refresh'] = str(enable_smart).lower() == 'true'
+
+    smart_threshold = get_env('SMART_REFRESH_THRESHOLD_PERCENT')
+    if smart_threshold:
+        try:
+            settings['smart_refresh_threshold_percent'] = int(float(smart_threshold))
+        except (ValueError, TypeError):
+            logger.warning(f"SMART_REFRESH_THRESHOLD_PERCENT 值无效: {smart_threshold}，忽略")
+
+    return settings
+
+
+def _overlay_webhook_from_env(webhook: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    webhook_url = get_env('WEBHOOK_URL')
+    if not webhook_url:
+        return webhook
+
+    if webhook is None:
+        webhook = {}
+
+    webhook['url'] = webhook_url
+    webhook['source'] = get_env('WEBHOOK_SOURCE', webhook.get('source', 'credit-monitor'))
+    webhook_type = get_env('WEBHOOK_TYPE') or get_env('WEBHOOK_PLATFORM')
+    if webhook_type:
+        webhook['type'] = webhook_type
+    else:
+        webhook['type'] = webhook.get('type', 'feishu')
+
+    return webhook
+
+
+def _overlay_sensitive_from_env(config: Dict[str, Any]) -> Dict[str, Any]:
+    env_emails = load_emails_from_env()
+    if env_emails:
+        config['email'] = env_emails
+    else:
+        for email in config.get('email', []) or []:
+            email_name = email.get('name', '')
+            env_password = get_email_password_from_env(email_name)
+            if env_password:
+                email['password'] = env_password
+
+    env_projects = load_projects_from_env()
+    if env_projects:
+        config['projects'] = env_projects
+    else:
+        for project in config.get('projects', []) or []:
+            project_name = project.get('name', '')
+            env_api_key = get_api_key_from_env(project_name)
+            if env_api_key:
+                project['api_key'] = env_api_key
+
+    env_subscriptions = load_subscriptions_from_env()
+    if env_subscriptions and not (config.get('subscriptions') or []):
+        config['subscriptions'] = env_subscriptions
+        logger.info(f"[Config] 从环境变量加载 {len(env_subscriptions)} 个订阅")
+
+    return config
+
+
+def _load_dynamic_from_db(config: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from database.repository import ConfigRepository
+
+        db_projects = ConfigRepository.get_all_projects()
+        db_subscriptions = ConfigRepository.get_all_subscriptions()
+        db_emails = ConfigRepository.get_all_emails()
+
+        if db_projects:
+            config['projects'] = [
+                {k: v for k, v in p.items() if k not in ['id', 'created_at', 'updated_at']}
+                for p in db_projects
+            ]
+        if db_subscriptions:
+            config['subscriptions'] = [
+                {k: v for k, v in s.items() if k not in ['id', 'created_at', 'updated_at']}
+                for s in db_subscriptions
+            ]
+        if db_emails:
+            config['email'] = [
+                {k: v for k, v in e.items() if k not in ['id', 'created_at', 'updated_at']}
+                for e in db_emails
+            ]
+    except Exception as e:
+        logger.warning(f"从数据库读取配置失败: {e}")
+
+    return config
 
 
 def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
-
-    支持三种模式：
-    1. 完全从环境变量加载（如果设置了 USE_ENV_CONFIG=true）
-    2. 从配置文件加载，但使用环境变量覆盖敏感信息
-    3. 支持 ${VAR_NAME} 格式的环境变量替换
 
     Args:
         config_file: 配置文件路径
@@ -320,170 +352,32 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         load_env_file()
         load_config_with_env_vars._env_loaded = True
 
-    # 模式 1: 完全从环境变量加载（如果设置了 USE_ENV_CONFIG=true）
     use_env_config = get_env('USE_ENV_CONFIG', 'false').lower() == 'true'
+    config: Dict[str, Any] = {}
 
-    if use_env_config:
-        logger.info("[Config] 使用完全环境变量配置模式")
-        config = {
-            'settings': {
-                'balance_refresh_interval_seconds': int(get_env('BALANCE_REFRESH_INTERVAL_SECONDS', '3600')),
-                'max_concurrent_checks': int(get_env('MAX_CONCURRENT_CHECKS', '5')),
-                'min_refresh_interval_seconds': int(get_env('MIN_REFRESH_INTERVAL_SECONDS', '60')),
-                'enable_smart_refresh': get_env('ENABLE_SMART_REFRESH', 'false').lower() == 'true',
-                'smart_refresh_threshold_percent': int(get_env('SMART_REFRESH_THRESHOLD_PERCENT', '5')),
-            },
-            'webhook': {
-                'url': get_env('WEBHOOK_URL', ''),
-                'source': get_env('WEBHOOK_SOURCE', 'credit-monitor'),
-                'type': get_env('WEBHOOK_TYPE', 'feishu'),
-            },
-            'email': load_emails_from_env(),
-            'projects': load_projects_from_env(),
-            'subscriptions': load_subscriptions_from_env(),
-        }
-    elif not os.path.exists(config_file):
-        # 如果配置文件不存在，尝试从环境变量加载
-        logger.warning(f"[Config] 配置文件不存在: {config_file}，尝试从环境变量加载")
-        config = {
-            'settings': {
-                'balance_refresh_interval_seconds': int(get_env('BALANCE_REFRESH_INTERVAL_SECONDS', '3600')),
-                'max_concurrent_checks': int(get_env('MAX_CONCURRENT_CHECKS', '5')),
-                'min_refresh_interval_seconds': int(get_env('MIN_REFRESH_INTERVAL_SECONDS', '60')),
-                'enable_smart_refresh': get_env('ENABLE_SMART_REFRESH', 'false').lower() == 'true',
-                'smart_refresh_threshold_percent': int(get_env('SMART_REFRESH_THRESHOLD_PERCENT', '5')),
-            },
-            'webhook': {
-                'url': get_env('WEBHOOK_URL', ''),
-                'source': get_env('WEBHOOK_SOURCE', 'credit-monitor'),
-                'type': get_env('WEBHOOK_TYPE', 'feishu'),
-            },
-            'email': load_emails_from_env(),
-            'projects': load_projects_from_env(),
-            'subscriptions': load_subscriptions_from_env(),
-        }
+    if not use_env_config and os.path.exists(config_file):
+        try:
+            config = _load_json_with_env_substitution(config_file)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"配置文件格式错误: {e}")
     else:
-        # 模式 2: 从配置文件加载，但使用环境变量覆盖
-        # 读取配置文件内容
-        with open(config_file, 'r', encoding='utf-8') as f:
-            content = f.read()
+        if use_env_config:
+            logger.info("[Config] USE_ENV_CONFIG=true：忽略配置文件，仅使用环境变量与数据库")
+        else:
+            logger.warning(f"[Config] 配置文件不存在: {config_file}，仅使用环境变量与数据库")
 
-        # 替换 ${VAR_NAME} 格式的环境变量
-        pattern = r'\$\{([^}]+)\}'
-
-        def replace_env(match):
-            var_name = match.group(1)
-            # 从环境变量读取，如果不存在则保持原样
-            return os.environ.get(var_name, match.group(0))
-
-        content = re.sub(pattern, replace_env, content)
-
-        # 解析JSON
-        config = json.loads(content)
-
-        # 环境变量覆盖 webhook 配置
-        webhook_url = get_env('WEBHOOK_URL')
-        if webhook_url:
-            if 'webhook' not in config:
-                config['webhook'] = {}
-            config['webhook']['url'] = webhook_url
-            config['webhook']['source'] = get_env('WEBHOOK_SOURCE', config['webhook'].get('source', 'credit-monitor'))
-            config['webhook']['type'] = get_env('WEBHOOK_TYPE', config['webhook'].get('type', 'feishu'))
-
-        # 环境变量覆盖邮箱配置（支持两种方式）
-        # 方式 1: 从环境变量完全加载邮箱（如果存在 EMAIL_1_USERNAME）
-        env_emails = load_emails_from_env()
-        if env_emails:
-            config['email'] = env_emails
-        # 方式 2: 覆盖配置文件中的邮箱密码
-        elif 'email' in config:
-            for email in config['email']:
-                email_name = email.get('name', '')
-                env_password = get_email_password_from_env(email_name)
-                if env_password:
-                    email['password'] = env_password
-
-        # 环境变量覆盖项目配置（支持两种方式）
-        # 方式 1: 从环境变量完全加载项目（如果存在 PROJECT_1_NAME）
-        env_projects = load_projects_from_env()
-        if env_projects:
-            config['projects'] = env_projects
-        # 方式 2: 覆盖配置文件中的 API Key
-        elif 'projects' in config:
-            for project in config['projects']:
-                project_name = project.get('name', '')
-                env_api_key = get_api_key_from_env(project_name)
-                if env_api_key:
-                    project['api_key'] = env_api_key
-
-        # 环境变量订阅配置（仅在配置文件没有订阅时使用，避免覆盖 Web API 添加的订阅）
-        env_subscriptions = load_subscriptions_from_env()
-        if env_subscriptions and not config.get('subscriptions'):
-            config['subscriptions'] = env_subscriptions
-            logger.info(f"[Config] 从环境变量加载 {len(env_subscriptions)} 个订阅")
-
-        # 环境变量覆盖系统设置
-        if 'settings' not in config:
-            config['settings'] = {}
-
-        refresh_interval = get_env('BALANCE_REFRESH_INTERVAL_SECONDS')
-        if refresh_interval:
-            try:
-                config['settings']['balance_refresh_interval_seconds'] = int(refresh_interval)
-            except (ValueError, TypeError):
-                logger.warning(f"BALANCE_REFRESH_INTERVAL_SECONDS 值无效: {refresh_interval}，忽略")
-
-        max_concurrent = get_env('MAX_CONCURRENT_CHECKS')
-        if max_concurrent:
-            try:
-                config['settings']['max_concurrent_checks'] = int(max_concurrent)
-            except (ValueError, TypeError):
-                logger.warning(f"MAX_CONCURRENT_CHECKS 值无效: {max_concurrent}，忽略")
+    config = _ensure_base_shape(config)
+    config['settings'] = _overlay_settings_from_env(config.get('settings', {}) or {})
+    config['webhook'] = _overlay_webhook_from_env(config.get('webhook'))
+    config = _overlay_sensitive_from_env(config)
+    config = _load_dynamic_from_db(config)
+    config['webhook'] = _overlay_webhook_from_env(config.get('webhook'))
+    config = _overlay_sensitive_from_env(config)
 
     # 打印配置版本号
     config_version = config.get('version')
     if config_version:
         logger.info(f"[Config] 配置版本: {config_version}")
-
-    # =============== 数据源集成 (优先从数据库加载) ===============
-    try:
-        from database.repository import ConfigRepository
-        db_projects = ConfigRepository.get_all_projects()
-        db_subscriptions = ConfigRepository.get_all_subscriptions()
-        db_emails = ConfigRepository.get_all_emails()
-
-        # 数据库的配置优先级最高，与文件配置进行合并 (同名覆盖，新增追加)
-        if db_projects:
-            static_projs = {p['name']: p for p in config.get('projects', [])}
-            for dp in db_projects:
-                clean_dp = {k: v for k, v in dp.items() if k not in ['id', 'created_at', 'updated_at']}
-                if clean_dp['name'] in static_projs:
-                    static_projs[clean_dp['name']].update(clean_dp)
-                else:
-                    static_projs[clean_dp['name']] = clean_dp
-            config['projects'] = list(static_projs.values())
-            
-        if db_subscriptions:
-            static_subs = {s['name']: s for s in config.get('subscriptions', [])}
-            for ds in db_subscriptions:
-                clean_ds = {k: v for k, v in ds.items() if k not in ['id', 'created_at', 'updated_at']}
-                if clean_ds['name'] in static_subs:
-                    static_subs[clean_ds['name']].update(clean_ds)
-                else:
-                    static_subs[clean_ds['name']] = clean_ds
-            config['subscriptions'] = list(static_subs.values())
-
-        if db_emails:
-            static_emails = {e['name']: e for e in config.get('email', [])}
-            for de in db_emails:
-                clean_de = {k: v for k, v in de.items() if k not in ['id', 'created_at', 'updated_at']}
-                if clean_de['name'] in static_emails:
-                    static_emails[clean_de['name']].update(clean_de)
-                else:
-                    static_emails[clean_de['name']] = clean_de
-            config['email'] = list(static_emails.values())
-    except Exception as e:
-        logger.warning(f"从数据库合并配置失败: {e}")
 
     if validate:
         app_config = AppConfig.from_dict(config)
@@ -498,9 +392,6 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
 
     # 调试日志：输出脱敏配置
     logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
-
-    # 通知配置监听器
-    _notify_config_listeners(config)
 
     return config
 
@@ -536,10 +427,11 @@ def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
     masked = copy.deepcopy(config)
     
     # 脱敏 webhook URL
-    if 'webhook' in masked and 'url' in masked['webhook']:
-        url = masked['webhook']['url']
+    webhook = masked.get('webhook')
+    if isinstance(webhook, dict) and 'url' in webhook:
+        url = webhook.get('url') or ''
         if 'hook/' in url:
-            masked['webhook']['url'] = url[:url.rfind('hook/') + 5] + '***'
+            webhook['url'] = url[:url.rfind('hook/') + 5] + '***'
     
     # 脱敏邮箱密码
     if 'email' in masked:

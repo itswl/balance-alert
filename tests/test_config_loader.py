@@ -6,7 +6,6 @@ import json
 import os
 import tempfile
 from unittest.mock import patch, MagicMock
-from core import config_loader
 from core.config_loader import (
     load_config_with_env_vars,
     get_config,
@@ -36,8 +35,7 @@ class TestLoadConfigWithEnvVars:
         return f.name
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
-    def test_env_var_substitution(self, mock_notify, mock_load_env):
+    def test_env_var_substitution(self, mock_load_env):
         """测试环境变量占位符替换"""
         raw_config = json.dumps({
             'projects': [
@@ -63,8 +61,7 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
-    def test_env_var_not_set_keeps_placeholder(self, mock_notify, mock_load_env):
+    def test_env_var_not_set_keeps_placeholder(self, mock_load_env):
         """测试环境变量不存在时保持占位符"""
         raw_config = json.dumps({
             'projects': [],
@@ -84,9 +81,8 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
     @patch.dict(os.environ, {}, clear=True)
-    def test_webhook_env_not_override(self, mock_notify, mock_load_env):
+    def test_webhook_env_not_override(self, mock_load_env):
         """测试无 webhook 环境变量时不覆盖"""
         config_data = {
             'projects': [],
@@ -103,13 +99,12 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
     @patch.dict(os.environ, {
         'WEBHOOK_URL': 'https://env.com/hook',
         'WEBHOOK_ENABLED': 'true',
         'WEBHOOK_PLATFORM': 'dingtalk'
     }, clear=True)
-    def test_webhook_env_override(self, mock_notify, mock_load_env):
+    def test_webhook_env_override(self, mock_load_env):
         """测试 webhook 环境变量覆盖配置"""
         config_data = {
             'projects': [],
@@ -126,8 +121,7 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
-    def test_email_password_env_override(self, mock_notify, mock_load_env):
+    def test_email_password_env_override(self, mock_load_env):
         """测试邮箱密码环境变量覆盖"""
         config_data = {
             'projects': [],
@@ -147,8 +141,7 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
-    def test_api_key_env_override_in_projects(self, mock_notify, mock_load_env):
+    def test_api_key_env_override_in_projects(self, mock_load_env):
         """测试项目 API Key 环境变量覆盖"""
         config_data = {
             'projects': [
@@ -168,8 +161,7 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    @patch('core.config_loader._notify_config_listeners')
-    def test_refresh_interval_env_override(self, mock_notify, mock_load_env):
+    def test_refresh_interval_env_override(self, mock_load_env):
         """测试刷新间隔环境变量覆盖"""
         config_data = {
             'projects': [],
@@ -459,96 +451,6 @@ class TestLoadEnvFile:
         """测试加载不存在的 .env 文件不报错"""
         load_env_file('/nonexistent/.env')
         mock_load_dotenv.assert_not_called()
-
-
-class TestConfigChangeDetection:
-    """配置变更检测（hash 去重）测试"""
-
-    def setup_method(self):
-        """重置模块级全局变量"""
-        config_loader._last_config_hash = None
-        config_loader._config_listeners = []
-
-    def teardown_method(self):
-        config_loader._last_config_hash = None
-        config_loader._config_listeners = []
-
-    def test_first_notify_always_triggers(self):
-        """首次通知一定触发监听器"""
-        received = []
-        config_loader._config_listeners.append(lambda cfg: received.append(cfg))
-        config_loader._notify_config_listeners({'key': 'value'})
-        assert len(received) == 1
-
-    def test_same_config_skips_second_notify(self):
-        """相同配置第二次不触发"""
-        received = []
-        config_loader._config_listeners.append(lambda cfg: received.append(cfg))
-        cfg = {'key': 'value'}
-        config_loader._notify_config_listeners(cfg)
-        config_loader._notify_config_listeners(cfg)
-        assert len(received) == 1
-
-    def test_different_config_triggers_again(self):
-        """配置变化后重新触发"""
-        received = []
-        config_loader._config_listeners.append(lambda cfg: received.append(cfg))
-        config_loader._notify_config_listeners({'key': 'v1'})
-        config_loader._notify_config_listeners({'key': 'v2'})
-        assert len(received) == 2
-
-    def test_listener_exception_does_not_break(self):
-        """监听器异常不影响其他监听器"""
-        results = []
-
-        def bad_listener(cfg):
-            raise RuntimeError("boom")
-
-        def good_listener(cfg):
-            results.append('ok')
-
-        config_loader._config_listeners.extend([bad_listener, good_listener])
-        config_loader._notify_config_listeners({'x': 1})
-        assert results == ['ok']
-
-    def test_hash_changes_with_key_order(self):
-        """不同 key 顺序但相同内容 → 同一 hash（sort_keys=True）"""
-        received = []
-        config_loader._config_listeners.append(lambda cfg: received.append(1))
-        config_loader._notify_config_listeners({'a': 1, 'b': 2})
-        config_loader._notify_config_listeners({'b': 2, 'a': 1})
-        assert len(received) == 1  # 相同内容，只触发一次
-
-
-class TestRegisterUnregisterListener:
-    """监听器注册/注销测试"""
-
-    def setup_method(self):
-        config_loader._config_listeners = []
-
-    def teardown_method(self):
-        config_loader._config_listeners = []
-
-    def test_register_adds_listener(self):
-        def my_listener(cfg): pass
-        config_loader.register_config_listener(my_listener)
-        assert my_listener in config_loader._config_listeners
-
-    def test_duplicate_register_ignored(self):
-        def my_listener(cfg): pass
-        config_loader.register_config_listener(my_listener)
-        config_loader.register_config_listener(my_listener)
-        assert config_loader._config_listeners.count(my_listener) == 1
-
-    def test_unregister_removes_listener(self):
-        def my_listener(cfg): pass
-        config_loader.register_config_listener(my_listener)
-        config_loader.unregister_config_listener(my_listener)
-        assert my_listener not in config_loader._config_listeners
-
-    def test_unregister_nonexistent_no_error(self):
-        def my_listener(cfg): pass
-        config_loader.unregister_config_listener(my_listener)  # 不应抛异常
 
 
 if __name__ == '__main__':
