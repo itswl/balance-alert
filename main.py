@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from web import create_app
 from core.state_manager import StateManager
 from services.monitor import CreditMonitor
@@ -30,76 +31,113 @@ from database.models import BalanceHistory, SubscriptionHistory
 from database.engine import get_session
 
 # ======= State Init =======
-def init_state_from_db(state_mgr: StateManager):
-    """从数据库加载最近的状态，以便重启后 UI 立即可用"""
+@contextmanager
+def _session_scope():
     session = None
     try:
         session = get_session()
-        if not session:
-            return
-            
-        # 1. 恢复 Balance 状态
-        # 每个项目取最新的一条记录
-        balance_subquery = session.query(
-            BalanceHistory.project_id,
-            func.max(BalanceHistory.timestamp).label('max_timestamp')
-        ).group_by(BalanceHistory.project_id).subquery()
-        latest_balances = session.query(BalanceHistory).join(
-            balance_subquery,
-            and_(
-                BalanceHistory.project_id == balance_subquery.c.project_id,
-                BalanceHistory.timestamp == balance_subquery.c.max_timestamp
-            )
-        ).all()
-        if latest_balances:
-            projects_state = []
-            for b in latest_balances:
-                projects_state.append({
-                    'project': b.project_name,
-                    'provider': b.provider,
-                    'type': b.balance_type,
-                    'success': True, # 假设查到的都是最后成功的，如果不准确也没关系，马上会刷新
-                    'credits': b.balance,
-                    'threshold': b.threshold,
-                    'need_alarm': b.need_alarm,
-                    'alarm_sent': False,
-                    'error': None
-                })
-            state_mgr.update_balance_state(projects_state)
-            
-        # 2. 恢复 Subscription 状态
-        sub_subquery = session.query(
-            SubscriptionHistory.subscription_id,
-            func.max(SubscriptionHistory.timestamp).label('max_timestamp')
-        ).group_by(SubscriptionHistory.subscription_id).subquery()
-        latest_subs = session.query(SubscriptionHistory).join(
-            sub_subquery,
-            and_(
-                SubscriptionHistory.subscription_id == sub_subquery.c.subscription_id,
-                SubscriptionHistory.timestamp == sub_subquery.c.max_timestamp
-            )
-        ).all()
-        if latest_subs:
-            subs_state = []
-            for s in latest_subs:
-                subs_state.append({
-                    'name': s.subscription_name,
-                    'cycle_type': s.cycle_type,
-                    'days_until_renewal': s.days_until_renewal,
-                    'amount': s.amount,
-                    'need_alert': s.need_renewal,
-                    'alert_sent': False,
-                    'already_renewed': False,
-                    'last_renewed_date': None
-                })
-            state_mgr.update_subscription_state(subs_state)
-            
-        logger.info("已从数据库恢复初始状态")
-    except Exception as e:
-        logger.error(f"从数据库恢复状态失败: {e}")
+        yield session
     finally:
         if session:
             session.close()
+
+
+def _load_latest_balance_state(session) -> list[dict]:
+    balance_subquery = session.query(
+        BalanceHistory.project_id,
+        func.max(BalanceHistory.timestamp).label('max_timestamp')
+    ).group_by(BalanceHistory.project_id).subquery()
+    latest_balances = session.query(BalanceHistory).join(
+        balance_subquery,
+        and_(
+            BalanceHistory.project_id == balance_subquery.c.project_id,
+            BalanceHistory.timestamp == balance_subquery.c.max_timestamp
+        )
+    ).all()
+    if not latest_balances:
+        return []
+    return [
+        {
+            'project': b.project_name,
+            'provider': b.provider,
+            'type': b.balance_type,
+            'success': True,
+            'credits': b.balance,
+            'threshold': b.threshold,
+            'need_alarm': b.need_alarm,
+            'alarm_sent': False,
+            'error': None
+        }
+        for b in latest_balances
+    ]
+
+
+def _load_latest_subscription_state(session) -> list[dict]:
+    sub_subquery = session.query(
+        SubscriptionHistory.subscription_id,
+        func.max(SubscriptionHistory.timestamp).label('max_timestamp')
+    ).group_by(SubscriptionHistory.subscription_id).subquery()
+    latest_subs = session.query(SubscriptionHistory).join(
+        sub_subquery,
+        and_(
+            SubscriptionHistory.subscription_id == sub_subquery.c.subscription_id,
+            SubscriptionHistory.timestamp == sub_subquery.c.max_timestamp
+        )
+    ).all()
+    if not latest_subs:
+        return []
+    return [
+        {
+            'name': s.subscription_name,
+            'cycle_type': s.cycle_type,
+            'days_until_renewal': s.days_until_renewal,
+            'amount': s.amount,
+            'need_alert': s.need_renewal,
+            'alert_sent': False,
+            'already_renewed': False,
+            'last_renewed_date': None
+        }
+        for s in latest_subs
+    ]
+
+
+def init_state_from_db(state_mgr: StateManager):
+    """从数据库加载最近的状态，以便重启后 UI 立即可用"""
+    try:
+        with _session_scope() as session:
+            if not session:
+                return
+
+            projects_state = _load_latest_balance_state(session)
+            if projects_state:
+                state_mgr.update_balance_state(projects_state)
+
+            subs_state = _load_latest_subscription_state(session)
+            if subs_state:
+                state_mgr.update_subscription_state(subs_state)
+
+            logger.info("已从数据库恢复初始状态")
+    except Exception as e:
+        logger.error(f"从数据库恢复状态失败: {e}")
+
+
+def _update_balance(state_mgr: StateManager):
+    monitor = CreditMonitor('config.json')
+    monitor.run(dry_run=not get_enable_web_alarm())
+    update_balance_cache(monitor.results, state_mgr)
+    return monitor.results
+
+
+def _update_subscriptions(state_mgr: StateManager):
+    subscription_checker = SubscriptionChecker('config.json')
+    subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+    update_subscription_cache(subscription_results or [], state_mgr)
+    return subscription_results or []
+
+
+def _update_metrics(balance_results, subscription_results):
+    metrics_collector.update_balance_metrics(balance_results)
+    metrics_collector.update_subscription_metrics(subscription_results)
 
 global_state_manager = StateManager()
 
@@ -115,22 +153,9 @@ def update_credits(state_mgr: StateManager = global_state_manager):
             logger.info("开始更新数据")
 
             # 更新余额数据
-            monitor = CreditMonitor('config.json')
-            monitor.run(dry_run=not get_enable_web_alarm())
-
-            # 更新缓存
-            update_balance_cache(monitor.results, state_mgr)
-
-            # 更新订阅数据
-            subscription_checker = SubscriptionChecker('config.json')
-            subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
-
-            # 更新缓存
-            update_subscription_cache(subscription_results or [], state_mgr)
-
-            # 更新 Prometheus 指标
-            metrics_collector.update_balance_metrics(monitor.results)
-            metrics_collector.update_subscription_metrics(subscription_results or [])
+            balance_results = _update_balance(state_mgr)
+            subscription_results = _update_subscriptions(state_mgr)
+            _update_metrics(balance_results, subscription_results)
             logger.info("数据更新完成")
 
         except Exception as e:
