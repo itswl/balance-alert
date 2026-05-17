@@ -40,6 +40,10 @@ def _mask_webhook_url(url: str) -> str:
     return f"{url[:12]}***{url[-4:]}"
 
 
+class RateLimitedError(Exception):
+    pass
+
+
 class WebhookAdapter:
     """Webhook 发送适配器"""
 
@@ -296,6 +300,9 @@ class WebhookAdapter:
         except requests.exceptions.ConnectionError as e:
             logger.error(f"连接错误（重试耗尽）: {e} | 请检查网络连接、Webhook URL 和防火墙设置")
             return False
+        except RateLimitedError as e:
+            logger.error(f"请求被限流（重试耗尽）: {e}")
+            return False
         except Exception as e:
             logger.error(f"发送失败: {type(e).__name__}: {e}", exc_info=True)
             return False
@@ -303,7 +310,7 @@ class WebhookAdapter:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=2, max=10),
-        retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError)),
+        retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError, RateLimitedError)),
         reraise=True
     )
     def _send_request_with_retry(self, payload):
@@ -324,6 +331,8 @@ class WebhookAdapter:
         if 200 <= response.status_code < 300:
             logger.info(f"告警发送成功 | 类型: {self.webhook_type} | 状态码: {response.status_code} | 耗时: {elapsed_time:.2f}s")
             return True
+        elif response.status_code == 429:
+            raise RateLimitedError(f"HTTP 429 | Retry-After: {response.headers.get('Retry-After')} | {response.text[:200]}")
         elif 500 <= response.status_code < 600:
             # 5xx 服务端错误，抛出异常以触发重试
             logger.warning(f"服务端错误 HTTP {response.status_code}，将重试")

@@ -18,6 +18,7 @@ from services.subscription_checker import SubscriptionChecker
 from services.email_scanner import EmailScanner
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
+from core.config_loader import make_project_id
 from services.config_service import load_config
 
 # 创建 logger（必须在使用前定义）
@@ -126,7 +127,7 @@ def _observe_monitor_execution_time(seconds: float) -> None:
 
 
 def _project_id(provider_name: str, project_name: str) -> str:
-    return hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+    return make_project_id(provider_name, project_name)
 
 
 def _provider_cache_key(provider_name: str, api_key: str) -> str:

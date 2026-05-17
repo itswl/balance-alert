@@ -9,6 +9,7 @@ import hashlib
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
+from core.config_loader import make_subscription_id
 
 # 创建 logger
 logger = get_logger('subscription_checker')
@@ -78,7 +79,7 @@ class SubscriptionChecker:
     
     @staticmethod
     def _subscription_id(name: str) -> str:
-        return hashlib.md5(f"subscription:{name}".encode()).hexdigest()
+        return make_subscription_id(name)
 
     def _should_skip_alert(self, subscription_id: str) -> bool:
         if not DB_AVAILABLE:
@@ -314,8 +315,12 @@ class SubscriptionChecker:
                 last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
                 next_renewal_date = self._safe_replace_year(last_renewed, last_renewed.year + 1)
 
-                while next_renewal_date <= today:
+                for _ in range(20):
+                    if next_renewal_date > today:
+                        break
                     next_renewal_date = self._safe_replace_year(next_renewal_date, next_renewal_date.year + 1)
+                else:
+                    raise ValueError("年度续费日期计算异常")
 
                 delta = next_renewal_date - today
                 return delta.days, next_renewal_date

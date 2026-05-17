@@ -85,15 +85,20 @@ class StateManager:
         """更新余额状态（线程安全）"""
         with self._lock:
             self._balance_state.last_update = self._now_iso()
-            self._balance_state.projects = projects.copy()
-            self._balance_state.summary = {
-                'total': len(projects),
-                'success': sum(1 for r in projects if r['success']),
-                'failed': sum(1 for r in projects if not r['success']),
-                'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
+            projects_copy = list(projects)
+            summary = {
+                'total': len(projects_copy),
+                'success': sum(1 for r in projects_copy if r['success']),
+                'failed': sum(1 for r in projects_copy if not r['success']),
+                'need_alarm': sum(1 for r in projects_copy if r.get('need_alarm', False)),
             }
-            # 预计算快照
-            self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
+            self._balance_state.projects = projects_copy
+            self._balance_state.summary = summary
+            self._balance_snapshot = {
+                'last_update': self._balance_state.last_update,
+                'projects': projects_copy,
+                'summary': summary,
+            }
 
             # 通知回调
             self._notify_callbacks('balance', self._balance_state)
@@ -113,13 +118,18 @@ class StateManager:
             merged = list(proj_map.values())
             self._balance_state.last_update = self._now_iso()
             self._balance_state.projects = merged
-            self._balance_state.summary = {
+            summary = {
                 'total': len(merged),
                 'success': sum(1 for r in merged if r['success']),
                 'failed': sum(1 for r in merged if not r['success']),
                 'need_alarm': sum(1 for r in merged if r.get('need_alarm', False)),
             }
-            self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
+            self._balance_state.summary = summary
+            self._balance_snapshot = {
+                'last_update': self._balance_state.last_update,
+                'projects': merged,
+                'summary': summary,
+            }
             self._notify_callbacks('balance', self._balance_state)
             logger.info(f"余额状态已更新: {self._balance_state.summary}")
     
@@ -131,13 +141,18 @@ class StateManager:
 
         with self._lock:
             self._subscription_state.last_update = self._now_iso()
-            self._subscription_state.subscriptions = subscriptions.copy()
-            self._subscription_state.summary = {
-                'total': len(subscriptions),
-                'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
+            subscriptions_copy = list(subscriptions)
+            summary = {
+                'total': len(subscriptions_copy),
+                'need_alert': sum(1 for r in subscriptions_copy if r.get('need_alert', False)),
             }
-            # 预计算快照
-            self._subscription_snapshot = copy.deepcopy(asdict(self._subscription_state))
+            self._subscription_state.subscriptions = subscriptions_copy
+            self._subscription_state.summary = summary
+            self._subscription_snapshot = {
+                'last_update': self._subscription_state.last_update,
+                'subscriptions': subscriptions_copy,
+                'summary': summary,
+            }
 
             # 通知回调
             self._notify_callbacks('subscription', self._subscription_state)
@@ -167,23 +182,33 @@ class StateManager:
         """重建状态摘要信息"""
         # 重建余额摘要
         projects = self._balance_state.projects
-        self._balance_state.summary = {
+        balance_summary = {
             'total': len(projects),
             'success': sum(1 for r in projects if r['success']),
             'failed': sum(1 for r in projects if not r['success']),
             'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
         }
+        self._balance_state.summary = balance_summary
 
         # 重建订阅摘要
         subscriptions = self._subscription_state.subscriptions
-        self._subscription_state.summary = {
+        subscription_summary = {
             'total': len(subscriptions),
             'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
         }
+        self._subscription_state.summary = subscription_summary
 
         # 重建快照
-        self._balance_snapshot = copy.deepcopy(asdict(self._balance_state))
-        self._subscription_snapshot = copy.deepcopy(asdict(self._subscription_state))
+        self._balance_snapshot = {
+            'last_update': self._balance_state.last_update,
+            'projects': self._balance_state.projects,
+            'summary': balance_summary,
+        }
+        self._subscription_snapshot = {
+            'last_update': self._subscription_state.last_update,
+            'subscriptions': self._subscription_state.subscriptions,
+            'summary': subscription_summary,
+        }
     
     def clear_state(self) -> None:
         """清空所有状态"""

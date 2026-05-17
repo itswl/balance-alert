@@ -7,7 +7,9 @@
 from typing import List, Optional, Dict, Any, Iterator
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
+import os
 from sqlalchemy import func, desc
+from sqlalchemy.exc import DBAPIError, OperationalError
 from core.logger import get_logger
 from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
 from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
@@ -15,6 +17,24 @@ import json
 from .engine import get_session, ENABLE_DATABASE
 
 logger = get_logger('repository')
+
+
+def _strict_database_errors_enabled() -> bool:
+    return os.environ.get('STRICT_DATABASE_ERRORS', 'false').lower() == 'true'
+
+
+def _auto_encrypt_on_read_enabled() -> bool:
+    return os.environ.get('AUTO_ENCRYPT_ON_READ', 'true').lower() == 'true'
+
+
+def _should_reraise_db_exception(e: Exception) -> bool:
+    if not _strict_database_errors_enabled():
+        return False
+    if isinstance(e, OperationalError):
+        return False
+    if isinstance(e, DBAPIError) and getattr(e, 'connection_invalidated', False):
+        return False
+    return True
 
 
 def _db_read(default_value, error_message: str, op, *, exc_info: bool = False):
@@ -27,6 +47,8 @@ def _db_read(default_value, error_message: str, op, *, exc_info: bool = False):
             return op(session)
     except Exception as e:
         logger.error(f"{error_message}: {e}", exc_info=exc_info)
+        if _should_reraise_db_exception(e):
+            raise
         return default_value
 
 
@@ -40,6 +62,8 @@ def _db_write(default_value, error_message: str, op, *, exc_info: bool = False):
             return op(session)
     except Exception as e:
         logger.error(f"{error_message}: {e}", exc_info=exc_info)
+        if _should_reraise_db_exception(e):
+            raise
         return default_value
 
 
@@ -83,6 +107,19 @@ def _encrypt_model_field(model: Any, field: str) -> bool:
     return False
 
 
+def _maybe_encrypt_models(session, models: List[Any], field: str) -> None:
+    if not _auto_encrypt_on_read_enabled():
+        return None
+    if not encryption_enabled():
+        return None
+
+    changed = False
+    for model in models:
+        changed = _encrypt_model_field(model, field) or changed
+    if changed:
+        session.commit()
+
+
 def _encrypt_data_field(data: Dict[str, Any], field: str) -> Dict[str, Any]:
     if field in data and data[field] != '***':
         data = data.copy()
@@ -106,12 +143,7 @@ class ConfigRepository:
         """获取所有邮箱配置"""
         def op(session):
             emails = session.query(EmailConfig).all()
-            if encryption_enabled():
-                changed = False
-                for email in emails:
-                    changed = _encrypt_model_field(email, 'password') or changed
-                if changed:
-                    session.commit()
+            _maybe_encrypt_models(session, emails, 'password')
             return [_email_to_dict(e) for e in emails]
 
         return _db_read([], "获取邮箱配置失败", op)
@@ -150,12 +182,7 @@ class ConfigRepository:
         """获取所有启用的项目配置"""
         def op(session):
             projects = session.query(ProjectConfig).all()
-            if encryption_enabled():
-                changed = False
-                for project in projects:
-                    changed = _encrypt_model_field(project, 'api_key') or changed
-                if changed:
-                    session.commit()
+            _maybe_encrypt_models(session, projects, 'api_key')
             return [_project_to_dict(p) for p in projects]
 
         return _db_read([], "获取项目配置失败", op)
