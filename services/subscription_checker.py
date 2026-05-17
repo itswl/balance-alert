@@ -68,16 +68,59 @@ class SubscriptionChecker:
             logger.info("🔍 [测试模式] 不会发送实际告警")
         
         today = datetime.now()
-        current_day = today.day
         
         for sub in enabled_subs:
-            result = self._check_subscription(sub, today, current_day, dry_run)
+            result = self._check_subscription(sub, today, dry_run)
             self.results.append(result)
 
         self._print_summary()
         return self.results
     
-    def _check_subscription(self, sub, today, current_day, dry_run):
+    @staticmethod
+    def _subscription_id(name: str) -> str:
+        return hashlib.md5(f"subscription:{name}".encode()).hexdigest()
+
+    def _should_skip_alert(self, subscription_id: str) -> bool:
+        if not DB_AVAILABLE:
+            return False
+        alert_cooldown = _get_alert_cooldown_seconds(self.config)
+        try:
+            return AlertRepository.has_recent_alert(subscription_id, 'subscription_renewal', alert_cooldown)
+        except Exception:
+            return False
+
+    def _save_alert_history(self, subscription_id: str, name: str, days_until_renewal: int, amount: float, alert_days_before: int) -> None:
+        if not DB_AVAILABLE:
+            return None
+        try:
+            AlertRepository.save_alert_record(
+                project_id=subscription_id,
+                project_name=name,
+                alert_type='subscription_renewal',
+                message=f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
+                balance_value=amount,
+                threshold_value=alert_days_before,
+                status='sent'
+            )
+        except Exception as e:
+            logger.error(f"保存订阅提醒告警历史失败: {e}")
+
+    def _save_subscription_history(self, subscription_id: str, name: str, cycle_type: str, days_until_renewal: int, amount: float, need_alert: bool) -> None:
+        if not DB_AVAILABLE:
+            return None
+        try:
+            SubscriptionRepository.save_subscription_record(
+                subscription_id=subscription_id,
+                subscription_name=name,
+                cycle_type=cycle_type,
+                days_until_renewal=days_until_renewal,
+                amount=amount,
+                need_renewal=need_alert
+            )
+        except Exception as e:
+            logger.error(f"保存订阅历史失败: {e}")
+
+    def _check_subscription(self, sub, today, dry_run):
         """检查单个订阅"""
         name = sub.get('name', '未知订阅')
         owner_project = sub.get('owner_project') or sub.get('project')
@@ -132,45 +175,21 @@ class SubscriptionChecker:
             logger.warning(f"⚠️  需要提醒续费! (提前 {alert_days_before} 天)")
 
             if not dry_run:
-                subscription_id = hashlib.md5(f"subscription:{name}".encode()).hexdigest()
-                alert_cooldown = _get_alert_cooldown_seconds(self.config)
-                if DB_AVAILABLE and AlertRepository.has_recent_alert(
-                    subscription_id, 'subscription_renewal', alert_cooldown
-                ):
+                subscription_id = self._subscription_id(name)
+                if self._should_skip_alert(subscription_id):
+                    alert_cooldown = _get_alert_cooldown_seconds(self.config)
                     logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
                 else:
                     alert_sent = self._send_alert(sub, days_until_renewal)
-                    if DB_AVAILABLE and alert_sent:
-                        try:
-                            AlertRepository.save_alert_record(
-                                project_id=subscription_id,
-                                project_name=name,
-                                alert_type='subscription_renewal',
-                                message=f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
-                                balance_value=amount,
-                                threshold_value=alert_days_before,
-                                status='sent'
-                            )
-                        except Exception as e:
-                            logger.error(f"保存订阅提醒告警历史失败: {e}")
+                    if alert_sent:
+                        self._save_alert_history(subscription_id, name, days_until_renewal, amount, alert_days_before)
             else:
                 logger.info("🔍 [测试模式] 跳过发送告警")
         else:
             logger.info(f"✅ 无需提醒")
 
-        if DB_AVAILABLE:
-            try:
-                subscription_id = hashlib.md5(f"subscription:{name}".encode()).hexdigest()
-                SubscriptionRepository.save_subscription_record(
-                    subscription_id=subscription_id,
-                    subscription_name=name,
-                    cycle_type=cycle_type,
-                    days_until_renewal=days_until_renewal,
-                    amount=amount,
-                    need_renewal=need_alert
-                )
-            except Exception as e:
-                logger.error(f"保存订阅历史失败: {e}")
+        subscription_id = self._subscription_id(name)
+        self._save_subscription_history(subscription_id, name, cycle_type, days_until_renewal, amount, need_alert)
         
         return {
             'name': name,
@@ -334,16 +353,8 @@ class SubscriptionChecker:
         current_day = today.day
 
         if current_day <= renewal_day:
-            # 本月还没到续费日
-            try:
-                next_renewal_date = datetime(today.year, today.month, renewal_day)
-            except ValueError:
-                # 如果续费日超过本月天数，使用本月最后一天
-                next_month = today.month + 1 if today.month < 12 else 1
-                next_year = today.year if today.month < 12 else today.year + 1
-                next_renewal_date = datetime(next_year, next_month, 1) - timedelta(days=1)
+            next_renewal_date = self._safe_month_date(today.year, today.month, int(renewal_day))
         else:
-            # 已经过了本月续费日，计算下个月
             if today.month == 12:
                 next_year = today.year + 1
                 next_month = 1
@@ -351,14 +362,7 @@ class SubscriptionChecker:
                 next_year = today.year
                 next_month = today.month + 1
 
-            try:
-                next_renewal_date = datetime(next_year, next_month, renewal_day)
-            except ValueError:
-                # 如果续费日超过下月天数，使用下月最后一天
-                if next_month == 12:
-                    next_renewal_date = datetime(next_year, 12, 31)
-                else:
-                    next_renewal_date = datetime(next_year, next_month + 1, 1) - timedelta(days=1)
+            next_renewal_date = self._safe_month_date(next_year, next_month, int(renewal_day))
 
         delta = next_renewal_date - today
         return delta.days, next_renewal_date
@@ -421,10 +425,12 @@ class SubscriptionChecker:
 def main():
     """主函数"""
     import argparse
+    from core.config_loader import get_default_config_path
     
     parser = argparse.ArgumentParser(description='订阅续费提醒检查')
     parser.add_argument('--dry-run', action='store_true', help='测试模式，不发送告警')
-    parser.add_argument('--config', default='config.json', help='配置文件路径')
+    default_config = get_default_config_path()
+    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
     
     args = parser.parse_args()
     
@@ -432,7 +438,7 @@ def main():
         checker = SubscriptionChecker(args.config)
         checker.check_subscriptions(dry_run=args.dry_run)
     except Exception as e:
-        logger.error(f"❌ 错误: {e}")
+        logger.error(f"❌ 错误: {e}", exc_info=True)
         sys.exit(1)
 
 

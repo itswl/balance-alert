@@ -13,7 +13,7 @@ import re
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Dict, Any, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
@@ -43,6 +43,17 @@ DEFAULT_ALERT_KEYWORDS = [
     'recharge reminder', 'top up', 'account suspended',
     'unpaid invoice', 'outstanding balance', 'payment failed'
 ]
+
+def _get_max_emails_to_scan() -> int:
+    try:
+        return max(1, int(os.environ.get('MAX_EMAILS_TO_SCAN', str(DEFAULT_MAX_EMAILS))))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_EMAILS
+
+
+def _iter_batches(items, batch_size: int):
+    for start in range(0, len(items), batch_size):
+        yield items[start:start + batch_size]
 
 
 @retry(
@@ -321,6 +332,63 @@ class EmailScanner:
         date = self._decode_str(msg.get('Date', ''))
         body = self._extract_text_from_email(msg)
         return subject, sender, date, body
+
+    def _is_valid_mailbox_config(self, email_config: Dict[str, Any]) -> bool:
+        host = email_config.get('host')
+        username = email_config.get('username')
+        password = email_config.get('password')
+        return bool(host and username and password)
+
+    def _search_email_ids(self, mail, days: int):
+        since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+        status, messages = mail.search(None, f'SINCE {since_date}')
+        if status != 'OK':
+            return []
+        return messages[0].split()
+
+    def _apply_scan_limit(self, email_ids):
+        max_scan_limit = _get_max_emails_to_scan()
+        if len(email_ids) <= max_scan_limit:
+            return email_ids, max_scan_limit, False
+        return email_ids[-max_scan_limit:], max_scan_limit, True
+
+    def _build_alert_result(self, mailbox_name: str, subject: str, sender: str, date: str, matched_keywords, service_name: str, amount):
+        return {
+            'mailbox': mailbox_name,
+            'subject': subject,
+            'sender': sender,
+            'date': date,
+            'keywords': matched_keywords,
+            'service_name': service_name,
+            'amount': amount,
+            'alert_sent': False
+        }
+
+    def _maybe_skip_duplicate(self, result: Dict[str, Any], mailbox_name: str, sender: str, subject: str, date: str, days: int, dry_run: bool) -> bool:
+        if dry_run:
+            return False
+        duplicate_sent = self._has_recent_email_alert(
+            mailbox=mailbox_name,
+            sender=sender,
+            subject=subject,
+            date=date,
+            days=max(days, 1)
+        )
+        if not duplicate_sent:
+            return False
+        result['duplicate'] = True
+        logger.info(f"邮件告警已发送过，跳过重复通知 | 邮箱: {mailbox_name} | 主题: {subject}")
+        self.results.append(result)
+        return True
+
+    def _handle_scan_exception(self, mailbox_name: str, error: Exception, dry_run: bool) -> Tuple[int, int]:
+        if isinstance(error, imaplib.IMAP4.error):
+            logger.error(f"❌ 邮箱连接错误: {error}")
+        else:
+            logger.error(f"❌ 扫描失败: {error}", exc_info=True)
+        if not dry_run:
+            self._send_error_alert(mailbox_name, str(error))
+        return 0, 0
     
     def scan_emails(self, days=1, dry_run=False):
         """
@@ -339,7 +407,6 @@ class EmailScanner:
         logger.info(f"   扫描范围: 最近 {days} 天")
         logger.info(f"{'='*60}\n")
         
-        # 并行扫描邮箱
         total_emails = 0
         total_alerts = 0
 
@@ -381,116 +448,70 @@ class EmailScanner:
         use_ssl = email_config.get('use_ssl', True)
         mailbox_name = email_config.get('name', username)
         
-        if not all([host, username, password]):
+        if not self._is_valid_mailbox_config(email_config):
             logger.warning("❌ 邮箱配置不完整，跳过")
             return 0, 0
         
         logger.info(f"连接邮箱 | 服务器: {host}:{port} | 用户名: {username}")
         
         try:
-            # 使用上下文管理器连接邮箱
             with imap_connection(host, port, username, password, use_ssl) as mail:
-                # 计算日期范围
-                since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
-                
-                # 搜索邮件
-                status, messages = mail.search(None, f'SINCE {since_date}')
-                
-                if status != 'OK':
-                    logger.error("❌ 搜索邮件失败")
-                    return 0, 0
-                
-                email_ids = messages[0].split()
-                total_emails = len(email_ids)
-                
-                # 应用扫描上限限制
-                max_scan_limit = int(os.environ.get('MAX_EMAILS_TO_SCAN', str(DEFAULT_MAX_EMAILS)))
-                if total_emails > max_scan_limit:
-                    logger.warning(f"📬 邮件数量 {total_emails} 超过上限 {max_scan_limit}，仅扫描最新 {max_scan_limit} 封")
-                    # 取最新的邮件（列表末尾是最新邮件）
-                    email_ids = email_ids[-max_scan_limit:]
-                    total_emails = len(email_ids)
-                
-                logger.info(f"📬 找到 {total_emails} 封邮件（扫描范围: 最近{days}天）")
-                
-                if total_emails == 0:
+                email_ids = self._search_email_ids(mail, days)
+                if not email_ids:
                     logger.info("ℹ️  没有需要检查的邮件")
                     return 0, 0
+
+                raw_total = len(email_ids)
+                email_ids, max_scan_limit, trimmed = self._apply_scan_limit(email_ids)
+                total_emails = len(email_ids)
+                if trimmed:
+                    logger.warning(f"📬 邮件数量 {raw_total} 超过上限 {max_scan_limit}，仅扫描最新 {max_scan_limit} 封")
+
+                logger.info(f"📬 找到 {total_emails} 封邮件（扫描范围: 最近{days}天）")
                 
                 # 分批处理邮件
                 batch_size = DEFAULT_BATCH_SIZE
                 alert_count = 0
                 processed_count = 0
 
-                # 按批次获取邮件
-                for batch_start in range(0, len(email_ids), batch_size):
-                    batch_ids = email_ids[batch_start:batch_start + batch_size]
-
-                    # 尝试批量 fetch
+                for batch_ids in _iter_batches(email_ids, batch_size):
                     fetched_messages = self._batch_fetch_emails(mail, batch_ids)
 
                     for msg in fetched_messages:
-                        # 邮件去重
                         email_uid = self._get_email_id(msg)
                         if not self._mark_seen(email_uid):
                             processed_count += 1
                             continue
 
-                        # 获取邮件信息
                         subject, sender, date, body = self._parse_message(msg)
 
-                        # 检查是否包含告警关键词
                         matched_keywords = self._check_alert_keywords(subject, body)
 
-                        if matched_keywords:
-                            alert_count += 1
-                            # 尝试提取服务信息
-                            service_name, amount = self._extract_service_info(subject, body)
+                        if not matched_keywords:
+                            processed_count += 1
+                            continue
 
-                            amount_str = f" | 金额: {amount}" if amount else ""
-                            logger.warning(
-                                f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
-                                f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
-                                f"服务: {service_name}{amount_str}"
-                            )
+                        alert_count += 1
+                        service_name, amount = self._extract_service_info(subject, body)
 
-                            # 记录结果
-                            result = {
-                                'mailbox': mailbox_name,
-                                'subject': subject,
-                                'sender': sender,
-                                'date': date,
-                                'keywords': matched_keywords,
-                                'service_name': service_name,
-                                'amount': amount,
-                                'alert_sent': False
-                            }
+                        amount_str = f" | 金额: {amount}" if amount else ""
+                        logger.warning(
+                            f"发现告警邮件 #{alert_count} | 邮箱: {mailbox_name} | 发件人: {sender} | "
+                            f"主题: {subject} | 日期: {date} | 关键词: {', '.join(matched_keywords)} | "
+                            f"服务: {service_name}{amount_str}"
+                        )
 
-                            duplicate_sent = False
-                            if not dry_run:
-                                duplicate_sent = self._has_recent_email_alert(
-                                    mailbox=mailbox_name,
-                                    sender=sender,
-                                    subject=subject,
-                                    date=date,
-                                    days=max(days, 1)
-                                )
+                        result = self._build_alert_result(mailbox_name, subject, sender, date, matched_keywords, service_name, amount)
+                        if self._maybe_skip_duplicate(result, mailbox_name, sender, subject, date, days, dry_run):
+                            processed_count += 1
+                            continue
 
-                            if duplicate_sent:
-                                result['duplicate'] = True
-                                logger.info(f"邮件告警已发送过，跳过重复通知 | 邮箱: {mailbox_name} | 主题: {subject}")
-                                self.results.append(result)
-                                processed_count += 1
-                                continue
+                        if not dry_run:
+                            result['alert_sent'] = self._send_alert(result)
+                        else:
+                            logger.info("[测试模式] 跳过发送告警")
 
-                            # 发送告警
-                            if not dry_run:
-                                alert_sent = self._send_alert(result)
-                                result['alert_sent'] = alert_sent
-                            else:
-                                logger.info("[测试模式] 跳过发送告警")
-
-                            self.results.append(result)
+                        self.results.append(result)
 
                         processed_count += 1
 
@@ -506,16 +527,8 @@ class EmailScanner:
                 
                 return total_emails, alert_count
                 
-        except imaplib.IMAP4.error as e:
-            logger.error(f"❌ 邮箱连接错误: {e}")
-            if not dry_run:
-                self._send_error_alert(mailbox_name, str(e))
-            return 0, 0
         except Exception as e:
-            logger.error(f"❌ 扫描失败: {e}", exc_info=True)
-            if not dry_run:
-                self._send_error_alert(mailbox_name, str(e))
-            return 0, 0
+            return self._handle_scan_exception(mailbox_name, e, dry_run)
     
     def _batch_fetch_emails(self, mail, batch_ids):
         """批量获取邮件，失败时降级为逐条获取
@@ -527,10 +540,9 @@ class EmailScanner:
         Returns:
             list: 解析后的邮件消息列表
         """
-        messages = []
-
         # 尝试批量 fetch
         try:
+            messages = []
             joined_ids = b','.join(batch_ids)
             status, msg_data = mail.fetch(joined_ids, '(RFC822)')
             if status == 'OK':
@@ -622,11 +634,13 @@ class EmailScanner:
 def main():
     """主函数"""
     import argparse
+    from core.config_loader import get_default_config_path
     
     parser = argparse.ArgumentParser(description='邮箱告警扫描器')
     parser.add_argument('--days', type=int, default=1, help='扫描最近几天的邮件（默认1天）')
     parser.add_argument('--dry-run', action='store_true', help='测试模式，不发送告警')
-    parser.add_argument('--config', default='config.json', help='配置文件路径')
+    default_config = get_default_config_path()
+    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
     
     args = parser.parse_args()
     
@@ -634,7 +648,7 @@ def main():
         scanner = EmailScanner(args.config)
         scanner.scan_emails(days=args.days, dry_run=args.dry_run)
     except Exception as e:
-        logger.error(f"错误: {e}")
+        logger.error(f"错误: {e}", exc_info=True)
         sys.exit(1)
 
 
