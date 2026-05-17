@@ -7,6 +7,11 @@ const AppState = {
     searchQuery: '',
     balanceData: null,
     subscriptionData: null,
+    features: {
+        subscriptions: false,
+        dynamic_config: false,
+        history: false,
+    },
     lastUpdate: null,
     autoRefreshInterval: null,
 };
@@ -262,6 +267,10 @@ const API = {
     async getHealth() {
         return this.request('/health');
     },
+
+    async getFeatures() {
+        return this.request('/api/features');
+    },
 };
 
 // ==================== UI 组件 ====================
@@ -330,6 +339,17 @@ const UI = {
         const projectNameAttr = Utils.escapeAttr(projectName);
         const providerAttr = Utils.escapeAttr(provider);
 
+        const optionalActions = [];
+        if (AppState.features.dynamic_config) {
+            optionalActions.push(`
+                        <button class="action-icon-btn js-edit-threshold" data-project="${projectNameAttr}" data-threshold="${Utils.escapeAttr(threshold)}" title="编辑阈值">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>`);
+        }
+
         return `
             <div class="project-card" data-provider="${providerAttr}" data-status="${projectStatus}">
                 <div class="project-header">
@@ -341,12 +361,7 @@ const UI = {
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <button class="action-icon-btn js-edit-threshold" data-project="${projectNameAttr}" data-threshold="${Utils.escapeAttr(threshold)}" title="编辑阈值">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                        </button>
+                        ${optionalActions.join('')}
                         <div class="project-status ${projectStatus}"></div>
                     </div>
                 </div>
@@ -375,14 +390,14 @@ const UI = {
                         <span class="detail-value">${projectStatus === 'normal' ? '✅ 正常' : '⚠️ 告警'}</span>
                     </div>
                 </div>
-                <div class="project-actions">
+                ${AppState.features.history ? `<div class="project-actions">
                     <button class="btn-link js-show-trend" data-project="${projectNameAttr}" data-provider="${providerAttr}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 4px;">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                         </svg>
                         查看趋势
                     </button>
-                </div>
+                </div>` : ''}
             </div>
         `;
     },
@@ -566,6 +581,9 @@ const App = {
         // 绑定事件
         this.bindEvents();
 
+        // 加载功能开关
+        await this.loadFeatures();
+
         // 加载数据
         await this.loadData();
 
@@ -607,6 +625,10 @@ const App = {
         });
 
         document.getElementById('view-subscriptions-btn').addEventListener('click', () => {
+            if (!AppState.features.subscriptions) {
+                UI.showToast('订阅功能未启用', 'info');
+                return;
+            }
             this.switchView('subscriptions');
         });
 
@@ -681,16 +703,37 @@ const App = {
         });
     },
 
+    async loadFeatures() {
+        try {
+            const result = await API.getFeatures();
+            AppState.features = {
+                ...AppState.features,
+                ...(result.features || {}),
+            };
+        } catch (error) {
+            console.warn('功能开关加载失败，使用核心版默认设置:', error);
+        }
+
+        const subscriptionBtn = document.getElementById('view-subscriptions-btn');
+        if (subscriptionBtn && !AppState.features.subscriptions) {
+            subscriptionBtn.style.display = 'none';
+        }
+
+        const addSubscriptionBtn = document.getElementById('add-subscription-btn');
+        if (addSubscriptionBtn && !AppState.features.subscriptions) {
+            addSubscriptionBtn.style.display = 'none';
+        }
+    },
+
     // 加载数据
     async loadData() {
         try {
             UI.setLoading(true);
 
-            // 并行加载余额和订阅数据
-            const [balanceData, subscriptionData] = await Promise.all([
-                API.getCredits(),
-                API.getSubscriptions()
-            ]);
+            const balanceData = await API.getCredits();
+            const subscriptionData = AppState.features.subscriptions
+                ? await API.getSubscriptions()
+                : { subscriptions: [] };
 
             AppState.balanceData = balanceData;
             AppState.subscriptionData = subscriptionData;
@@ -775,10 +818,10 @@ const App = {
         // 每5分钟自动刷新一次数据（不调用 API refresh，只 reload）
         AppState.autoRefreshInterval = setInterval(async () => {
             try {
-                const [balanceData, subscriptionData] = await Promise.all([
-                    API.getCredits(),
-                    API.getSubscriptions()
-                ]);
+                const balanceData = await API.getCredits();
+                const subscriptionData = AppState.features.subscriptions
+                    ? await API.getSubscriptions()
+                    : { subscriptions: [] };
 
                 AppState.balanceData = balanceData;
                 AppState.subscriptionData = subscriptionData;

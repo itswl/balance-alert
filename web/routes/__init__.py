@@ -4,15 +4,8 @@
 组织所有 Flask Blueprint 路由
 """
 from .core import core_bp, init_core_routes
-from .subscription import subscription_bp, init_subscription_routes
-from .project import project_bp
-from .email import email_bp
 
 __all__ = [
     'core_bp',
-    'subscription_bp',
-    'project_bp',
-    'email_bp',
     'init_core_routes',
-    'init_subscription_routes',
 ]

@@ -15,8 +15,8 @@ logger = get_logger('database')
 # 数据库路径（从环境变量读取，默认在 data 目录）
 DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./data/balance_alert.db')
 
-# 是否启用数据持久化（默认启用）
-ENABLE_DATABASE = os.environ.get('ENABLE_DATABASE', 'true').lower() == 'true'
+# 是否启用数据持久化。核心版默认关闭，避免只想跑余额告警时还要带数据库。
+ENABLE_DATABASE = os.environ.get('ENABLE_DATABASE', 'false').lower() == 'true'
 
 # 全局引擎和会话工厂
 _engine = None
