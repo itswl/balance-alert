@@ -45,15 +45,17 @@ def get_refresh_interval(config_file: str = 'config.json') -> int:
 
 
 # 全局配置缓存和锁
-_config_cache: Optional[Dict[str, Any]] = None
+_config_cache: Dict[str, Dict[str, Any]] = {}
 _config_lock = Lock()
 
 
-def clear_config_cache() -> None:
+def clear_config_cache(config_file: Optional[str] = None) -> None:
     """清除配置缓存"""
-    global _config_cache
     with _config_lock:
-        _config_cache = None
+        if config_file:
+            _config_cache.pop(config_file, None)
+        else:
+            _config_cache.clear()
         logger.debug("[Config] 配置缓存已清除")
 
 
@@ -169,20 +171,19 @@ def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
 
 def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
     """获取配置，带缓存和自动重载"""
-    global _config_cache
-    
     # 如果使用缓存且缓存存在，直接返回
     if use_cache:
         with _config_lock:
-            if _config_cache is not None:
-                return _config_cache
+            cached = _config_cache.get(config_file)
+            if cached is not None:
+                return cached
     
     # 加载新配置
     config = load_config_with_env_vars(config_file)
     
     # 更新缓存
     with _config_lock:
-        _config_cache = config
+        _config_cache[config_file] = config
     
     return config
 
