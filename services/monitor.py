@@ -10,7 +10,7 @@ import argparse
 import hashlib
 import threading
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable, TypeVar, Generic
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
@@ -35,14 +35,39 @@ except ImportError:
 DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
 MAX_CONCURRENT_UPPER_BOUND = 50  # 提升上限 from 20 to 50
 
-# Provider 响应缓存（TTL 缓存）
 DEFAULT_RESPONSE_CACHE_TTL = 300  # 默认缓存 5 分钟
-_response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
-_cache_lock = threading.Lock()
-
-# Provider 实例缓存（复用 Session，避免每次创建新实例）
 PROVIDER_CACHE_TTL = 600  # 实例缓存 10 分钟
-_provider_cache: Dict[str, Tuple[float, Any]] = {}
+
+T = TypeVar('T')
+
+
+class _TTLCache(Generic[T]):
+    def __init__(self) -> None:
+        self._data: Dict[str, Tuple[float, T]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: str, ttl_seconds: int) -> Optional[T]:
+        if ttl_seconds <= 0:
+            return None
+
+        now = time.time()
+        with self._lock:
+            hit = self._data.get(key)
+            if not hit:
+                return None
+            cached_at, value = hit
+            if now - cached_at >= ttl_seconds:
+                self._data.pop(key, None)
+                return None
+            return value
+
+    def set(self, key: str, value: T) -> None:
+        with self._lock:
+            self._data[key] = (time.time(), value)
+
+
+_provider_cache: _TTLCache[Any] = _TTLCache()
+_response_cache: _TTLCache[Dict[str, Any]] = _TTLCache()
 
 
 def _get_alert_cooldown_seconds(config: Dict[str, Any]) -> int:
@@ -55,29 +80,34 @@ def _get_alert_cooldown_seconds(config: Dict[str, Any]) -> int:
         return 86400
 
 
+def _safe_metrics_call(action: Callable[[], None]) -> None:
+    try:
+        action()
+    except Exception:
+        return None
+
+
+def _project_id(provider_name: str, project_name: str) -> str:
+    return hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+
+
+def _provider_cache_key(provider_name: str, api_key: str) -> str:
+    return f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
+
+
 def _get_or_create_provider(provider_name: str, api_key: str) -> Any:
     """获取或创建 Provider 实例（带 TTL 缓存）"""
     if not api_key:
         raise ValueError(f"项目缺少 API Key，无法创建服务商适配器: {provider_name}")
 
-    cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
-    now = time.time()
+    cache_key = _provider_cache_key(provider_name, api_key)
+    cached = _provider_cache.get(cache_key, PROVIDER_CACHE_TTL)
+    if cached is not None:
+        return cached
 
-    with _cache_lock:
-        if cache_key in _provider_cache:
-            cached_time, cached_provider = _provider_cache[cache_key]
-            if now - cached_time < PROVIDER_CACHE_TTL:
-                return cached_provider
-            # TTL 过期，移除旧实例
-            del _provider_cache[cache_key]
-
-    # 在锁外创建新实例
     provider_class = get_provider(provider_name)
     provider = provider_class(api_key)
-
-    with _cache_lock:
-        _provider_cache[cache_key] = (now, provider)
-
+    _provider_cache.set(cache_key, provider)
     return provider
 
 
@@ -155,24 +185,13 @@ class CreditMonitor:
                 'alarm_sent': False
             }
         
-        result = None
-        cached = False
-
-        # 检查 TTL 缓存
-        cache_ttl = self.config.get('settings', {}).get('response_cache_ttl', DEFAULT_RESPONSE_CACHE_TTL)
-        cache_key = f"{provider_name}:{hashlib.md5(api_key.encode()).hexdigest()}"
-
-        if cache_ttl > 0:
-            with _cache_lock:
-                if cache_key in _response_cache:
-                    cached_time, cached_result = _response_cache[cache_key]
-                    if time.time() - cached_time < cache_ttl:
-                        logger.info(f"[{project_name}] 使用缓存结果 (TTL: {cache_ttl}s)")
-                        result = cached_result
-                        cached = True
-
-        # 获取余额
-        if result is None:
+        cache_ttl = int(self.config.get('settings', {}).get('response_cache_ttl', DEFAULT_RESPONSE_CACHE_TTL) or 0)
+        cache_key = _provider_cache_key(provider_name, api_key)
+        result = _response_cache.get(cache_key, cache_ttl)
+        cached = result is not None
+        if cached:
+            logger.info(f"[{project_name}] 使用缓存结果 (TTL: {cache_ttl}s)")
+        else:
             result = provider.get_credits()
         
         if not result['success']:
@@ -190,8 +209,7 @@ class CreditMonitor:
 
         # 缓存成功的结果
         if cache_ttl > 0 and not cached:
-            with _cache_lock:
-                _response_cache[cache_key] = (time.time(), result)
+            _response_cache.set(cache_key, result)
 
         # 检查是否需要告警
         need_alarm = credits < threshold
@@ -200,7 +218,7 @@ class CreditMonitor:
         # 保存余额历史到数据库
         if DB_AVAILABLE:
             try:
-                project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+                project_id = _project_id(provider_name, project_name)
                 BalanceRepository.save_balance_record(
                     project_id=project_id,
                     project_name=project_name,
@@ -217,7 +235,7 @@ class CreditMonitor:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
 
             if not dry_run:
-                project_id = hashlib.md5(f"{provider_name}:{project_name}".encode()).hexdigest()
+                project_id = _project_id(provider_name, project_name)
                 alert_cooldown = _get_alert_cooldown_seconds(self.config)
                 if DB_AVAILABLE and AlertRepository.has_recent_alert(project_id, 'low_balance', alert_cooldown):
                     logger.info(f"[{project_name}] 告警仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
@@ -329,12 +347,7 @@ class CreditMonitor:
         if dry_run:
             logger.info("[测试模式] 不会发送实际告警")
 
-        # 记录活跃项目数（Prometheus 指标）
-        try:
-            from services.prometheus_exporter import metrics_collector
-            metrics_collector.active_projects_count.set(len(projects))
-        except Exception:
-            pass  # 容错，不影响主流程
+        _safe_metrics_call(lambda: __import__('services.prometheus_exporter', fromlist=['metrics_collector']).metrics_collector.active_projects_count.set(len(projects)))
 
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
@@ -371,12 +384,8 @@ class CreditMonitor:
 
         # 记录执行时间（Prometheus 指标）
         execution_time = time.time() - start_time
-        try:
-            from services.prometheus_exporter import metrics_collector
-            metrics_collector.monitor_execution_time.observe(execution_time)
-            logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
-        except Exception:
-            pass  # 容错
+        _safe_metrics_call(lambda: __import__('services.prometheus_exporter', fromlist=['metrics_collector']).metrics_collector.monitor_execution_time.observe(execution_time))
+        logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
     
     def _print_summary(self) -> None:
         """打印检查汇总"""
