@@ -3,20 +3,19 @@
 邮箱扫描器 - 检测欠费、续费等提醒邮件
 支持重试机制和连接池
 """
-import imaplib
 import email
-import hashlib
+import imaplib
 import os
 import sys
-from email.header import decode_header
 import re
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from contextlib import contextmanager
 from typing import Optional
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
+from services.email_imap import imap_connection
+from services.email_parsing import decode_str, extract_text_from_email
+from services.email_dedupe import get_email_id
 
 # 创建 logger
 logger = get_logger('email_scanner')
@@ -45,51 +44,12 @@ DEFAULT_ALERT_KEYWORDS = [
 ]
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type((imaplib.IMAP4.error, ConnectionError, TimeoutError)),
-    reraise=True
-)
-def _open_imap(host: str, port: int, username: str, password: str, use_ssl: bool = True):
-    logger.info(f"正在连接IMAP服务器 {host}:{port} (SSL: {use_ssl})")
-    if use_ssl:
-        mail = imaplib.IMAP4_SSL(host, port)
-    else:
-        mail = imaplib.IMAP4(host, port)
-
-    mail.login(username, password)
-    mail.select('INBOX')
-    logger.info("✅ IMAP连接成功")
-    return mail
-
-
 def _record_email_scan_metrics(mailbox_name: str, total_emails: int, alert_count: int) -> None:
     try:
         from services.prometheus_exporter import metrics_collector
         metrics_collector.record_email_scan(mailbox_name, total_emails, alert_count)
     except Exception:
         return None
-
-
-@contextmanager
-def imap_connection(host: str, port: int, username: str, password: str, use_ssl: bool = True):
-    """IMAP连接上下文管理器"""
-    mail = None
-    try:
-        mail = _open_imap(host, port, username, password, use_ssl)
-        logger.info(f"✅ 成功连接到邮箱 {username}@{host}")
-        yield mail
-    except Exception as e:
-        logger.error(f"❌ 邮箱连接失败: {e}")
-        raise
-    finally:
-        if mail:
-            try:
-                mail.logout()
-                logger.info(f"   已断开邮箱连接 {username}@{host}")
-            except Exception as e:
-                logger.warning(f"   断开连接时出错: {e}")
 
 
 class EmailScanner:
@@ -148,29 +108,7 @@ class EmailScanner:
         return []
     
     def _decode_str(self, s):
-        """解码邮件标题或内容"""
-        if s is None:
-            return ""
-        
-        if isinstance(s, bytes):
-            s = s.decode('utf-8', errors='ignore')
-        
-        # 尝试解码 MIME 编码的标题
-        try:
-            decoded_parts = decode_header(s)
-            result = []
-            for content, encoding in decoded_parts:
-                if isinstance(content, bytes):
-                    if encoding:
-                        result.append(content.decode(encoding, errors='ignore'))
-                    else:
-                        result.append(content.decode('utf-8', errors='ignore'))
-                else:
-                    result.append(str(content))
-            return ''.join(result)
-        except (UnicodeDecodeError, LookupError) as e:
-            # 解码失败，返回原始字符串
-            return str(s)
+        return decode_str(s)
     
     def _mark_seen(self, email_uid: str) -> bool:
         if email_uid in self._seen_ids:
@@ -181,51 +119,7 @@ class EmailScanner:
         return True
 
     def _extract_text_from_email(self, msg):
-        """从邮件中提取文本内容"""
-        text_content = []
-        
-        if msg.is_multipart():
-            for part in msg.walk():
-                content_type = part.get_content_type()
-                content_disposition = str(part.get("Content-Disposition"))
-                
-                # 跳过附件
-                if "attachment" in content_disposition:
-                    continue
-                
-                # 提取文本内容
-                if content_type == "text/plain":
-                    try:
-                        payload = part.get_payload(decode=True)
-                        if payload:
-                            charset = part.get_content_charset() or 'utf-8'
-                            text_content.append(payload.decode(charset, errors='ignore'))
-                    except (UnicodeDecodeError, LookupError, AttributeError) as e:
-                        # 解码失败，跳过此部分
-                        pass
-                elif content_type == "text/html":
-                    try:
-                        payload = part.get_payload(decode=True)
-                        if payload:
-                            charset = part.get_content_charset() or 'utf-8'
-                            html_text = payload.decode(charset, errors='ignore')
-                            # 简单去除 HTML 标签
-                            clean_text = re.sub(r'<[^>]+>', ' ', html_text)
-                            text_content.append(clean_text)
-                    except (UnicodeDecodeError, LookupError, AttributeError) as e:
-                        # 解码失败，跳过此部分
-                        pass
-        else:
-            try:
-                payload = msg.get_payload(decode=True)
-                if payload:
-                    charset = msg.get_content_charset() or 'utf-8'
-                    text_content.append(payload.decode(charset, errors='ignore'))
-            except (UnicodeDecodeError, LookupError, AttributeError) as e:
-                # 解码失败，跳过
-                pass
-        
-        return '\n'.join(text_content)
+        return extract_text_from_email(msg)
     
     def _check_alert_keywords(self, subject, body):
         """检查是否包含告警关键词（不区分大小写，使用预编译正则）"""
@@ -238,16 +132,7 @@ class EmailScanner:
         return [kw for kw in self.alert_keywords if kw.lower() in matched_lower]
     
     def _get_email_id(self, msg) -> str:
-        """获取邮件唯一标识，优先 Message-ID，回退 md5(date|subject|from)"""
-        message_id = msg.get('Message-ID', '').strip()
-        if message_id:
-            return message_id
-        # 回退方案：用 date+subject+from 的哈希
-        date = msg.get('Date', '')
-        subject = msg.get('Subject', '')
-        sender = msg.get('From', '')
-        raw = f"{date}|{subject}|{sender}"
-        return hashlib.md5(raw.encode('utf-8', errors='ignore')).hexdigest()
+        return get_email_id(msg)
 
     def _extract_service_info(self, subject, body):
         """尝试从邮件中提取服务名称和金额信息"""
