@@ -6,6 +6,7 @@
 """
 import os
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, scoped_session
 from core.logger import get_logger
 from .models import Base
@@ -21,6 +22,19 @@ ENABLE_DATABASE = os.environ.get('ENABLE_DATABASE', 'false').lower() == 'true'
 # 全局引擎和会话工厂
 _engine = None
 _session_factory = None
+
+
+def _mask_database_url(database_url: str) -> str:
+    """Return a log-safe database URL with credentials hidden."""
+    try:
+        return make_url(database_url).render_as_string(hide_password=True)
+    except Exception:
+        if '://' not in database_url or '@' not in database_url:
+            return database_url
+        scheme, rest = database_url.split('://', 1)
+        if '@' not in rest:
+            return database_url
+        return f"{scheme}://***:***@{rest.rsplit('@', 1)[-1]}"
 
 
 def get_engine():
@@ -46,7 +60,7 @@ def get_engine():
             pool_pre_ping=True,  # 连接池健康检查
             connect_args={'check_same_thread': False} if 'sqlite' in DATABASE_URL else {}
         )
-        logger.info(f"数据库引擎已创建: {DATABASE_URL}")
+        logger.info(f"数据库引擎已创建: {_mask_database_url(DATABASE_URL)}")
     
     return _engine
 

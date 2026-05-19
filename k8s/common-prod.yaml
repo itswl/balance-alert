@@ -1,0 +1,173 @@
+# Production manifest for common-prod.
+#
+# Before applying, make sure .env contains WEB_API_KEY, DATABASE_URL, and the
+# provider credentials used by the project_config rows in PostgreSQL.
+#
+# kubectl create secret generic balance-alert-secret \
+#   --from-env-file=.env \
+#   -n common-prod \
+#   --dry-run=client -o yaml | kubectl apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance-alert
+  namespace: common-prod
+  labels:
+    app: balance-alert
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: balance-alert
+  template:
+    metadata:
+      labels:
+        app: balance-alert
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: balance-alert
+          image: registry.cn-shenzhen.aliyuncs.com/natureselect-public/balance-alert
+          imagePullPolicy: Always
+          ports:
+            - name: web
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+            - name: ENABLE_WEB_ALARM
+              value: "false"
+            - name: ENABLE_DATABASE
+              value: "true"
+            - name: ENABLE_DYNAMIC_CONFIG
+              value: "true"
+            - name: BALANCE_REFRESH_INTERVAL_SECONDS
+              value: "3600"
+            - name: MAX_CONCURRENT_CHECKS
+              value: "5"
+            - name: MIN_REFRESH_INTERVAL_SECONDS
+              value: "60"
+            - name: ENABLE_SMART_REFRESH
+              value: "false"
+            - name: WEB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: balance-alert-secret
+                  key: WEB_API_KEY
+                  optional: false
+
+          envFrom:
+            - secretRef:
+                name: balance-alert-secret
+                optional: false
+
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: web
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 2
+
+          startupProbe:
+            httpGet:
+              path: /live
+              port: web
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 12
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 15"]
+
+      volumes:
+        - name: logs
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: balance-alert
+  namespace: common-prod
+  labels:
+    app: balance-alert
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 8080
+      targetPort: web
+      protocol: TCP
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app: balance-alert
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: balance-alert
+  namespace: common-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-http01"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - balance-alert.prod.common.natureselect.work
+      secretName: tls-balance-alert.prod.common.natureselect.work
+  rules:
+    - host: balance-alert.prod.common.natureselect.work
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: balance-alert
+                port:
+                  number: 8080
