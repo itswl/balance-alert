@@ -273,5 +273,30 @@ class TestGetCycleText:
         assert self.checker._get_cycle_text('yearly', 315) == '每年 3月15日'
 
 
+class TestSubscriptionDefaults:
+    """数据库动态配置中 NULL 字段的默认值兜底"""
+
+    def setup_method(self, method):
+        self.checker = SubscriptionChecker.__new__(SubscriptionChecker)
+        self.checker.config = {'settings': {}}
+        self.checker.results = []
+        self.checker._save_subscription_history = lambda *args, **kwargs: None
+
+    def test_null_alert_days_before_uses_default(self):
+        sub = {
+            'name': 'emqx - mqtt - 授权',
+            'cycle_type': 'monthly',
+            'renewal_day': 9,
+            'alert_days_before': None,
+            'amount': None,
+            'enabled': True,
+        }
+
+        result = self.checker._check_subscription(sub, datetime(2026, 5, 22), dry_run=True)
+
+        assert result['days_until_renewal'] == 18
+        assert result['need_alert'] is False
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

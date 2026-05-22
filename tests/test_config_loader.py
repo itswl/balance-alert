@@ -97,6 +97,30 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
+    def test_webhook_env_overrides_empty_config(self, mock_load_env):
+        """WEBHOOK_* 环境变量会覆盖入口脚本生成的空 webhook 配置"""
+        config_data = {
+            'projects': [],
+            'subscriptions': [],
+            'email': [],
+            'settings': {'balance_refresh_interval_seconds': 3600},
+            'webhook': {'url': '', 'source': 'credit-monitor', 'type': 'custom'}
+        }
+        config_path = self._create_config_file(config_data)
+        try:
+            with patch.dict(os.environ, {
+                'WEBHOOK_URL': 'https://open.feishu.cn/open-apis/bot/v2/hook/token',
+                'WEBHOOK_SOURCE': 'balance-alert',
+                'WEBHOOK_TYPE': 'feishu',
+            }, clear=True):
+                config = load_config_with_env_vars(config_path, validate=False)
+                assert config['webhook']['url'] == 'https://open.feishu.cn/open-apis/bot/v2/hook/token'
+                assert config['webhook']['source'] == 'balance-alert'
+                assert config['webhook']['type'] == 'feishu'
+        finally:
+            os.unlink(config_path)
+
+    @patch('core.config_loader.load_env_file')
     def test_email_password_placeholder_substitution(self, mock_load_env):
         """邮箱 password 使用 ${VAR} 时会被环境变量替换"""
         config_data = {

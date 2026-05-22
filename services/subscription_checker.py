@@ -31,6 +31,24 @@ def _get_alert_cooldown_seconds(config) -> int:
         return 86400
 
 
+def _coerce_int(value, default: int) -> int:
+    if value in (None, ''):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float(value, default: float = 0.0) -> float:
+    if value in (None, ''):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class SubscriptionChecker:
     """订阅续费检查器"""
     
@@ -125,11 +143,11 @@ class SubscriptionChecker:
         """检查单个订阅"""
         name = sub.get('name', '未知订阅')
         owner_project = sub.get('owner_project') or sub.get('project')
-        renewal_day = sub.get('renewal_day', 1)
-        alert_days_before = sub.get('alert_days_before', 3)
-        amount = sub.get('amount', 0)
+        renewal_day = _coerce_int(sub.get('renewal_day'), 1)
+        alert_days_before = max(0, _coerce_int(sub.get('alert_days_before'), 3))
+        amount = _coerce_float(sub.get('amount'), 0.0)
         last_renewed_date = sub.get('last_renewed_date')  # 上次续费日期
-        cycle_type = sub.get('cycle_type', 'monthly')  # 续费周期类型: weekly, monthly, yearly
+        cycle_type = sub.get('cycle_type') or 'monthly'  # 续费周期类型: weekly, monthly, yearly
         
         logger.info(f"{'='*60}")
         logger.info(f"📦 订阅: {name}")

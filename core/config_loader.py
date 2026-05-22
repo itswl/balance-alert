@@ -122,6 +122,26 @@ def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
     return settings
 
 
+def _overlay_webhook_from_env(config: Dict[str, Any]) -> Dict[str, Any]:
+    env_map = {
+        'WEBHOOK_URL': 'url',
+        'WEBHOOK_SOURCE': 'source',
+        'WEBHOOK_TYPE': 'type',
+    }
+    env_values = {field: get_env(env_name) for env_name, field in env_map.items()}
+    env_values = {field: value for field, value in env_values.items() if value}
+    if not env_values:
+        return config
+
+    webhook = config.get('webhook')
+    if not isinstance(webhook, dict):
+        webhook = {}
+        config['webhook'] = webhook
+
+    webhook.update(env_values)
+    return config
+
+
 def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
 
@@ -152,6 +172,7 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
 
     config = _ensure_base_shape(config)
     config['settings'] = _overlay_settings_from_env(config.get('settings', {}) or {})
+    config = _overlay_webhook_from_env(config)
 
     # 打印配置版本号
     config_version = config.get('version')
