@@ -7,12 +7,12 @@
 import threading
 import time
 import json
-import os
 import copy
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from core.logger import get_logger
+from core.settings import get_settings
 
 logger = get_logger('state_manager')
 
@@ -53,7 +53,7 @@ class StateManager:
         self._subscription_state: SubscriptionState = SubscriptionState()
         self._lock: threading.RLock = threading.RLock()
         self._callbacks: List[Callable[[str, Any], None]] = []
-        self._cache_file: str = os.environ.get('CACHE_FILE_PATH', '/tmp/balance_cache.json')
+        self._cache_file: str = get_settings().cache_file_path
         self._start_time: float = time.time()
         # 预计算快照，避免每次 get 都 deepcopy
         self._balance_snapshot: Optional[Dict[str, Any]] = None

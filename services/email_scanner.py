@@ -6,7 +6,6 @@
 import imaplib
 import email
 import hashlib
-import os
 import sys
 from email.header import decode_header
 import re
@@ -17,6 +16,7 @@ from typing import Optional, Dict, Any, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
+from core.settings import get_settings
 
 # 创建 logger
 logger = get_logger('email_scanner')
@@ -45,10 +45,7 @@ DEFAULT_ALERT_KEYWORDS = [
 ]
 
 def _get_max_emails_to_scan() -> int:
-    try:
-        return max(1, int(os.environ.get('MAX_EMAILS_TO_SCAN', str(DEFAULT_MAX_EMAILS))))
-    except (TypeError, ValueError):
-        return DEFAULT_MAX_EMAILS
+    return max(1, get_settings().max_emails_to_scan)
 
 
 def _iter_batches(items, batch_size: int):

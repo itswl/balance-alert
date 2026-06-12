@@ -4,11 +4,11 @@ Flask 应用工厂
 
 创建和配置 Flask 应用实例
 """
-import os
 from flask import Flask
 from pathlib import Path
 from core.state_manager import StateManager
 from core.logger import get_logger
+from core.settings import get_settings
 
 logger = get_logger('web.app')
 
@@ -44,15 +44,15 @@ def create_app(state_manager: StateManager = None) -> Flask:
     app.config['JSON_SORT_KEYS'] = False  # 保持JSON键顺序
 
     # 按需启用 CORS；同源前端无需开启，生产环境建议通过 CORS_ORIGINS 白名单控制。
-    if os.environ.get('WEB_ENABLE_CORS', 'false').lower() == 'true':
+    settings = get_settings()
+    if settings.web_enable_cors:
         try:
             from flask_cors import CORS
         except ImportError:
             logger.warning("WEB_ENABLE_CORS=true 但未安装 flask-cors，已跳过 CORS 开启")
             CORS = None
 
-        raw_origins = os.environ.get('CORS_ORIGINS', '')
-        origins = [origin.strip() for origin in raw_origins.split(',') if origin.strip()]
+        origins = settings.cors_origin_list
         if CORS and origins:
             CORS(app, origins=origins)
         elif CORS:
@@ -82,8 +82,7 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         app: Flask 应用实例
         state_manager: 状态管理器实例
     """
-    def _enabled(name: str) -> bool:
-        return os.environ.get(name, 'false').lower() == 'true'
+    settings = get_settings()
 
     from .routes import create_core_bp
     app.register_blueprint(create_core_bp(state_manager))
@@ -101,13 +100,13 @@ def _register_blueprints(app: Flask, state_manager: StateManager):
         return history_bp
 
     registrations = [
-        ('ENABLE_SUBSCRIPTIONS', _subscription_bp),
-        ('ENABLE_DYNAMIC_CONFIG', _dynamic_config_bps),
-        ('ENABLE_HISTORY_API', _history_bp),
+        (settings.enable_subscriptions, _subscription_bp),
+        (settings.enable_dynamic_config, _dynamic_config_bps),
+        (settings.enable_history_api, _history_bp),
     ]
 
-    for flag, factory in registrations:
-        if not _enabled(flag):
+    for enabled, factory in registrations:
+        if not enabled:
             continue
         value = factory()
         if isinstance(value, list):

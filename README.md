@@ -16,7 +16,7 @@ Balance Alert 是一个余额监控和告警工具：定时检查多个平台的
 
 | 来源 | 放什么 | 适合场景 |
 | --- | --- | --- |
-| `config.json` | 项目列表、provider、阈值、Webhook 结构化配置 | 本地运行、简单部署、配置随文件发布 |
+| `config.json` | 项目列表、provider、阈值等业务数据 | 本地运行、简单部署、配置随文件发布 |
 | `.env` / Kubernetes Secret | API Key、Webhook URL、数据库连接、功能开关 | 敏感信息、环境差异、生产部署 |
 | 数据库动态配置 | `projects` / `subscriptions` / `email` 三类配置 | Web UI 维护配置、生产动态更新 |
 
@@ -89,24 +89,19 @@ python services/monitor.py --dry-run
 
 ## 配置文件
 
-`config.json` 的顶层结构如下：
+`config.json` 只负责业务列表（`projects` 为主），顶层结构如下：
 
 ```json
 {
-  "settings": {
-    "balance_refresh_interval_seconds": 3600,
-    "max_concurrent_checks": 5
-  },
-  "webhook": {
-    "url": "${WEBHOOK_URL}",
-    "source": "${WEBHOOK_SOURCE}",
-    "type": "${WEBHOOK_TYPE}"
-  },
   "email": [],
   "subscriptions": [],
   "projects": []
 }
 ```
+
+Webhook、刷新间隔、并发数、各类开关等都由环境变量配置（见下方「环境变量」），
+不再写进 `config.json`。如需兼容旧配置，文件里仍可保留 `settings` / `webhook` 块，
+但同名环境变量会覆盖它们。
 
 `projects` 是余额监控的核心配置。单个项目示例：
 

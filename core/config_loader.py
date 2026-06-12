@@ -12,6 +12,7 @@ from threading import Lock
 from dotenv import load_dotenv
 from core.config_validator import AppConfig
 from core.logger import get_logger
+from core.settings import get_settings
 
 logger = get_logger('config_loader')
 
@@ -24,12 +25,8 @@ def load_env_file(env_file: str = '.env') -> None:
         logger.info(f"[Config] 已加载环境变量文件: {env_file}")
 
 
-def get_env(key: str, default=None) -> Optional[str]:
-    """获取环境变量"""
-    return os.environ.get(key, default)
-
 def get_default_config_path() -> str:
-    return get_env('CONFIG_PATH', 'config.json')
+    return get_settings().config_path
 
 
 def make_project_id(provider_name: str, project_name: str) -> str:
@@ -41,12 +38,15 @@ def make_subscription_id(name: str) -> str:
 
 
 def get_enable_web_alarm() -> bool:
-    return get_env('ENABLE_WEB_ALARM', 'false').lower() == 'true'
+    return get_settings().enable_web_alarm
 
 
 def get_refresh_interval(config_file: str = 'config.json') -> int:
-    config = load_config_with_env_vars(config_file, validate=False)
-    interval = (config.get('settings') or {}).get('balance_refresh_interval_seconds')
+    """刷新间隔：环境变量优先于 config.settings，最后回退到默认值。"""
+    interval = get_settings().balance_refresh_interval_seconds
+    if interval is None:
+        config = load_config_with_env_vars(config_file, validate=False)
+        interval = (config.get('settings') or {}).get('balance_refresh_interval_seconds')
     if interval is None:
         return DEFAULT_REFRESH_INTERVAL_SECONDS
     try:
@@ -72,9 +72,9 @@ def clear_config_cache(config_file: Optional[str] = None) -> None:
 
 
 def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
+    # settings 可能存在但为 None（显式写 "settings": null），setdefault 不会覆盖，需单独处理。
     if config.get('settings') is None:
         config['settings'] = {}
-    config.setdefault('settings', {})
     config.setdefault('projects', [])
     config.setdefault('subscriptions', [])
     config.setdefault('email', [])
@@ -104,41 +104,35 @@ def _load_json_with_env_substitution(config_file: str) -> Dict[str, Any]:
     return _substitute_env_placeholders(json.loads(content))
 
 
-def _overlay_settings_from_env(settings: Dict[str, Any]) -> Dict[str, Any]:
-    refresh_interval = get_env('BALANCE_REFRESH_INTERVAL_SECONDS')
-    if refresh_interval:
-        try:
-            settings['balance_refresh_interval_seconds'] = int(refresh_interval)
-        except (ValueError, TypeError):
-            logger.warning(f"BALANCE_REFRESH_INTERVAL_SECONDS 值无效: {refresh_interval}，忽略")
+def _overlay_env(config: Dict[str, Any]) -> Dict[str, Any]:
+    """用环境变量覆盖 config 中的 settings 与 webhook 字段。
 
-    max_concurrent = get_env('MAX_CONCURRENT_CHECKS')
-    if max_concurrent:
-        try:
-            settings['max_concurrent_checks'] = int(max_concurrent)
-        except (ValueError, TypeError):
-            logger.warning(f"MAX_CONCURRENT_CHECKS 值无效: {max_concurrent}，忽略")
+    取值与类型校验统一由 :mod:`core.settings` 负责，这里只把已生效的值写回 config，
+    供下游按 ``config['settings']`` / ``config['webhook']`` 消费。``None`` 表示未设置，保留原值。
+    """
+    settings = get_settings()
 
-    return settings
-
-
-def _overlay_webhook_from_env(config: Dict[str, Any]) -> Dict[str, Any]:
-    env_map = {
-        'WEBHOOK_URL': 'url',
-        'WEBHOOK_SOURCE': 'source',
-        'WEBHOOK_TYPE': 'type',
+    overlay_settings = {
+        'balance_refresh_interval_seconds': settings.balance_refresh_interval_seconds,
+        'max_concurrent_checks': settings.max_concurrent_checks,
     }
-    env_values = {field: get_env(env_name) for env_name, field in env_map.items()}
-    env_values = {field: value for field, value in env_values.items() if value}
-    if not env_values:
-        return config
+    for key, value in overlay_settings.items():
+        if value is not None:
+            config.setdefault('settings', {})[key] = value
 
-    webhook = config.get('webhook')
-    if not isinstance(webhook, dict):
-        webhook = {}
-        config['webhook'] = webhook
+    overlay_webhook = {
+        'url': settings.webhook_url,
+        'source': settings.webhook_source,
+        'type': settings.webhook_type,
+    }
+    overlay_webhook = {k: v for k, v in overlay_webhook.items() if v}
+    if overlay_webhook:
+        webhook = config.get('webhook')
+        if not isinstance(webhook, dict):
+            webhook = {}
+            config['webhook'] = webhook
+        webhook.update(overlay_webhook)
 
-    webhook.update(env_values)
     return config
 
 
@@ -171,8 +165,7 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
         logger.warning(f"[Config] 配置文件不存在: {config_file}，仅使用数据库与默认值")
 
     config = _ensure_base_shape(config)
-    config['settings'] = _overlay_settings_from_env(config.get('settings', {}) or {})
-    config = _overlay_webhook_from_env(config)
+    config = _overlay_env(config)
 
     # 打印配置版本号
     config_version = config.get('version')

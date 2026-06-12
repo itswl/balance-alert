@@ -7,10 +7,10 @@
 from typing import List, Optional, Dict, Any, Iterator
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-import os
 from sqlalchemy import func, desc
 from sqlalchemy.exc import DBAPIError, OperationalError
 from core.logger import get_logger
+from core.settings import get_settings
 from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
 from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
 import json
@@ -20,11 +20,11 @@ logger = get_logger('repository')
 
 
 def _strict_database_errors_enabled() -> bool:
-    return os.environ.get('STRICT_DATABASE_ERRORS', 'false').lower() == 'true'
+    return get_settings().strict_database_errors
 
 
 def _auto_encrypt_on_read_enabled() -> bool:
-    return os.environ.get('AUTO_ENCRYPT_ON_READ', 'true').lower() == 'true'
+    return get_settings().auto_encrypt_on_read
 
 
 def _should_reraise_db_exception(e: Exception) -> bool:

@@ -4,7 +4,6 @@
 支持配置驱动的多项目余额检查和告警
 """
 import json
-import os
 import sys
 import argparse
 import hashlib
@@ -19,6 +18,7 @@ from services.email_scanner import EmailScanner
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
 from core.config_loader import make_project_id
+from core.settings import get_settings
 from services.config_service import load_config
 
 # 创建 logger（必须在使用前定义）
@@ -88,8 +88,8 @@ _response_cache: _TTLCache[Dict[str, Any]] = _TTLCache()
 
 
 def _get_alert_cooldown_seconds(config: Dict[str, Any]) -> int:
-    """获取告警冷却时间，默认 24 小时。"""
-    env_value = os.environ.get('ALERT_COOLDOWN_SECONDS')
+    """获取告警冷却时间，默认 24 小时。环境变量优先于 config.settings。"""
+    env_value = get_settings().alert_cooldown_seconds
     raw_value = env_value if env_value is not None else config.get('settings', {}).get('alert_cooldown_seconds', 86400)
     try:
         return max(0, int(raw_value))
@@ -171,7 +171,7 @@ class CreditMonitor:
         Returns:
             Dict[str, Any]: 配置字典
         """
-        if not self.config_path.exists() and os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() != 'true':
+        if not self.config_path.exists() and not get_settings().enable_dynamic_config:
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
         return load_config(str(self.config_path))
     
