@@ -4,7 +4,6 @@ Webhook 适配器
 支持多种 webhook 类型：飞书、自定义等
 """
 import json
-import os
 import time
 import requests
 import requests.adapters
@@ -12,6 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from core.logger import get_logger
+from core.settings import get_settings
 
 # 创建 logger
 logger = get_logger('webhook_adapter')
@@ -21,8 +21,8 @@ DEFAULT_POOL_CONNECTIONS = 10
 DEFAULT_POOL_MAXSIZE = 100
 DEFAULT_MAX_RETRIES = 3
 
-# 从环境变量读取超时时间，默认 10 秒
-REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
+# HTTP 请求超时时间（秒），可用 REQUEST_TIMEOUT 覆盖
+REQUEST_TIMEOUT = get_settings().request_timeout
 
 
 def _mask_webhook_url(url: str) -> str:

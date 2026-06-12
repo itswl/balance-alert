@@ -4,12 +4,12 @@
 """
 import json
 import sys
-import os
 import hashlib
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
 from core.config_loader import make_subscription_id
+from core.settings import get_settings
 
 # 创建 logger
 logger = get_logger('subscription_checker')
@@ -22,8 +22,14 @@ except ImportError:
 
 
 def _get_alert_cooldown_seconds(config) -> int:
-    """获取订阅提醒冷却时间，默认 24 小时。"""
-    env_value = os.environ.get('SUBSCRIPTION_ALERT_COOLDOWN_SECONDS') or os.environ.get('ALERT_COOLDOWN_SECONDS')
+    """获取订阅提醒冷却时间，默认 24 小时。
+
+    优先级：SUBSCRIPTION_ALERT_COOLDOWN_SECONDS > ALERT_COOLDOWN_SECONDS > config.settings > 默认。
+    """
+    settings = get_settings()
+    env_value = settings.subscription_alert_cooldown_seconds
+    if env_value is None:
+        env_value = settings.alert_cooldown_seconds
     raw_value = env_value if env_value is not None else config.get('settings', {}).get('subscription_alert_cooldown_seconds', 86400)
     try:
         return max(0, int(raw_value))

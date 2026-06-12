@@ -9,15 +9,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, scoped_session
 from core.logger import get_logger
+from core.settings import get_settings
 from .models import Base
 
 logger = get_logger('database')
 
-# 数据库路径（从环境变量读取，默认在 data 目录）
-DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./data/balance_alert.db')
-
-# 是否启用数据持久化。核心版默认关闭，避免只想跑余额告警时还要带数据库。
-ENABLE_DATABASE = os.environ.get('ENABLE_DATABASE', 'false').lower() == 'true'
+# 数据库连接与持久化开关在模块加载时定型（其它模块以常量形式导入）。
+# 核心版默认关闭持久化，避免只想跑余额告警时还要带数据库。
+_settings = get_settings()
+DATABASE_URL = _settings.database_url
+ENABLE_DATABASE = _settings.enable_database
 
 # 全局引擎和会话工厂
 _engine = None

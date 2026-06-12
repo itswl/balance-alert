@@ -4,12 +4,12 @@
 
 包含健康检查、余额查询、刷新等核心功能
 """
-import os
 import time
 import threading
 from flask import Blueprint, jsonify, request, render_template, send_from_directory
 from pathlib import Path
 from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
+from core.settings import get_settings
 from core.state_manager import StateManager
 from core.logger import get_logger
 from ..utils import make_etag_response, json_error, json_success
@@ -33,7 +33,7 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
         return int(time.time() - state_manager._start_time) if hasattr(state_manager, '_start_time') else 0
 
     def _version() -> str:
-        return os.environ.get('APP_VERSION', '1.0.0')
+        return get_settings().app_version
 
     @core_bp.route('/')
     def index():
@@ -103,12 +103,13 @@ def create_core_bp(state_manager: StateManager) -> Blueprint:
     @core_bp.route('/api/features')
     def get_features():
         """返回当前启用的可选能力，前端据此隐藏高级入口。"""
+        settings = get_settings()
         return jsonify({
             'status': 'success',
             'features': {
-                'subscriptions': os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() == 'true',
-                'dynamic_config': os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true',
-                'history': os.environ.get('ENABLE_HISTORY_API', 'false').lower() == 'true',
+                'subscriptions': settings.enable_subscriptions,
+                'dynamic_config': settings.enable_dynamic_config,
+                'history': settings.enable_history_api,
             }
         })
 

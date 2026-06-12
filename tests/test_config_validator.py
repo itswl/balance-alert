@@ -6,12 +6,9 @@ from core.config_validator import (
     EmailConfig,
     SubscriptionConfig,
     ProjectConfig,
-    WebhookConfig,
-    SettingsConfig,
     AppConfig,
     CycleType,
     ProjectType,
-    WebhookType
 )
 
 
@@ -189,7 +186,7 @@ class TestAppConfig:
     """应用配置测试"""
 
     def test_from_dict(self):
-        """测试从字典创建配置"""
+        """测试从字典创建配置（settings/webhook 由 core.settings 接管，此处忽略）"""
         data = {
             'settings': {
                 'balance_refresh_interval_seconds': 3600,
@@ -213,11 +210,11 @@ class TestAppConfig:
         }
         config = AppConfig.from_dict(data)
 
-        assert config.settings.balance_refresh_interval_seconds == 3600
-        assert config.settings.max_concurrent_checks == 5
-        assert config.webhook is not None
-        assert config.webhook.url == 'https://example.com/webhook'
+        # settings/webhook 不再属于 AppConfig，多余键被忽略而非报错
+        assert not hasattr(config, 'settings')
+        assert not hasattr(config, 'webhook')
         assert len(config.projects) == 1
+        assert config.projects[0].name == 'OpenRouter'
         assert len(config.subscriptions) == 0
         assert len(config.email) == 0
 
@@ -245,12 +242,8 @@ class TestAppConfig:
         assert errors == {}
 
     def test_validate_failures(self):
-        """测试验证失败"""
+        """测试验证失败（业务数据：projects/subscriptions/email）"""
         data = {
-            'settings': {
-                'balance_refresh_interval_seconds': -1,  # 无效值
-                'max_concurrent_checks': 25  # 超过最大值
-            },
             'projects': [
                 {
                     'name': '',  # 无效值
@@ -266,9 +259,7 @@ class TestAppConfig:
         config = AppConfig.from_dict(data)
         errors = config.validate()
 
-        assert 'settings' in errors
         assert 'projects' in errors
-        assert len(errors['settings']) > 0
         assert len(errors['projects']) > 0
 
     def test_is_valid(self):
@@ -291,8 +282,9 @@ class TestAppConfig:
         assert config.is_valid() is True
 
         invalid_data = {
-            'settings': {'balance_refresh_interval_seconds': -1},
-            'projects': [],
+            'projects': [
+                {'name': '', 'provider': '', 'api_key': '', 'threshold': 5.0, 'type': 'credits'}
+            ],
             'subscriptions': [],
             'email': []
         }
@@ -373,16 +365,6 @@ class TestSafeTypeConversion:
         }
         config = ProjectConfig.from_dict(data)
         assert config.threshold == 0.0  # 默认值
-
-    def test_settings_from_dict_non_numeric_values(self):
-        """SettingsConfig.from_dict 传入非数字值不崩溃"""
-        data = {
-            'balance_refresh_interval_seconds': 'abc',
-            'max_concurrent_checks': None,
-        }
-        config = SettingsConfig.from_dict(data)
-        assert config.balance_refresh_interval_seconds == 3600  # 默认值
-        assert config.max_concurrent_checks == 5  # 默认值
 
 
 if __name__ == '__main__':

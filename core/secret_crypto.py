@@ -6,26 +6,20 @@
 """
 import base64
 import hashlib
-import os
 from typing import Optional
 
 from core.logger import get_logger
+from core.settings import get_settings
 
 logger = get_logger('secret_crypto')
 
 ENCRYPTED_PREFIX = 'enc:v1:'
-KEY_ENV_NAMES = (
-    'CONFIG_ENCRYPTION_KEY',
-    'BALANCE_ALERT_ENCRYPTION_KEY',
-)
 
 
 def _get_raw_key() -> Optional[str]:
-    for env_name in KEY_ENV_NAMES:
-        value = (os.environ.get(env_name) or '').strip()
-        if value:
-            return value
-    return None
+    # 支持 CONFIG_ENCRYPTION_KEY 及旧名 BALANCE_ALERT_ENCRYPTION_KEY（见 settings 别名）。
+    value = (get_settings().config_encryption_key or '').strip()
+    return value or None
 
 
 def encryption_enabled() -> bool:

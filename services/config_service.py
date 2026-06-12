@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 import copy
-import os
 from typing import Any, Dict, List, Optional
 
 from core.config_loader import get_config as _get_file_config
 from core.config_loader import get_default_config_path, load_config_with_env_vars as _load_file_config
+from core.settings import get_settings
 
 
 _DB_META_FIELDS = {'id', 'created_at', 'updated_at'}
 
 
 def _dynamic_config_enabled() -> bool:
-    return os.environ.get('ENABLE_DYNAMIC_CONFIG', 'false').lower() == 'true'
+    return get_settings().enable_dynamic_config
 
 
 def _load_base_config(config_file: str, validate: bool, use_cache: bool) -> Dict[str, Any]:

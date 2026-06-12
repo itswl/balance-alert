@@ -13,6 +13,7 @@ from core.state_manager import StateManager
 from services.monitor import run_credit_monitor
 from core.logger import get_logger
 from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
+from core.settings import get_settings
 
 logger = get_logger('web_server')
 
@@ -32,7 +33,7 @@ def _update_balance(state_mgr: StateManager):
 
 
 def _update_subscriptions(state_mgr: StateManager):
-    if os.environ.get('ENABLE_SUBSCRIPTIONS', 'false').lower() != 'true':
+    if not get_settings().enable_subscriptions:
         state_mgr.update_subscription_state([])
         return []
 
@@ -44,7 +45,7 @@ def _update_subscriptions(state_mgr: StateManager):
 
 
 def _update_metrics(balance_results, subscription_results):
-    if os.environ.get('ENABLE_PROMETHEUS', 'false').lower() != 'true':
+    if not get_settings().enable_prometheus:
         return
     try:
         from services.prometheus_exporter import metrics_collector
@@ -83,8 +84,9 @@ def update_credits(state_mgr: StateManager = global_state_manager):
 
 if __name__ == '__main__':
     # 从环境变量读取端口配置
-    web_port = int(os.environ.get('WEB_PORT', '8080'))
-    metrics_port = int(os.environ.get('METRICS_PORT', '9100'))
+    settings = get_settings()
+    web_port = settings.web_port
+    metrics_port = settings.metrics_port
 
     # 注册信号处理器实现优雅关闭
     def _shutdown_handler(signum, frame):
@@ -104,7 +106,7 @@ if __name__ == '__main__':
 
     update_thread = None
 
-    if os.environ.get('ENABLE_DATABASE', 'false').lower() == 'true':
+    if settings.enable_database:
         try:
             from database import init_database
             if init_database():
@@ -120,7 +122,7 @@ if __name__ == '__main__':
         update_thread = threading.Thread(target=update_credits, daemon=True)
         update_thread.start()
 
-        if os.environ.get('ENABLE_PROMETHEUS', 'false').lower() == 'true':
+        if settings.enable_prometheus:
             from prometheus_client import start_http_server
             logger.info("启动 Prometheus Metrics 服务器")
             logger.info(f"Metrics 端点: http://localhost:{metrics_port}/metrics")

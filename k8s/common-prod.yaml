@@ -56,10 +56,6 @@ spec:
               value: "3600"
             - name: MAX_CONCURRENT_CHECKS
               value: "5"
-            - name: MIN_REFRESH_INTERVAL_SECONDS
-              value: "60"
-            - name: ENABLE_SMART_REFRESH
-              value: "false"
             - name: WEB_API_KEY
               valueFrom:
                 secretKeyRef:

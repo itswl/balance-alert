@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """
 配置验证模块
-使用 dataclasses 验证配置文件结构
+
+用 pydantic 校验 config.json 的业务数据（projects/subscriptions/email）。
+
+两阶段语义（保持对外接口不变）：
+- ``XxxConfig.from_dict(data)`` 宽容构造，非法数值回退默认值，不抛异常；
+- ``.validate()`` 返回错误信息列表（business 规则），``AppConfig.validate()`` 汇总成按节分组的字典。
+
+settings 与 webhook 的取值/类型校验已由 :mod:`core.settings` 接管，这里不再重复。
 """
-from typing import Dict, Any, List, Optional, Literal
-from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional
 from enum import Enum
 from datetime import date
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -38,40 +46,34 @@ class ProjectType(str, Enum):
     BALANCE = "balance"
 
 
-class WebhookType(str, Enum):
-    """Webhook 类型"""
-    FEISHU = "feishu"
-    DINGTALK = "dingtalk"
-    WECOM = "wecom"
-    CUSTOM = "custom"
+class _ConfigBase(BaseModel):
+    """允许多余字段、宽容构造的基类。"""
+    model_config = ConfigDict(extra='ignore')
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "_ConfigBase":
+        return cls.model_validate(data or {})
+
+    def validate(self) -> List[str]:  # noqa: D401 - 返回错误列表，不抛异常
+        return []
 
 
-@dataclass
-class EmailConfig:
+class EmailConfig(_ConfigBase):
     """邮箱配置"""
-    name: str
-    host: str
-    port: int
-    username: str
-    password: str
+    name: str = ''
+    host: str = ''
+    port: int = 993
+    username: str = ''
+    password: str = ''
     use_ssl: bool = True
     enabled: bool = True
 
+    @field_validator('port', mode='before')
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EmailConfig":
-        """从字典创建配置"""
-        return cls(
-            name=data.get('name', ''),
-            host=data.get('host', ''),
-            port=data.get('port', 993),
-            username=data.get('username', ''),
-            password=data.get('password', ''),
-            use_ssl=data.get('use_ssl', True),
-            enabled=data.get('enabled', True)
-        )
+    def _coerce_port(cls, v: Any) -> int:
+        return _safe_int(v, 993)
 
     def validate(self) -> List[str]:
-        """验证配置，返回错误列表"""
         errors = []
         if not self.host:
             errors.append("邮箱 host 不能为空")
@@ -84,49 +86,50 @@ class EmailConfig:
         return errors
 
 
-@dataclass
-class SubscriptionConfig:
+class SubscriptionConfig(_ConfigBase):
     """订阅配置"""
-    name: str
-    renewal_day: int
-    alert_days_before: int
-    amount: float
+    name: str = ''
+    renewal_day: int = 1
+    alert_days_before: int = 3
+    amount: float = 0.0
     owner_project: Optional[str] = None
     cycle_type: CycleType = CycleType.MONTHLY
     enabled: bool = True
     last_renewed_date: Optional[str] = None
     renewal_month: Optional[int] = None  # 年周期时使用
 
+    @field_validator('renewal_day', 'alert_days_before', mode='before')
+    @classmethod
+    def _coerce_int_fields(cls, v: Any, info) -> int:
+        defaults = {'renewal_day': 1, 'alert_days_before': 3}
+        return _safe_int(v, defaults.get(info.field_name, 0))
+
+    @field_validator('amount', mode='before')
+    @classmethod
+    def _coerce_amount(cls, v: Any) -> float:
+        return _safe_float(v, 0.0)
+
+    @field_validator('cycle_type', mode='before')
+    @classmethod
+    def _coerce_cycle(cls, v: Any) -> Any:
+        try:
+            return CycleType(v)
+        except ValueError:
+            return CycleType.MONTHLY
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SubscriptionConfig":
-        """从字典创建配置"""
-        cycle_type_str = data.get('cycle_type', 'monthly')
-        try:
-            cycle_type = CycleType(cycle_type_str)
-        except ValueError:
-            cycle_type = CycleType.MONTHLY
-
-        return cls(
-            name=data.get('name', ''),
-            owner_project=data.get('owner_project') or data.get('project'),
-            renewal_day=_safe_int(data.get('renewal_day', 1), 1),
-            alert_days_before=_safe_int(data.get('alert_days_before', 3), 3),
-            amount=_safe_float(data.get('amount', 0), 0.0),
-            cycle_type=cycle_type,
-            enabled=data.get('enabled', True),
-            last_renewed_date=data.get('last_renewed_date'),
-            renewal_month=data.get('renewal_month')
-        )
+        data = dict(data or {})
+        if not data.get('owner_project') and data.get('project'):
+            data['owner_project'] = data['project']
+        return cls.model_validate(data)
 
     def validate(self) -> List[str]:
-        """验证配置，返回错误列表"""
         errors = []
         if not self.name:
             errors.append("订阅 name 不能为空")
-
         if self.alert_days_before < 0:
             errors.append("alert_days_before 不能为负数")
-
         if self.amount < 0:
             errors.append("amount 不能为负数")
 
@@ -153,38 +156,37 @@ class SubscriptionConfig:
         return errors
 
 
-@dataclass
-class ProjectConfig:
+class ProjectConfig(_ConfigBase):
     """项目配置"""
-    name: str
-    provider: str
-    api_key: str
-    threshold: float
-    type: ProjectType
+    name: str = ''
+    provider: str = ''
+    api_key: str = ''
+    threshold: float = 0.0
+    type: ProjectType = ProjectType.CREDITS
     owner_project: Optional[str] = None
     enabled: bool = True
 
+    @field_validator('threshold', mode='before')
+    @classmethod
+    def _coerce_threshold(cls, v: Any) -> float:
+        return _safe_float(v, 0.0)
+
+    @field_validator('type', mode='before')
+    @classmethod
+    def _coerce_type(cls, v: Any) -> Any:
+        try:
+            return ProjectType(v)
+        except ValueError:
+            return ProjectType.CREDITS
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ProjectConfig":
-        """从字典创建配置"""
-        type_str = data.get('type', 'credits')
-        try:
-            project_type = ProjectType(type_str)
-        except ValueError:
-            project_type = ProjectType.CREDITS
-
-        return cls(
-            name=data.get('name', ''),
-            owner_project=data.get('owner_project') or data.get('project'),
-            provider=data.get('provider', ''),
-            api_key=data.get('api_key', ''),
-            threshold=_safe_float(data.get('threshold', 0), 0.0),
-            type=project_type,
-            enabled=data.get('enabled', True)
-        )
+        data = dict(data or {})
+        if not data.get('owner_project') and data.get('project'):
+            data['owner_project'] = data['project']
+        return cls.model_validate(data)
 
     def validate(self) -> List[str]:
-        """验证配置，返回错误列表"""
         errors = []
         if not self.name:
             errors.append("项目 name 不能为空")
@@ -197,122 +199,43 @@ class ProjectConfig:
         return errors
 
 
-@dataclass
-class WebhookConfig:
-    """Webhook 配置"""
-    url: str
-    type: WebhookType = WebhookType.FEISHU
-    source: str = "credit-monitor"
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "WebhookConfig":
-        """从字典创建配置"""
-        type_str = data.get('type', 'feishu')
-        try:
-            webhook_type = WebhookType(type_str)
-        except ValueError:
-            webhook_type = WebhookType.CUSTOM
-
-        return cls(
-            url=data.get('url', ''),
-            type=webhook_type,
-            source=data.get('source', 'credit-monitor')
-        )
-
-    def validate(self) -> List[str]:
-        """验证配置，返回错误列表"""
-        errors = []
-        if not self.url:
-            errors.append("Webhook URL 不能为空")
-        return errors
-
-
-@dataclass
-class SettingsConfig:
-    """系统设置配置"""
-    balance_refresh_interval_seconds: int = 3600
-    max_concurrent_checks: int = 5
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SettingsConfig":
-        """从字典创建配置"""
-        return cls(
-            balance_refresh_interval_seconds=_safe_int(data.get('balance_refresh_interval_seconds', 3600), 3600),
-            max_concurrent_checks=_safe_int(data.get('max_concurrent_checks', 5), 5),
-        )
-
-    def validate(self) -> List[str]:
-        """验证配置，返回错误列表"""
-        errors = []
-        if self.balance_refresh_interval_seconds <= 0:
-            errors.append("balance_refresh_interval_seconds 必须大于 0")
-        if self.max_concurrent_checks < 1 or self.max_concurrent_checks > 20:
-            errors.append("max_concurrent_checks 必须在 1-20 之间")
-        return errors
-
-
-@dataclass
-class AppConfig:
-    """应用完整配置"""
+class AppConfig(_ConfigBase):
+    """应用配置（仅校验业务数据；settings/webhook 由 core.settings 负责）。"""
     version: Optional[str] = None
-    settings: SettingsConfig = field(default_factory=SettingsConfig)
-    webhook: Optional[WebhookConfig] = None
-    email: List[EmailConfig] = field(default_factory=list)
-    subscriptions: List[SubscriptionConfig] = field(default_factory=list)
-    projects: List[ProjectConfig] = field(default_factory=list)
+    email: List[EmailConfig] = []
+    subscriptions: List[SubscriptionConfig] = []
+    projects: List[ProjectConfig] = []
+
+    @field_validator('email', 'subscriptions', 'projects', mode='before')
+    @classmethod
+    def _none_to_empty(cls, v: Any) -> Any:
+        return v or []
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
-        """从字典创建配置"""
+        data = dict(data or {})
         return cls(
             version=data.get('version'),
-            settings=SettingsConfig.from_dict(data.get('settings', {})),
-            webhook=WebhookConfig.from_dict(data.get('webhook', {})) if data.get('webhook') else None,
-            email=[EmailConfig.from_dict(e) for e in data.get('email', [])],
-            subscriptions=[SubscriptionConfig.from_dict(s) for s in data.get('subscriptions', [])],
-            projects=[ProjectConfig.from_dict(p) for p in data.get('projects', [])]
+            email=[EmailConfig.from_dict(e) for e in (data.get('email') or [])],
+            subscriptions=[SubscriptionConfig.from_dict(s) for s in (data.get('subscriptions') or [])],
+            projects=[ProjectConfig.from_dict(p) for p in (data.get('projects') or [])],
         )
 
     def validate(self) -> Dict[str, List[str]]:
-        """
-        验证配置
-
-        Returns:
-            Dict[str, List[str]]: 各模块的错误信息列表
-        """
+        """逐节收集错误，返回 {节名: [错误...]}。无错误返回空字典。"""
         errors: Dict[str, List[str]] = {}
 
-        # 验证设置
-        settings_errors = self.settings.validate()
-        if settings_errors:
-            errors['settings'] = settings_errors
-
-        # 验证 Webhook
-        if self.webhook:
-            webhook_errors = self.webhook.validate()
-            if webhook_errors:
-                errors['webhook'] = webhook_errors
-
-        # 验证邮箱配置
-        email_errors: List[str] = []
-        for i, email in enumerate(self.email):
-            email_errors.extend([f"email[{i}]: {e}" for e in email.validate()])
-        if email_errors:
-            errors['email'] = email_errors
-
-        # 验证订阅配置
-        subscription_errors: List[str] = []
-        for i, sub in enumerate(self.subscriptions):
-            subscription_errors.extend([f"subscriptions[{i}]: {e}" for e in sub.validate()])
-        if subscription_errors:
-            errors['subscriptions'] = subscription_errors
-
-        # 验证项目配置
-        project_errors: List[str] = []
-        for i, project in enumerate(self.projects):
-            project_errors.extend([f"projects[{i}]: {e}" for e in project.validate()])
-        if project_errors:
-            errors['projects'] = project_errors
+        sections = [
+            ('email', self.email),
+            ('subscriptions', self.subscriptions),
+            ('projects', self.projects),
+        ]
+        for key, items in sections:
+            section_errors: List[str] = []
+            for i, item in enumerate(items):
+                section_errors.extend([f"{key}[{i}]: {e}" for e in item.validate()])
+            if section_errors:
+                errors[key] = section_errors
 
         return errors
 

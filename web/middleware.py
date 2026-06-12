@@ -5,9 +5,10 @@ Web 中间件
 提供认证、请求验证等装饰器
 """
 import hmac
-import os
 from functools import wraps
 from flask import request, jsonify
+
+from core.settings import get_settings
 
 try:
     from pydantic import ValidationError
@@ -16,14 +17,8 @@ except ImportError:  # Optional routes use Pydantic; the core dashboard does not
 
 
 def _get_api_key() -> str:
-    api_key = (os.environ.get('WEB_API_KEY') or os.environ.get('WEB_AUTH_API_KEY') or '').strip()
-    if api_key:
-        return api_key
-
-    if os.environ.get('ALLOW_LEGACY_WEB_API_KEY', 'false').lower() == 'true':
-        return (os.environ.get('API_KEY') or '').strip()
-
-    return ''
+    # 优先 WEB_API_KEY（含旧名 WEB_AUTH_API_KEY），再按开关回退到 legacy API_KEY。
+    return get_settings().resolved_web_api_key()
 
 
 def _extract_api_key() -> str:

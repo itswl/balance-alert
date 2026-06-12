@@ -1,14 +1,5 @@
 {
-  "settings": {
-    "balance_refresh_interval_seconds": 3600,
-    "max_concurrent_checks": 5
-  },
-  "webhook": {
-    "_comment": "推荐使用环境变量占位符（不存在则保留原样）",
-    "url": "${WEBHOOK_URL}",
-    "source": "${WEBHOOK_SOURCE}",
-    "type": "${WEBHOOK_TYPE}"
-  },
+  "_comment": "config.json 只放业务列表（projects）。Webhook、刷新间隔、并发数等改由环境变量配置，见 .env.example。",
   "email": [],
   "subscriptions": [],
   "projects": [
