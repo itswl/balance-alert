@@ -160,11 +160,10 @@ Webhook、刷新间隔、并发数、各类开关等都由环境变量配置（�
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `WEB_PORT` | `8080` | Web 服务端口 |
-| `WEB_HOST` | `0.0.0.0` | Web 监听地址 |
 | `WEB_ENABLE_CORS` | `false` | 是否启用 CORS |
 | `CORS_ORIGINS` | 无 | CORS 白名单，逗号分隔；开启 CORS 时建议必填 |
-| `WEB_AUTH_API_KEY` | 无 | `WEB_API_KEY` 的兼容别名 |
-| `ALLOW_LEGACY_WEB_API_KEY` | `false` | 是否允许旧变量 `API_KEY` 作为 Web 认证密钥，不推荐生产使用 |
+
+注意：环境变量的值写错（如 `ENABLE_DATABASE=enabled`）会在启动时直接报错，便于及早发现配置问题；留空（`KEY=`）视为未设置。
 
 ### 数据库和动态配置
 
@@ -175,7 +174,6 @@ Webhook、刷新间隔、并发数、各类开关等都由环境变量配置（�
 | `ENABLE_DYNAMIC_CONFIG` | `false` | 从数据库读取 `projects` / `subscriptions` / `email` |
 | `ENABLE_HISTORY_API` | `false` | 启用历史数据 API |
 | `CONFIG_ENCRYPTION_KEY` | 无 | 加密数据库中的 `api_key` 和邮箱 `password` |
-| `BALANCE_ALERT_ENCRYPTION_KEY` | 无 | `CONFIG_ENCRYPTION_KEY` 的兼容别名 |
 | `AUTO_ENCRYPT_ON_READ` | `true` | 读取明文数据库配置时自动回写为密文 |
 | `STRICT_DATABASE_ERRORS` | `false` | 数据库异常是否向上抛出，排障时可打开 |
 
@@ -204,19 +202,9 @@ ENABLE_DYNAMIC_CONFIG=true
 DATABASE_URL=postgresql://user:password@host:5432/balance_alert
 ```
 
-2. 初始化或升级表结构：
+2. 启动服务。`ENABLE_DATABASE=true` 时应用启动会自动创建缺失的表，无需手动迁移。
 
-```bash
-alembic upgrade head
-```
-
-如果已有表结构是手工创建的，且确认已经和当前模型一致，只是缺少 Alembic 版本记录，可以用：
-
-```bash
-alembic stamp head
-```
-
-3. 启动服务后，在 Web UI 或接口中维护项目配置。数据库里有项目时，应用会优先使用数据库项目；数据库为空时继续使用 `config.json`。
+3. 在 Web UI 或接口中维护项目配置。数据库里有项目时，应用会优先使用数据库项目；数据库为空时继续使用 `config.json`。已有 `config.json` 的项目可用 `python scripts/migrate_config_to_db.py` 一次性导入数据库。
 
 ### 敏感字段加密
 
@@ -262,15 +250,10 @@ kubectl create secret generic balance-alert-secret \
 ```bash
 kubectl apply -f k8s/common-prod-secret.yaml
 kubectl apply -f k8s/common-prod.yaml
-kubectl -n common-prod exec deploy/balance-alert -- alembic upgrade head
 kubectl -n common-prod rollout status deploy/balance-alert
 ```
 
-只有在确认表结构已经是当前版本、但 `alembic_version` 记录不准时，才使用：
-
-```bash
-kubectl -n common-prod exec deploy/balance-alert -- alembic stamp head
-```
+表结构由应用启动时自动创建（`ENABLE_DATABASE=true`），无需手动迁移。
 
 生产健康检查约定：
 
@@ -302,7 +285,7 @@ docker-compose --profile monitoring up -d
 本地：
 
 ```bash
-python services/monitor.py --dry-run
+python -m services.monitor --dry-run
 curl http://localhost:8080/live
 curl -H "X-API-Key: $WEB_API_KEY" http://localhost:8080/api/features
 ```
@@ -317,18 +300,11 @@ kubectl -n common-prod exec deploy/balance-alert -- curl -s http://127.0.0.1:808
 kubectl -n common-prod get events --sort-by=.lastTimestamp | tail -30
 ```
 
-检查数据库版本：
-
-```bash
-alembic current
-alembic heads
-```
-
 ## 常见问题
 
 ### API Key 未配置，请设置 WEB_API_KEY
 
-服务端没有读到 `WEB_API_KEY` 或 `WEB_AUTH_API_KEY`。检查 `.env`、Kubernetes Secret 和 Deployment 是否已经重启。
+服务端没有读到 `WEB_API_KEY`。检查 `.env`、Kubernetes Secret 和 Deployment 是否已经重启。
 
 Kubernetes 中建议显式引用：
 
@@ -347,7 +323,7 @@ Kubernetes 中建议显式引用：
 
 - 没有有效项目配置，`has_data=false`
 - 数据库动态配置没打开，`ENABLE_DYNAMIC_CONFIG=false`
-- 数据库项目读取失败，例如迁移没跑
+- 数据库项目读取失败
 - cron 失败日志非空
 
 先看：
@@ -360,10 +336,6 @@ kubectl -n common-prod logs deploy/balance-alert --tail=200
 ### startup probe failed: HTTP probe failed with statuscode: 503
 
 说明 startup probe 打到了 `/health`。启动探针应该使用 `/live`，因为启动阶段不能依赖余额数据是否已经初始化。
-
-### Alembic 报 DuplicateColumn
-
-通常是数据库表结构已经被手工改过，但 `alembic_version` 记录落后。先确认实际列和索引，再用 `alembic stamp head` 校准版本，不要盲目重跑迁移。
 
 ### 数据库里的 `api_key` 没有加密
 
@@ -380,12 +352,13 @@ kubectl -n common-prod exec deploy/balance-alert -- printenv CONFIG_ENCRYPTION_K
 ```text
 providers/             平台余额适配器
 services/monitor.py    核心检查和告警流程
-services/config_service.py
 services/webhook_adapter.py
+services/subscription_checker.py
+services/email_scanner.py
 core/                  配置、日志、状态管理、密钥加密
 web/                   Flask Web 看板和 API
 static/ templates/     前端页面
-database/ alembic/     可选历史库和动态配置
-k8s/                   Kubernetes 部署示例
+database/              可选历史库和动态配置（启动时自动建表）
+k8s/                   Kubernetes 部署清单（common-prod.yaml）
 grafana/               可选监控面板
 ```

@@ -21,9 +21,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
 ### 1. 健康检查
 
 ```bash
-GET /health
-GET /ready
-GET /live
+GET /health   # 就绪检查：有数据且不过期才返回 200
+GET /live     # 存活检查：进程能响应即返回 200
 ```
 
 **响应**：
@@ -94,7 +93,7 @@ Content-Type: application/json
 
 ## 订阅 API（可选）
 
-需启用：`ENABLE_SUBSCRIPTIONS=true`
+需启用：`ENABLE_SUBSCRIPTIONS=true`（未启用时下列写接口统一返回 503；`GET /api/subscriptions` 始终可用，未启用时返回空状态）
 
 ### 5. 获取订阅状态
 
@@ -132,10 +131,12 @@ Content-Type: application/json
   "cycle_type": "monthly",
   "renewal_day": 15,
   "alert_days_before": 3,
-  "amount": 99.0,
-  "currency": "CNY"
+  "amount": 99.0
 }
 ```
+
+必填字段：`name`、`cycle_type`、`renewal_day`、`alert_days_before`、`amount`。
+年付（`cycle_type=yearly`）的 `renewal_day` 使用 MMDD 格式，如 `315` 表示 3 月 15 日。
 
 ### 7. 删除订阅
 
@@ -149,17 +150,59 @@ Content-Type: application/json
 }
 ```
 
+### 8. 获取订阅配置列表
+
+```bash
+GET /api/config/subscriptions
+```
+
+### 9. 更新订阅配置
+
+```bash
+POST /api/config/subscription
+Content-Type: application/json
+
+{
+  "name": "Netflix Premium",
+  "amount": 129.0,
+  "renewal_day": 20
+}
+```
+
+`name` 用于定位订阅，其余字段（`new_name` / `cycle_type` / `renewal_day` / `alert_days_before` / `amount` / `enabled` / `last_renewed_date` / `owner_project`）按需提供。
+
+### 10. 标记/清除已续费
+
+```bash
+POST /api/subscription/mark_renewed
+Content-Type: application/json
+
+{
+  "name": "Netflix Premium",
+  "renewed_date": "2026-08-01"  // 可选，默认今天
+}
+```
+
+```bash
+POST /api/subscription/clear_renewed
+Content-Type: application/json
+
+{
+  "name": "Netflix Premium"
+}
+```
+
 ## 动态配置 API（可选）
 
 需启用：`ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true`
 
-### 8. 获取项目配置
+### 11. 获取项目配置
 
 ```bash
 GET /api/config/projects
 ```
 
-### 9. 更新项目阈值
+### 12. 更新项目阈值
 
 ```bash
 POST /api/config/threshold
@@ -171,13 +214,13 @@ Content-Type: application/json
 }
 ```
 
-### 10. 获取邮箱配置
+### 13. 获取邮箱配置
 
 ```bash
 GET /api/config/emails
 ```
 
-### 11. 添加/更新邮箱配置
+### 14. 添加/更新邮箱配置
 
 ```bash
 POST /api/config/email
@@ -191,7 +234,7 @@ Content-Type: application/json
 }
 ```
 
-### 12. 删除邮箱配置
+### 15. 删除邮箱配置
 
 ```bash
 POST /api/config/email/delete
@@ -206,7 +249,7 @@ Content-Type: application/json
 
 需启用：`ENABLE_HISTORY_API=true` 且 `ENABLE_DATABASE=true`
 
-### 13. 查询余额历史
+### 16. 查询余额历史
 
 ```bash
 GET /api/history/balance?project_id=abc123&days=7
@@ -218,7 +261,7 @@ GET /api/history/balance?project_id=abc123&days=7
 - `days`: 查询天数（默认7）
 - `limit`: 返回记录数（默认100）
 
-### 14. 获取趋势分析
+### 17. 获取趋势分析
 
 ```bash
 GET /api/history/trend/<project_id>?days=30
@@ -239,13 +282,13 @@ GET /api/history/trend/<project_id>?days=30
 }
 ```
 
-### 15. 查询告警历史
+### 18. 查询告警历史
 
 ```bash
 GET /api/history/alerts?days=7&limit=50
 ```
 
-### 16. 获取告警统计
+### 19. 获取告警统计
 
 ```bash
 GET /api/history/stats?days=30
@@ -311,7 +354,6 @@ for p in projects:
 ```bash
 # 健康检查
 curl http://localhost:8080/health
-curl http://localhost:8080/ready
 curl http://localhost:8080/live
 
 # 功能开关
@@ -325,11 +367,11 @@ curl -X POST -H "X-API-Key: your-secret-key" http://localhost:8080/api/refresh
 
 # 添加订阅
 curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \
-     -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"amount":99}' \
+     -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"alert_days_before":3,"amount":99}' \
      http://localhost:8080/api/subscription/add
 
 # 查询趋势
 curl -H "X-API-Key: your-secret-key" "http://localhost:8080/api/history/trend/abc123?days=30"
 ```
 
-**最后更新**: 2026-05-17
+**最后更新**: 2026-08-03
