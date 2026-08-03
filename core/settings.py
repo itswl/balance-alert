@@ -61,7 +61,12 @@ class AppSettings(BaseSettings):
     # ---- HTTP / 扫描 ----
     request_timeout: int = 10
     max_emails_to_scan: int = 1000
-    cache_file_path: str = '/tmp/balance_cache.json'
+    response_cache_ttl: int = 300  # 同一 provider+key 的余额结果缓存秒数，防止手动刷新打爆上游
+
+    # ---- 日志 ----
+    log_level: str = 'INFO'
+    log_format: str = 'text'  # text 或 json
+    log_file: Optional[str] = None
 
     # ---- 数据库 ----
     database_url: str = 'sqlite:///./data/balance_alert.db'

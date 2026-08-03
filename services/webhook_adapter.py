@@ -73,16 +73,15 @@ class WebhookAdapter:
             self.webhook_type = 'custom'
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any], default_source: str) -> Optional['WebhookAdapter']:
-        """从配置的 webhook 段构建 adapter，未配置 URL 时返回 None"""
-        webhook_config = config.get('webhook') or {}
-        url = webhook_config.get('url')
-        if not url:
+    def from_settings(cls, default_source: str) -> Optional['WebhookAdapter']:
+        """按环境变量（WEBHOOK_URL/TYPE/SOURCE）构建 adapter，未配置 URL 时返回 None"""
+        settings = get_settings()
+        if not settings.webhook_url:
             return None
         return cls(
-            url,
-            webhook_config.get('type', 'custom'),
-            webhook_config.get('source', default_source),
+            settings.webhook_url,
+            settings.webhook_type or 'custom',
+            settings.webhook_source or default_source,
         )
 
     def _get_session(self):

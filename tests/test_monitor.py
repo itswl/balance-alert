@@ -79,31 +79,26 @@ class TestCreditMonitor:
             os.unlink(f.name)
 
     def test_get_max_concurrent_checks_default(self):
-        """测试默认并发数"""
-        config = self._base_config(settings={})
-        config_path = self._create_config_file(config)
+        """未设置 MAX_CONCURRENT_CHECKS 时使用默认并发数"""
+        config_path = self._create_config_file(self._base_config(settings={}))
         try:
+            os.environ.pop('MAX_CONCURRENT_CHECKS', None)
             monitor = CreditMonitor(config_path)
             assert monitor._get_max_concurrent_checks() == 20
         finally:
             os.unlink(config_path)
 
     def test_get_max_concurrent_checks_clamped(self):
-        """测试并发数上下限"""
-        config = self._base_config(settings={'max_concurrent_checks': 100})
-        config_path = self._create_config_file(config)
+        """MAX_CONCURRENT_CHECKS 环境变量钳制在 [1, 50]"""
+        config_path = self._create_config_file(self._base_config(settings={}))
         try:
             monitor = CreditMonitor(config_path)
+            os.environ['MAX_CONCURRENT_CHECKS'] = '100'
             assert monitor._get_max_concurrent_checks() == 50  # 上限
-        finally:
-            os.unlink(config_path)
-
-        config = self._base_config(settings={'max_concurrent_checks': -5})
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
+            os.environ['MAX_CONCURRENT_CHECKS'] = '-5'
             assert monitor._get_max_concurrent_checks() == 1  # 下限
         finally:
+            os.environ.pop('MAX_CONCURRENT_CHECKS', None)
             os.unlink(config_path)
 
     @patch('services.monitor.get_provider')

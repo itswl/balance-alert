@@ -302,7 +302,7 @@ class EmailScanner:
         return service_name, amount
 
     def _get_webhook_adapter(self, default_source: str) -> Optional[WebhookAdapter]:
-        return WebhookAdapter.from_config(self.config, default_source)
+        return WebhookAdapter.from_settings(default_source)
 
     def _has_recent_email_alert(self, mailbox: str, sender: str, subject: str, date: str, days: int) -> bool:
         try:

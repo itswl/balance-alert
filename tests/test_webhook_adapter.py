@@ -309,6 +309,32 @@ class TestSendRequest:
         assert result is False
 
 
+class TestFromSettings:
+    """按环境变量构建 adapter"""
+
+    def test_full_env(self, monkeypatch):
+        monkeypatch.setenv('WEBHOOK_URL', 'https://open.feishu.cn/open-apis/bot/v2/hook/token')
+        monkeypatch.setenv('WEBHOOK_TYPE', 'feishu')
+        monkeypatch.setenv('WEBHOOK_SOURCE', 'balance-alert')
+        adapter = WebhookAdapter.from_settings('fallback-source')
+        assert adapter is not None
+        assert adapter.webhook_url == 'https://open.feishu.cn/open-apis/bot/v2/hook/token'
+        assert adapter.webhook_type == 'feishu'
+        assert adapter.source == 'balance-alert'
+
+    def test_defaults_when_only_url(self, monkeypatch):
+        monkeypatch.delenv('WEBHOOK_TYPE', raising=False)
+        monkeypatch.delenv('WEBHOOK_SOURCE', raising=False)
+        monkeypatch.setenv('WEBHOOK_URL', 'https://example.com/hook/x')
+        adapter = WebhookAdapter.from_settings('my-source')
+        assert adapter.webhook_type == 'custom'
+        assert adapter.source == 'my-source'
+
+    def test_none_when_url_unset(self, monkeypatch):
+        monkeypatch.delenv('WEBHOOK_URL', raising=False)
+        assert WebhookAdapter.from_settings('src') is None
+
+
 class TestSupportedTypes:
     """支持类型常量测试"""
 

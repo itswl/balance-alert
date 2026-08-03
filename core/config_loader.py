@@ -2,10 +2,10 @@
 """
 配置加载模块
 
-配置的三个来源按优先级合并：
-1. 环境变量（settings/webhook 段，见 core.settings）
-2. 数据库动态配置（projects/subscriptions/email，需 ENABLE_DYNAMIC_CONFIG）
-3. config.json（支持 ${VAR} 占位符替换）
+职责边界（一个值只有一个家）：
+- 环境变量（core.settings）：密钥、连接、开关、调度参数
+- config.json：业务清单 projects/subscriptions/email，支持 ${VAR} 占位符
+- 数据库动态配置：生产的业务清单，需 ENABLE_DYNAMIC_CONFIG，有数据时覆盖文件同名段落
 """
 import copy
 import hashlib
@@ -47,19 +47,12 @@ def make_subscription_id(name: str) -> str:
     return hashlib.md5(f"subscription:{name}".encode()).hexdigest()
 
 
-def get_refresh_interval(config_file: Optional[str] = None) -> int:
-    """刷新间隔：环境变量优先于 config.settings，最后回退到默认值。"""
+def get_refresh_interval() -> int:
+    """刷新间隔：环境变量 BALANCE_REFRESH_INTERVAL_SECONDS，未设置或非正数时用默认值。"""
     interval = get_settings().balance_refresh_interval_seconds
-    if interval is None:
-        config = load_config_with_env_vars(config_file or get_default_config_path())
-        interval = (config.get('settings') or {}).get('balance_refresh_interval_seconds')
-    if interval is None:
+    if interval is None or interval <= 0:
         return DEFAULT_REFRESH_INTERVAL_SECONDS
-    try:
-        parsed = int(interval)
-    except (ValueError, TypeError):
-        return DEFAULT_REFRESH_INTERVAL_SECONDS
-    return parsed if parsed > 0 else DEFAULT_REFRESH_INTERVAL_SECONDS
+    return interval
 
 
 # 全局配置缓存和锁
@@ -78,9 +71,6 @@ def clear_config_cache(config_file: Optional[str] = None) -> None:
 
 
 def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
-    # settings 可能存在但为 None（显式写 "settings": null），setdefault 不会覆盖，需单独处理。
-    if config.get('settings') is None:
-        config['settings'] = {}
     config.setdefault('projects', [])
     config.setdefault('subscriptions', [])
     config.setdefault('email', [])
@@ -101,38 +91,6 @@ def _substitute_env_placeholders(value: Any) -> Any:
 
         return re.sub(pattern, replace_env, value)
     return value
-
-
-def _overlay_env(config: Dict[str, Any]) -> Dict[str, Any]:
-    """用环境变量覆盖 config 中的 settings 与 webhook 字段。
-
-    取值与类型校验统一由 :mod:`core.settings` 负责，这里只把已生效的值写回 config，
-    供下游按 ``config['settings']`` / ``config['webhook']`` 消费。``None`` 表示未设置，保留原值。
-    """
-    settings = get_settings()
-
-    overlay_settings = {
-        'balance_refresh_interval_seconds': settings.balance_refresh_interval_seconds,
-        'max_concurrent_checks': settings.max_concurrent_checks,
-    }
-    for key, value in overlay_settings.items():
-        if value is not None:
-            config.setdefault('settings', {})[key] = value
-
-    overlay_webhook = {
-        'url': settings.webhook_url,
-        'source': settings.webhook_source,
-        'type': settings.webhook_type,
-    }
-    overlay_webhook = {k: v for k, v in overlay_webhook.items() if v}
-    if overlay_webhook:
-        webhook = config.get('webhook')
-        if not isinstance(webhook, dict):
-            webhook = {}
-            config['webhook'] = webhook
-        webhook.update(overlay_webhook)
-
-    return config
 
 
 def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
@@ -158,7 +116,6 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
         logger.warning(f"[Config] 配置文件不存在: {config_file}，仅使用数据库与默认值")
 
     config = _ensure_base_shape(config)
-    config = _overlay_env(config)
 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
@@ -218,13 +175,6 @@ def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Di
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
     """脱敏处理，用于日志输出"""
     masked = copy.deepcopy(config)
-
-    # 脱敏 webhook URL
-    webhook = masked.get('webhook')
-    if isinstance(webhook, dict) and 'url' in webhook:
-        url = webhook.get('url') or ''
-        if 'hook/' in url:
-            webhook['url'] = url[:url.rfind('hook/') + 5] + '***'
 
     # 脱敏邮箱密码
     if 'email' in masked:

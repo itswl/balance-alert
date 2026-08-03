@@ -12,26 +12,30 @@ Balance Alert 是一个余额监控和告警工具：定时检查多个平台的
 
 ## 配置总览
 
-应用有三类配置来源：
+**一个值只有一个家**，三层配置各管一摊、互不重叠：
 
-| 来源 | 放什么 | 适合场景 |
+| 来源 | 只放 | 适合场景 |
 | --- | --- | --- |
-| `config.json` | 项目列表、provider、阈值等业务数据 | 本地运行、简单部署、配置随文件发布 |
-| `.env` / Kubernetes Secret | API Key、Webhook URL、数据库连接、功能开关 | 敏感信息、环境差异、生产部署 |
-| 数据库动态配置 | `projects` / `subscriptions` / `email` 三类配置 | Web UI 维护配置、生产动态更新 |
+| `.env` / Kubernetes Secret（环境变量） | 密钥、Webhook、数据库连接、功能开关、调度参数 —— 全部见下方「环境变量」表 | 所有部署 |
+| `config.json` | 仅业务清单：`projects` / `subscriptions` / `email` | 本地运行、简单部署 |
+| 数据库动态配置 | 同上三类业务清单 | 生产环境，Web UI 维护 |
 
-配置加载规则：
+加载规则：
 
 1. 默认读取 `CONFIG_PATH` 指定的配置文件，未设置时读取 `config.json`。
 2. 配置文件里的 `${VAR}` 会被同名环境变量替换，适合把密钥留在 `.env` 或 Secret。
-3. `BALANCE_REFRESH_INTERVAL_SECONDS`、`MAX_CONCURRENT_CHECKS` 等环境变量会覆盖 `settings` 中的同名设置。
-4. 当 `ENABLE_DATABASE=true` 且 `ENABLE_DYNAMIC_CONFIG=true` 时，如果数据库里有对应数据，数据库中的 `projects` / `subscriptions` / `email` 会覆盖配置文件中的同名段落。
+3. 当 `ENABLE_DATABASE=true` 且 `ENABLE_DYNAMIC_CONFIG=true` 时，如果数据库里有对应数据，数据库中的 `projects` / `subscriptions` / `email` 会覆盖配置文件中的同名段落。
+
+排障时用这个命令查看脱敏后的最终生效配置和每段来源：
+
+```bash
+python -m services.monitor --show-config
+```
 
 推荐原则：
 
-- 不要把真实密钥写进 `config.json`，使用 `${OPENROUTER_API_KEY}` 这类占位符。
+- Provider 密钥两种存法：本地用 `.env` + `${VAR}` 占位符；生产用数据库动态配置（配 `CONFIG_ENCRYPTION_KEY` 加密存储）。不要把真实密钥明文写进 `config.json`。
 - Web 登录密钥使用 `WEB_API_KEY`，不要复用云厂商或 Provider 的业务 API Key。
-- 生产环境如果使用数据库动态配置，建议同时设置 `CONFIG_ENCRYPTION_KEY`。
 
 ## 快速开始
 
@@ -84,7 +88,7 @@ http://localhost:8080
 执行一次余额检查：
 
 ```bash
-python services/monitor.py --dry-run
+python -m services.monitor --dry-run
 ```
 
 ## 配置文件
@@ -99,9 +103,8 @@ python services/monitor.py --dry-run
 }
 ```
 
-Webhook、刷新间隔、并发数、各类开关等都由环境变量配置（见下方「环境变量」），
-不再写进 `config.json`。如需兼容旧配置，文件里仍可保留 `settings` / `webhook` 块，
-但同名环境变量会覆盖它们。
+Webhook、刷新间隔、并发数、各类开关等**只由环境变量配置**（见下方「环境变量」）。
+文件里的 `settings` / `webhook` 块已不再生效，请迁移到环境变量。
 
 `projects` 是余额监控的核心配置。单个项目示例：
 
@@ -152,8 +155,9 @@ Webhook、刷新间隔、并发数、各类开关等都由环境变量配置（�
 | `WEBHOOK_SOURCE` | `credit-monitor` | 告警来源标识 |
 | `CONFIG_PATH` | `config.json` | 配置文件路径 |
 | `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | Web 后台刷新间隔 |
-| `MAX_CONCURRENT_CHECKS` | 配置文件值 | 并发检查数，上限由程序限制 |
+| `MAX_CONCURRENT_CHECKS` | `20` | 并发检查数，钳制在 1-50 |
 | `ALERT_COOLDOWN_SECONDS` | `86400` | 同一项目告警冷却时间 |
+| `RESPONSE_CACHE_TTL` | `300` | 余额结果缓存秒数，防止手动刷新打爆上游 |
 
 ### Web 和 API
 

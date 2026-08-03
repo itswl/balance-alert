@@ -18,20 +18,16 @@ except ImportError:
     DB_AVAILABLE = False
 
 
-def _get_alert_cooldown_seconds(config) -> int:
-    """获取订阅提醒冷却时间，默认 24 小时。
+def _get_alert_cooldown_seconds() -> int:
+    """订阅提醒冷却时间，默认 24 小时。
 
-    优先级：SUBSCRIPTION_ALERT_COOLDOWN_SECONDS > ALERT_COOLDOWN_SECONDS > config.settings > 默认。
+    优先级：SUBSCRIPTION_ALERT_COOLDOWN_SECONDS > ALERT_COOLDOWN_SECONDS > 默认。
     """
     settings = get_settings()
-    env_value = settings.subscription_alert_cooldown_seconds
-    if env_value is None:
-        env_value = settings.alert_cooldown_seconds
-    raw_value = env_value if env_value is not None else config.get('settings', {}).get('subscription_alert_cooldown_seconds', 86400)
-    try:
-        return max(0, int(raw_value))
-    except (TypeError, ValueError):
-        return 86400
+    value = settings.subscription_alert_cooldown_seconds
+    if value is None:
+        value = settings.alert_cooldown_seconds
+    return max(0, value) if value is not None else 86400
 
 
 def calculate_next_renewal_date(cycle_type: str, renewal_day: int, from_date: datetime = None) -> datetime:
@@ -133,7 +129,7 @@ class SubscriptionChecker:
     def _should_skip_alert(self, subscription_id: str) -> bool:
         if not DB_AVAILABLE:
             return False
-        alert_cooldown = _get_alert_cooldown_seconds(self.config)
+        alert_cooldown = _get_alert_cooldown_seconds()
         try:
             return AlertRepository.has_recent_alert(subscription_id, 'subscription_renewal', alert_cooldown)
         except Exception:
@@ -212,7 +208,7 @@ class SubscriptionChecker:
             if not dry_run:
                 subscription_id = self._subscription_id(name)
                 if self._should_skip_alert(subscription_id):
-                    alert_cooldown = _get_alert_cooldown_seconds(self.config)
+                    alert_cooldown = _get_alert_cooldown_seconds()
                     logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
                 else:
                     alert_sent = self._send_alert(sub, days_until_renewal)
@@ -389,7 +385,7 @@ class SubscriptionChecker:
     
     def _send_alert(self, sub, days_until_renewal):
         """发送续费提醒告警"""
-        adapter = WebhookAdapter.from_config(self.config, 'credit-monitor')
+        adapter = WebhookAdapter.from_settings('credit-monitor')
         if adapter is None:
             logger.error("❌ 未配置 webhook 地址")
             return False

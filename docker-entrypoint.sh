@@ -20,19 +20,11 @@ if [ ! -d /app/data ]; then
 fi
 
 # 2. 初始化 config.json（如果不存在或为空）
+# config.json 只放业务清单；调度/webhook 等一律走环境变量
 if [ ! -s /app/config.json ]; then
     echo "📝 创建默认配置文件..."
     cat > /app/config.json << 'EOF'
 {
-  "settings": {
-    "balance_refresh_interval_seconds": 3600,
-    "max_concurrent_checks": 5
-  },
-  "webhook": {
-    "url": "",
-    "source": "credit-monitor",
-    "type": "feishu"
-  },
   "email": [],
   "subscriptions": [],
   "projects": []

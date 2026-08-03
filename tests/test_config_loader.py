@@ -97,30 +97,6 @@ class TestLoadConfigWithEnvVars:
             os.unlink(config_path)
 
     @patch('core.config_loader.load_env_file')
-    def test_webhook_env_overrides_empty_config(self, mock_load_env):
-        """WEBHOOK_* 环境变量会覆盖入口脚本生成的空 webhook 配置"""
-        config_data = {
-            'projects': [],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600},
-            'webhook': {'url': '', 'source': 'credit-monitor', 'type': 'custom'}
-        }
-        config_path = self._create_config_file(config_data)
-        try:
-            with patch.dict(os.environ, {
-                'WEBHOOK_URL': 'https://open.feishu.cn/open-apis/bot/v2/hook/token',
-                'WEBHOOK_SOURCE': 'balance-alert',
-                'WEBHOOK_TYPE': 'feishu',
-            }, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['webhook']['url'] == 'https://open.feishu.cn/open-apis/bot/v2/hook/token'
-                assert config['webhook']['source'] == 'balance-alert'
-                assert config['webhook']['type'] == 'feishu'
-        finally:
-            os.unlink(config_path)
-
-    @patch('core.config_loader.load_env_file')
     def test_email_password_placeholder_substitution(self, mock_load_env):
         """邮箱 password 使用 ${VAR} 时会被环境变量替换"""
         config_data = {
@@ -140,28 +116,23 @@ class TestLoadConfigWithEnvVars:
         finally:
             os.unlink(config_path)
 
-    @patch('core.config_loader.load_env_file')
-    def test_refresh_interval_env_override(self, mock_load_env):
-        """测试刷新间隔环境变量覆盖"""
-        config_data = {
-            'projects': [],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600}
-        }
-        config_path = self._create_config_file(config_data)
-        try:
-            with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '1800'}, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['settings']['balance_refresh_interval_seconds'] == 1800
-        finally:
-            os.unlink(config_path)
+    def test_refresh_interval_from_env(self):
+        """刷新间隔只认环境变量，未设置或非正数用默认值"""
+        from core.config_loader import get_refresh_interval
+
+        with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '1800'}, clear=True):
+            assert get_refresh_interval() == 1800
+        with patch.dict(os.environ, {}, clear=True):
+            assert get_refresh_interval() == 3600
+        with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '0'}, clear=True):
+            assert get_refresh_interval() == 3600
 
     def test_file_not_found(self):
         """测试配置文件不存在"""
         config = load_config_with_env_vars('/nonexistent/config.json')
-        assert 'settings' in config
-        assert 'projects' in config
+        assert config['projects'] == []
+        assert config['subscriptions'] == []
+        assert config['email'] == []
 
 
 class TestMaskSensitiveData:
@@ -206,28 +177,6 @@ class TestMaskSensitiveData:
         }
         masked = mask_sensitive_data(config)
         assert masked['projects'][0]['api_key'] == '1234***6789'
-
-    def test_mask_webhook_url(self):
-        """测试脱敏 Webhook URL"""
-        config = {
-            'webhook': {
-                'url': 'https://open.feishu.cn/open-apis/bot/v2/hook/abc123def456'
-            }
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['webhook']['url'].endswith('***')
-        assert 'hook/' in masked['webhook']['url']
-        assert 'abc123def456' not in masked['webhook']['url']
-
-    def test_mask_webhook_url_without_hook_prefix(self):
-        """测试无 hook/ 前缀的 URL 不脱敏"""
-        config = {
-            'webhook': {
-                'url': 'https://example.com/api/webhook'
-            }
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['webhook']['url'] == 'https://example.com/api/webhook'
 
     def test_mask_email_password(self):
         """测试脱敏邮箱密码"""
