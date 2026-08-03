@@ -52,7 +52,7 @@ def _get_fernet():
         from cryptography.fernet import Fernet
     except ImportError as exc:
         raise RuntimeError(
-            'CONFIG_ENCRYPTION_KEY 已设置，但未安装 cryptography；请安装 requirements-optional.txt'
+            'CONFIG_ENCRYPTION_KEY 已设置，但未安装 cryptography；请执行 pip install cryptography'
         ) from exc
 
     return Fernet(_normalize_key(raw_key))

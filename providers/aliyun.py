@@ -6,9 +6,9 @@ import datetime
 import hashlib
 import hmac
 import base64
-from .base import percent_encode_aliyun
 import json
 import uuid
+from urllib.parse import quote
 
 
 class AliyunProvider(BaseProvider):
@@ -161,7 +161,11 @@ class AliyunProvider(BaseProvider):
     
     @staticmethod
     def _percent_encode(s):
-        return percent_encode_aliyun(s)
+        """阿里云签名要求的百分号编码变体"""
+        if s is None:
+            return ''
+        encoded = quote(str(s), safe='')
+        return encoded.replace('+', '%20').replace('*', '%2A').replace('%7E', '~')
     
     @classmethod
     def get_provider_name(cls):

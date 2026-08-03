@@ -12,7 +12,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from core.logger import get_logger
 from core.settings import get_settings
 from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
-from .models import BalanceHistory, AlertHistory, SubscriptionHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
+from .models import BalanceHistory, AlertHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
 import json
 from .engine import get_session, ENABLE_DATABASE
 
@@ -179,7 +179,7 @@ class ConfigRepository:
             
     @staticmethod
     def get_all_projects() -> List[Dict[str, Any]]:
-        """获取所有启用的项目配置"""
+        """获取所有项目配置（含未启用的）"""
         def op(session):
             projects = session.query(ProjectConfig).all()
             _maybe_encrypt_models(session, projects, 'api_key')
@@ -189,7 +189,7 @@ class ConfigRepository:
 
     @staticmethod
     def get_all_subscriptions() -> List[Dict[str, Any]]:
-        """获取所有启用的订阅配置"""
+        """获取所有订阅配置（含未启用的）"""
         def op(session):
             subs = session.query(SubscriptionConfig).all()
             return [s.to_dict() for s in subs]
@@ -330,18 +330,6 @@ class BalanceRepository:
             return record.id
 
         return _db_write(None, "保存余额记录失败", op, exc_info=True)
-
-    @staticmethod
-    def get_latest_balance(project_id: str) -> Optional[Dict[str, Any]]:
-        """获取项目最新余额记录"""
-        def op(session):
-            record = session.query(BalanceHistory)\
-                .filter(BalanceHistory.project_id == project_id)\
-                .order_by(desc(BalanceHistory.timestamp))\
-                .first()
-            return record.to_dict() if record else None
-
-        return _db_read(None, "查询最新余额失败", op, exc_info=True)
 
     @staticmethod
     def get_balance_history(
@@ -550,54 +538,3 @@ class AlertRepository:
             }
 
         return _db_read({'error': 'Database not available'}, "获取告警统计失败", op, exc_info=True)
-
-
-class SubscriptionRepository:
-    """订阅历史数据访问"""
-
-    @staticmethod
-    def save_subscription_record(
-        subscription_id: str,
-        subscription_name: str,
-        cycle_type: str,
-        days_until_renewal: int,
-        amount: float = 0,
-        need_renewal: bool = False
-    ) -> Optional[int]:
-        """保存订阅记录"""
-        def op(session):
-            record = SubscriptionHistory(
-                subscription_id=subscription_id,
-                subscription_name=subscription_name,
-                cycle_type=cycle_type,
-                days_until_renewal=days_until_renewal,
-                amount=amount,
-                need_renewal=need_renewal,
-                timestamp=utcnow()
-            )
-            session.add(record)
-            session.flush()
-            logger.debug(f"保存订阅记录: {subscription_name}")
-            return record.id
-
-        return _db_write(None, "保存订阅记录失败", op, exc_info=True)
-
-    @staticmethod
-    def get_subscription_history(
-        subscription_id: Optional[str] = None,
-        days: int = 30,
-        limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """获取订阅历史"""
-        def op(session):
-            query = session.query(SubscriptionHistory)
-            since = utcnow() - timedelta(days=days)
-            query = query.filter(SubscriptionHistory.timestamp >= since)
-            if subscription_id:
-                query = query.filter(SubscriptionHistory.subscription_id == subscription_id)
-            records = query.order_by(desc(SubscriptionHistory.timestamp))\
-                .limit(limit)\
-                .all()
-            return [r.to_dict() for r in records]
-
-        return _db_read([], "查询订阅历史失败", op, exc_info=True)

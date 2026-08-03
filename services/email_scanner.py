@@ -7,6 +7,7 @@ import imaplib
 import email
 import hashlib
 import sys
+import threading
 from email.header import decode_header
 import re
 from datetime import datetime, timedelta
@@ -23,7 +24,6 @@ logger = get_logger('email_scanner')
 
 # 邮件扫描常量
 DEFAULT_BATCH_SIZE = 100
-DEFAULT_MAX_EMAILS = 1000
 MAX_SEEN_IDS = 10000
 
 # 默认告警关键词
@@ -115,6 +115,7 @@ class EmailScanner:
         self.email_configs = self._parse_email_configs()
         self.results = []
         self._seen_ids = OrderedDict()  # 邮件去重集合（有界，FIFO 淘汰）
+        self._state_lock = threading.Lock()  # 保护 _seen_ids / results（多邮箱并发扫描）
 
         # 关键词匹配规则（支持配置覆盖和追加）
         email_settings = self.config.get('email_settings', {})
@@ -137,7 +138,7 @@ class EmailScanner:
     
     def _load_config(self):
         """加载配置文件"""
-        from services.config_service import load_config
+        from core.config_loader import load_config
         return load_config(self.config_path)
     
     def _parse_email_configs(self):
@@ -181,12 +182,13 @@ class EmailScanner:
             return str(s)
     
     def _mark_seen(self, email_uid: str) -> bool:
-        if email_uid in self._seen_ids:
-            return False
-        self._seen_ids[email_uid] = None
-        if len(self._seen_ids) > MAX_SEEN_IDS:
-            self._seen_ids.popitem(last=False)
-        return True
+        with self._state_lock:
+            if email_uid in self._seen_ids:
+                return False
+            self._seen_ids[email_uid] = None
+            if len(self._seen_ids) > MAX_SEEN_IDS:
+                self._seen_ids.popitem(last=False)
+            return True
 
     def _extract_text_from_email(self, msg):
         """从邮件中提取文本内容"""
@@ -300,14 +302,7 @@ class EmailScanner:
         return service_name, amount
 
     def _get_webhook_adapter(self, default_source: str) -> Optional[WebhookAdapter]:
-        webhook_config = self.config.get('webhook', {})
-        webhook_url = webhook_config.get('url')
-        if not webhook_url:
-            return None
-
-        webhook_type = webhook_config.get('type', 'custom')
-        webhook_source = webhook_config.get('source', default_source)
-        return WebhookAdapter(webhook_url, webhook_type, webhook_source)
+        return WebhookAdapter.from_config(self.config, default_source)
 
     def _has_recent_email_alert(self, mailbox: str, sender: str, subject: str, date: str, days: int) -> bool:
         try:
@@ -375,7 +370,8 @@ class EmailScanner:
             return False
         result['duplicate'] = True
         logger.info(f"邮件告警已发送过，跳过重复通知 | 邮箱: {mailbox_name} | 主题: {subject}")
-        self.results.append(result)
+        with self._state_lock:
+            self.results.append(result)
         return True
 
     def _handle_scan_exception(self, mailbox_name: str, error: Exception, dry_run: bool) -> Tuple[int, int]:
@@ -508,7 +504,8 @@ class EmailScanner:
                         else:
                             logger.info("[测试模式] 跳过发送告警")
 
-                        self.results.append(result)
+                        with self._state_lock:
+                            self.results.append(result)
 
                         processed_count += 1
 

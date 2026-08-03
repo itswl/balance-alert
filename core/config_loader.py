@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
 """
 配置加载模块
-支持从环境变量读取敏感配置，优先于配置文件
+
+配置的三个来源按优先级合并：
+1. 环境变量（settings/webhook 段，见 core.settings）
+2. 数据库动态配置（projects/subscriptions/email，需 ENABLE_DYNAMIC_CONFIG）
+3. config.json（支持 ${VAR} 占位符替换）
 """
-import os
-import json
-import re
+import copy
 import hashlib
-from typing import Dict, Any, Optional
+import json
+import logging
+import os
+import re
 from threading import Lock
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
-from core.config_validator import AppConfig
+
 from core.logger import get_logger
 from core.settings import get_settings
 
 logger = get_logger('config_loader')
 
 DEFAULT_REFRESH_INTERVAL_SECONDS = 3600
+
+_DB_META_FIELDS = {'id', 'created_at', 'updated_at'}
+
 
 def load_env_file(env_file: str = '.env') -> None:
     """加载 .env 文件"""
@@ -37,15 +47,11 @@ def make_subscription_id(name: str) -> str:
     return hashlib.md5(f"subscription:{name}".encode()).hexdigest()
 
 
-def get_enable_web_alarm() -> bool:
-    return get_settings().enable_web_alarm
-
-
-def get_refresh_interval(config_file: str = 'config.json') -> int:
+def get_refresh_interval(config_file: Optional[str] = None) -> int:
     """刷新间隔：环境变量优先于 config.settings，最后回退到默认值。"""
     interval = get_settings().balance_refresh_interval_seconds
     if interval is None:
-        config = load_config_with_env_vars(config_file, validate=False)
+        config = load_config_with_env_vars(config_file or get_default_config_path())
         interval = (config.get('settings') or {}).get('balance_refresh_interval_seconds')
     if interval is None:
         return DEFAULT_REFRESH_INTERVAL_SECONDS
@@ -97,13 +103,6 @@ def _substitute_env_placeholders(value: Any) -> Any:
     return value
 
 
-def _load_json_with_env_substitution(config_file: str) -> Dict[str, Any]:
-    with open(config_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    return _substitute_env_placeholders(json.loads(content))
-
-
 def _overlay_env(config: Dict[str, Any]) -> Dict[str, Any]:
     """用环境变量覆盖 config 中的 settings 与 webhook 字段。
 
@@ -136,18 +135,11 @@ def _overlay_env(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
-def load_config_with_env_vars(config_file: str = 'config.json', validate: bool = True) -> Dict[str, Any]:
+def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
     """加载配置文件并替换环境变量占位符
 
-    Args:
-        config_file: 配置文件路径
-        validate: 是否验证配置（默认 True）
-
-    Returns:
-        Dict[str, Any]: 配置字典
-
     Raises:
-        ValueError: 当配置验证失败时
+        ValueError: 配置文件不是合法 JSON 时
     """
     # 首先加载 .env 文件（只在首次调用时加载）
     if not getattr(load_config_with_env_vars, '_env_loaded', False):
@@ -158,7 +150,8 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
 
     if os.path.exists(config_file):
         try:
-            config = _load_json_with_env_substitution(config_file)
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = _substitute_env_placeholders(json.load(f))
         except json.JSONDecodeError as e:
             raise ValueError(f"配置文件格式错误: {e}")
     else:
@@ -167,76 +160,78 @@ def load_config_with_env_vars(config_file: str = 'config.json', validate: bool =
     config = _ensure_base_shape(config)
     config = _overlay_env(config)
 
-    # 打印配置版本号
-    config_version = config.get('version')
-    if config_version:
-        logger.info(f"[Config] 配置版本: {config_version}")
-
-    if validate:
-        _validate_loaded_config(config)
-
-    # 调试日志：输出脱敏配置
-    logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
 
     return config
 
 
-def _validate_loaded_config(config: Dict[str, Any]) -> None:
-    app_config = AppConfig.from_dict(config)
-    errors = app_config.validate()
-    if not errors:
-        return None
-
-    error_messages = []
-    for section, section_errors in errors.items():
-        error_messages.append(f"  {section}:")
-        for err in section_errors:
-            error_messages.append(f"    - {err}")
-    logger.warning(f"配置验证发现以下问题:\n" + "\n".join(error_messages))
-
-
-def load_config(config_file: str = 'config.json') -> Dict[str, Any]:
-    """加载配置，环境变量优先于配置文件（兼容旧接口）"""
-    return load_config_with_env_vars(config_file)
-
-
-def get_config(config_file: str = 'config.json', use_cache: bool = True, validate: bool = True) -> Dict[str, Any]:
-    """获取配置，带缓存和自动重载"""
+def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
+    """获取文件配置（含环境变量覆盖），带缓存"""
     if use_cache:
         with _config_lock:
             cached = _config_cache.get(config_file)
-            if cached is not None and cached.get('config') is not None:
-                config = cached['config']
-                if validate and not cached.get('validated', False):
-                    _validate_loaded_config(config)
-                    cached['validated'] = True
-                return config
+            if cached is not None:
+                return cached
 
-    config = load_config_with_env_vars(config_file, validate=validate)
+    config = load_config_with_env_vars(config_file)
     with _config_lock:
-        _config_cache[config_file] = {'config': config, 'validated': bool(validate)}
+        _config_cache[config_file] = config
+
+    return config
+
+
+def _strip_meta_fields(items):
+    return [{k: v for k, v in item.items() if k not in _DB_META_FIELDS} for item in items]
+
+
+def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Dict[str, Any]:
+    """加载最终配置：文件配置（含 env 覆盖）+ 数据库动态配置。
+
+    返回独立副本，调用方可安全修改。
+    """
+    config_file = config_file or get_default_config_path()
+    config = copy.deepcopy(get_config(config_file, use_cache=use_cache))
+
+    if not get_settings().enable_dynamic_config:
+        return config
+
+    try:
+        from database.repository import ConfigRepository
+        db_projects = ConfigRepository.get_all_projects()
+        db_subscriptions = ConfigRepository.get_all_subscriptions()
+        db_emails = ConfigRepository.get_all_emails()
+    except Exception as e:
+        logger.warning(f"[Config] 读取数据库动态配置失败，回退到文件配置: {e}")
+        return config
+
+    if db_projects:
+        config['projects'] = _strip_meta_fields(db_projects)
+    if db_subscriptions:
+        config['subscriptions'] = _strip_meta_fields(db_subscriptions)
+    if db_emails:
+        config['email'] = _strip_meta_fields(db_emails)
 
     return config
 
 
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
     """脱敏处理，用于日志输出"""
-    import copy
     masked = copy.deepcopy(config)
-    
+
     # 脱敏 webhook URL
     webhook = masked.get('webhook')
     if isinstance(webhook, dict) and 'url' in webhook:
         url = webhook.get('url') or ''
         if 'hook/' in url:
             webhook['url'] = url[:url.rfind('hook/') + 5] + '***'
-    
+
     # 脱敏邮箱密码
     if 'email' in masked:
         for email in masked['email']:
             if 'password' in email:
                 email['password'] = '***'
-    
+
     # 脱敏 API Key
     if 'projects' in masked:
         for project in masked['projects']:
@@ -246,5 +241,5 @@ def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
                     project['api_key'] = api_key[:4] + '***' + api_key[-4:]
                 else:
                     project['api_key'] = '***'
-    
+
     return masked

@@ -38,23 +38,25 @@ def _mask_database_url(database_url: str) -> str:
         return f"{scheme}://***:***@{rest.rsplit('@', 1)[-1]}"
 
 
+def _ensure_sqlite_dir() -> None:
+    if 'sqlite' not in DATABASE_URL:
+        return
+    db_dir = os.path.dirname(DATABASE_URL.replace('sqlite:///', ''))
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+        logger.info(f"创建数据目录: {db_dir}")
+
+
 def get_engine():
     """获取数据库引擎（单例）"""
     global _engine
-    
+
     if not ENABLE_DATABASE:
         logger.warning("数据持久化已禁用 (ENABLE_DATABASE=false)")
         return None
-    
-    if _engine is None:
-        if 'sqlite' in DATABASE_URL:
-            db_path = DATABASE_URL.replace('sqlite:///', '')
-            db_dir = os.path.dirname(db_path)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-                logger.info(f"创建数据目录: {db_dir}")
 
-        # 创建引擎
+    if _engine is None:
+        _ensure_sqlite_dir()
         _engine = create_engine(
             DATABASE_URL,
             echo=False,  # 生产环境关闭 SQL 日志
@@ -62,7 +64,7 @@ def get_engine():
             connect_args={'check_same_thread': False} if 'sqlite' in DATABASE_URL else {}
         )
         logger.info(f"数据库引擎已创建: {_mask_database_url(DATABASE_URL)}")
-    
+
     return _engine
 
 
@@ -89,35 +91,18 @@ def init_database():
     
     try:
         engine = get_engine()
-        
-        # 确保数据目录存在
-        if 'sqlite' in DATABASE_URL:
-            db_path = DATABASE_URL.replace('sqlite:///', '')
-            db_dir = os.path.dirname(db_path)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-                logger.info(f"创建数据目录: {db_dir}")
-        
-        # 创建所有表
         Base.metadata.create_all(engine)
         logger.info("✅ 数据库初始化完成")
-        
         return True
-        
+
     except Exception as e:
         logger.error(f"❌ 数据库初始化失败: {e}", exc_info=True)
         return False
 
 
 def get_session():
-    """获取数据库会话（上下文管理器）"""
+    """获取数据库会话"""
     factory = get_session_factory()
     if factory is None:
         return None
     return factory()
-
-
-def close_session():
-    """关闭会话"""
-    if _session_factory:
-        _session_factory.remove()

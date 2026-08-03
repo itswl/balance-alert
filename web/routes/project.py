@@ -4,10 +4,9 @@
 
 包含项目的配置更新功能
 """
-from flask import Blueprint, jsonify, request
-from ..utils import load_config_safe, audit_log, mask_project_config, json_error, json_success, require_json_fields, make_etag_response
+from flask import Blueprint
+from ..utils import load_config_safe, audit_log, mask_project_config, json_error, json_success, require_json_fields, make_etag_response, config_db_write
 from core.config_loader import clear_config_cache
-from services.config_service import upsert_project
 from core.logger import get_logger
 
 logger = get_logger('web.routes.project')
@@ -61,11 +60,11 @@ def update_project_threshold():
             return json_error(f'未找到项目: {project_name}', 404)
 
         # 保存到数据库
-        success = upsert_project(target_project)
-        
+        success = config_db_write(lambda repo: repo.upsert_project(target_project))
+
         if success:
             clear_config_cache()
-            
+
         audit_log('update_project_threshold', {
             'project': project_name,
             'old_threshold': old_threshold,

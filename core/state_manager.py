@@ -1,223 +1,99 @@
 #!/usr/bin/env python3
 """
 状态管理器
-封装全局状态，提供线程安全的访问接口
-支持状态持久化和通知机制
+封装 Web 看板展示的余额/订阅状态，提供线程安全的访问接口
 """
+import copy
 import threading
 import time
-import json
-import copy
-from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
 from core.logger import get_logger
-from core.settings import get_settings
 
 logger = get_logger('state_manager')
 
 
-@dataclass
-class BalanceState:
-    """余额状态数据类"""
-    last_update: Optional[str] = None
-    projects: Optional[List[Dict[str, Any]]] = None
-    summary: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self) -> None:
-        if self.projects is None:
-            self.projects = []
-        if self.summary is None:
-            self.summary = {}
+def _empty_balance_state() -> Dict[str, Any]:
+    return {'last_update': None, 'projects': [], 'summary': {}}
 
 
-@dataclass
-class SubscriptionState:
-    """订阅状态数据类"""
-    last_update: Optional[str] = None
-    subscriptions: Optional[List[Dict[str, Any]]] = None
-    summary: Optional[Dict[str, Any]] = None
+def _empty_subscription_state() -> Dict[str, Any]:
+    return {'last_update': None, 'subscriptions': [], 'summary': {}}
 
-    def __post_init__(self) -> None:
-        if self.subscriptions is None:
-            self.subscriptions = []
-        if self.summary is None:
-            self.summary = {}
+
+def _balance_summary(projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        'total': len(projects),
+        'success': sum(1 for r in projects if r['success']),
+        'failed': sum(1 for r in projects if not r['success']),
+        'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
+    }
 
 
 class StateManager:
-    """状态管理器类"""
+    """状态管理器类
+
+    写线程（后台刷新）与读线程（waitress worker）真实并发，读写都在锁内；
+    get_* 返回深拷贝，调用方可任意修改而不影响内部状态。
+    """
 
     def __init__(self) -> None:
-        self._balance_state: BalanceState = BalanceState()
-        self._subscription_state: SubscriptionState = SubscriptionState()
-        self._lock: threading.RLock = threading.RLock()
-        self._callbacks: List[Callable[[str, Any], None]] = []
-        self._cache_file: str = get_settings().cache_file_path
-        self._start_time: float = time.time()
-        # 预计算快照，避免每次 get 都 deepcopy
-        self._balance_snapshot: Optional[Dict[str, Any]] = None
-        self._subscription_snapshot: Optional[Dict[str, Any]] = None
-    
-    def register_callback(self, callback: Callable[[str, Any], None]) -> None:
-        """注册状态变更回调函数"""
-        with self._lock:
-            self._callbacks.append(callback)
-    
-    def unregister_callback(self, callback: Callable[[str, Any], None]) -> None:
-        """注销状态变更回调函数"""
-        with self._lock:
-            if callback in self._callbacks:
-                self._callbacks.remove(callback)
-    
-    def _notify_callbacks(self, state_type: str, state_data: Any) -> None:
-        """通知所有注册的回调函数"""
-        for callback in self._callbacks[:]:  # 复制列表避免在迭代时修改
-            try:
-                callback(state_type, state_data)
-            except Exception as e:
-                logger.error(f"回调函数执行失败: {e}", exc_info=True)
+        self._lock = threading.RLock()
+        self._start_time = time.time()
+        self._balance = _empty_balance_state()
+        self._subscriptions = _empty_subscription_state()
 
-    def _now_iso(self) -> str:
+    @staticmethod
+    def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-    
+
+    def uptime_seconds(self) -> float:
+        return time.time() - self._start_time
+
+    def _set_balance(self, projects: List[Dict[str, Any]]) -> None:
+        self._balance = {
+            'last_update': self._now_iso(),
+            'projects': projects,
+            'summary': _balance_summary(projects),
+        }
+        logger.info(f"余额状态已更新: {self._balance['summary']}")
+
     def update_balance_state(self, projects: List[Dict[str, Any]]) -> None:
-        """更新余额状态（线程安全）"""
+        """全量更新余额状态（线程安全）"""
         with self._lock:
-            self._balance_state.last_update = self._now_iso()
-            projects_copy = list(projects)
-            summary = {
-                'total': len(projects_copy),
-                'success': sum(1 for r in projects_copy if r['success']),
-                'failed': sum(1 for r in projects_copy if not r['success']),
-                'need_alarm': sum(1 for r in projects_copy if r.get('need_alarm', False)),
-            }
-            self._balance_state.projects = projects_copy
-            self._balance_state.summary = summary
-            self._balance_snapshot = {
-                'last_update': self._balance_state.last_update,
-                'projects': projects_copy,
-                'summary': summary,
-            }
-
-            # 通知回调
-            self._notify_callbacks('balance', self._balance_state)
-
-            logger.info(f"余额状态已更新: {self._balance_state.summary}")
+            self._set_balance(list(projects or []))
 
     def merge_balance_state(self, projects: List[Dict[str, Any]]) -> None:
+        """按项目名合并部分刷新结果（线程安全）"""
         with self._lock:
-            current_projects = self._balance_state.projects or []
-            proj_map = {p.get('project'): p for p in current_projects if p.get('project') is not None}
-            for r in projects:
+            proj_map = {p.get('project'): p for p in self._balance['projects'] if p.get('project') is not None}
+            for r in projects or []:
                 proj_key = r.get('project')
-                if proj_key is None:
-                    continue
-                proj_map[proj_key] = r
+                if proj_key is not None:
+                    proj_map[proj_key] = r
+            self._set_balance(list(proj_map.values()))
 
-            merged = list(proj_map.values())
-            self._balance_state.last_update = self._now_iso()
-            self._balance_state.projects = merged
-            summary = {
-                'total': len(merged),
-                'success': sum(1 for r in merged if r['success']),
-                'failed': sum(1 for r in merged if not r['success']),
-                'need_alarm': sum(1 for r in merged if r.get('need_alarm', False)),
-            }
-            self._balance_state.summary = summary
-            self._balance_snapshot = {
-                'last_update': self._balance_state.last_update,
-                'projects': merged,
-                'summary': summary,
-            }
-            self._notify_callbacks('balance', self._balance_state)
-            logger.info(f"余额状态已更新: {self._balance_state.summary}")
-    
     def update_subscription_state(self, subscriptions: Optional[List[Dict[str, Any]]]) -> None:
         """更新订阅状态（线程安全）"""
-        # 处理 None 情况
-        if subscriptions is None:
-            subscriptions = []
-
         with self._lock:
-            self._subscription_state.last_update = self._now_iso()
-            subscriptions_copy = list(subscriptions)
-            summary = {
-                'total': len(subscriptions_copy),
-                'need_alert': sum(1 for r in subscriptions_copy if r.get('need_alert', False)),
+            subscriptions = list(subscriptions or [])
+            self._subscriptions = {
+                'last_update': self._now_iso(),
+                'subscriptions': subscriptions,
+                'summary': {
+                    'total': len(subscriptions),
+                    'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
+                },
             }
-            self._subscription_state.subscriptions = subscriptions_copy
-            self._subscription_state.summary = summary
-            self._subscription_snapshot = {
-                'last_update': self._subscription_state.last_update,
-                'subscriptions': subscriptions_copy,
-                'summary': summary,
-            }
+            logger.info(f"订阅状态已更新: {self._subscriptions['summary']}")
 
-            # 通知回调
-            self._notify_callbacks('subscription', self._subscription_state)
-
-            logger.info(f"订阅状态已更新: {self._subscription_state.summary}")
-    
     def get_balance_state(self) -> Dict[str, Any]:
         """获取余额状态（线程安全，返回独立副本）"""
         with self._lock:
-            if self._balance_snapshot is not None:
-                return copy.deepcopy(self._balance_snapshot)
-            return copy.deepcopy(asdict(self._balance_state))
+            return copy.deepcopy(self._balance)
 
     def get_subscription_state(self) -> Dict[str, Any]:
         """获取订阅状态（线程安全，返回独立副本）"""
         with self._lock:
-            if self._subscription_snapshot is not None:
-                return copy.deepcopy(self._subscription_snapshot)
-            return copy.deepcopy(asdict(self._subscription_state))
-    
-    def has_data(self) -> bool:
-        """检查是否有数据（线程安全）"""
-        with self._lock:
-            return self._balance_state.last_update is not None
-    
-    def _rebuild_summaries(self) -> None:
-        """重建状态摘要信息"""
-        # 重建余额摘要
-        projects = self._balance_state.projects
-        balance_summary = {
-            'total': len(projects),
-            'success': sum(1 for r in projects if r['success']),
-            'failed': sum(1 for r in projects if not r['success']),
-            'need_alarm': sum(1 for r in projects if r.get('need_alarm', False)),
-        }
-        self._balance_state.summary = balance_summary
-
-        # 重建订阅摘要
-        subscriptions = self._subscription_state.subscriptions
-        subscription_summary = {
-            'total': len(subscriptions),
-            'need_alert': sum(1 for r in subscriptions if r.get('need_alert', False)),
-        }
-        self._subscription_state.summary = subscription_summary
-
-        # 重建快照
-        self._balance_snapshot = {
-            'last_update': self._balance_state.last_update,
-            'projects': self._balance_state.projects,
-            'summary': balance_summary,
-        }
-        self._subscription_snapshot = {
-            'last_update': self._subscription_state.last_update,
-            'subscriptions': self._subscription_state.subscriptions,
-            'summary': subscription_summary,
-        }
-    
-    def clear_state(self) -> None:
-        """清空所有状态"""
-        with self._lock:
-            self._balance_state = BalanceState()
-            self._subscription_state = SubscriptionState()
-            self._balance_snapshot = None
-            self._subscription_snapshot = None
-            logger.info("状态已清空")
-
-
- 
+            return copy.deepcopy(self._subscriptions)
