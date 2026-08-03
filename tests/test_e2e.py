@@ -214,21 +214,31 @@ class TestE2EWebAPI:
 
         assert all(code in [200, 503] for code in results)
     
-    def test_api_with_invalid_data(self, client):
-        """测试 API 输入验证"""
+    def test_api_with_invalid_data(self, client, monkeypatch):
+        """测试 API 输入验证（订阅启用时走真实校验路径）"""
+        monkeypatch.setenv('ENABLE_SUBSCRIPTIONS', 'true')
         # 发送无效的订阅数据
         invalid_data = {
             "name": "",  # 空名称
             "threshold": -100  # 负数阈值
         }
-        
+
         response = client.post('/api/subscription/add',
                               data=json.dumps(invalid_data),
                               content_type='application/json',
                               headers={'Authorization': 'Bearer test-key'})
-        
+
         # 应该返回 400 错误
         assert response.status_code == 400
+
+    def test_subscription_api_disabled_returns_503(self, client, monkeypatch):
+        """订阅功能关闭时，订阅写接口统一返回 503"""
+        monkeypatch.delenv('ENABLE_SUBSCRIPTIONS', raising=False)
+        response = client.post('/api/subscription/add',
+                              data=json.dumps({"name": "x"}),
+                              content_type='application/json',
+                              headers={'Authorization': 'Bearer test-key'})
+        assert response.status_code == 503
 
 
 class TestE2EConfigReload:
@@ -237,7 +247,7 @@ class TestE2EConfigReload:
     def test_config_reload(self, test_config_file):
         """测试配置文件修改后自动重载"""
         # 1. 加载初始配置
-        initial_config = load_config_with_env_vars(test_config_file, validate=False)
+        initial_config = load_config_with_env_vars(test_config_file)
         initial_project_count = len(initial_config.get('projects', []))
         
         # 2. 修改配置文件
@@ -256,7 +266,7 @@ class TestE2EConfigReload:
         
         # 3. 重新加载配置
         time.sleep(0.1)  # 等待文件系统同步
-        reloaded_config = load_config_with_env_vars(test_config_file, validate=False)
+        reloaded_config = load_config_with_env_vars(test_config_file)
         
         # 4. 验证配置已更新
         assert len(reloaded_config.get('projects', [])) == initial_project_count + 1

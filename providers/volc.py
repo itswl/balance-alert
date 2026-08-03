@@ -1,15 +1,31 @@
 """
 火山云余额查询适配器
 """
-from .base import BaseProvider, mask_headers, mask_url
+from .base import BaseProvider, mask_url
 import datetime
 import hashlib
 import hmac
-from .base import percent_encode_rfc3986, sha256_hexdigest, hmac_sha256
 import json
+from urllib.parse import quote
 from core.logger import get_logger
 
 logger = get_logger('volc_provider')
+
+_SENSITIVE_HEADER_KEYS = {'authorization', 'x-api-key', 'x-auth-token', 'api-key', 'token'}
+
+
+def mask_headers(headers):
+    if not isinstance(headers, dict):
+        return {}
+    masked = {}
+    for k, v in headers.items():
+        key = str(k)
+        if key.lower() in _SENSITIVE_HEADER_KEYS and v:
+            text = str(v)
+            masked[key] = f"{text[:4]}***{text[-4:]}" if len(text) > 8 else "***"
+        else:
+            masked[key] = v
+    return masked
 
 
 class VolcProvider(BaseProvider):
@@ -203,25 +219,24 @@ class VolcProvider(BaseProvider):
     
     @staticmethod
     def _norm_query(params):
-        """规范化查询参数"""
+        """规范化查询参数（RFC 3986 编码）"""
+        encode = lambda v: quote(str(v), safe='-_.~') if v is not None else ''
         query_items = []
         for key in sorted(params.keys()):
-            if isinstance(params[key], list):
-                for item in params[key]:
-                    query_items.append(f"{percent_encode_rfc3986(key)}={percent_encode_rfc3986(str(item))}")
-            else:
-                query_items.append(f"{percent_encode_rfc3986(key)}={percent_encode_rfc3986(str(params[key]))}")
+            values = params[key] if isinstance(params[key], list) else [params[key]]
+            for item in values:
+                query_items.append(f"{encode(key)}={encode(str(item))}")
         return '&'.join(query_items)
-    
+
     @staticmethod
     def _hash_sha256(content):
         """SHA256 哈希"""
-        return sha256_hexdigest(content)
-    
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
     @staticmethod
     def _hmac_sha256(key, content):
         """HMAC-SHA256"""
-        return hmac_sha256(key, content)
+        return hmac.new(key, content.encode('utf-8'), hashlib.sha256).digest()
     
     @classmethod
     def get_provider_name(cls):

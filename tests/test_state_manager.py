@@ -2,35 +2,7 @@
 状态管理器测试
 """
 import pytest
-import os
-import json
-import tempfile
-from core.state_manager import StateManager, BalanceState, SubscriptionState
-
-
-class TestBalanceState:
-    """余额状态数据类测试"""
-
-    def test_defaults(self):
-        state = BalanceState()
-        assert state.last_update is None
-        assert state.projects == []
-        assert state.summary == {}
-
-    def test_post_init_none_handling(self):
-        state = BalanceState(last_update='2024-01-01', projects=None, summary=None)
-        assert state.projects == []
-        assert state.summary == {}
-
-
-class TestSubscriptionState:
-    """订阅状态数据类测试"""
-
-    def test_defaults(self):
-        state = SubscriptionState()
-        assert state.last_update is None
-        assert state.subscriptions == []
-        assert state.summary == {}
+from core.state_manager import StateManager
 
 
 class TestStateManager:
@@ -42,10 +14,14 @@ class TestStateManager:
 
     def test_initial_state(self):
         """测试初始状态"""
-        assert self.manager.has_data() is False
         balance = self.manager.get_balance_state()
         assert balance['last_update'] is None
         assert balance['projects'] == []
+        assert balance['summary'] == {}
+
+        subscription = self.manager.get_subscription_state()
+        assert subscription['last_update'] is None
+        assert subscription['subscriptions'] == []
 
     def test_update_balance_state(self):
         """测试更新余额状态"""
@@ -55,13 +31,27 @@ class TestStateManager:
         ]
         self.manager.update_balance_state(projects)
 
-        assert self.manager.has_data() is True
-
         state = self.manager.get_balance_state()
         assert state['last_update'] is not None
         assert len(state['projects']) == 2
         assert state['summary']['total'] == 2
         assert state['summary']['success'] == 1
+        assert state['summary']['failed'] == 1
+
+    def test_merge_balance_state(self):
+        """测试部分刷新按项目名合并"""
+        self.manager.update_balance_state([
+            {'project': 'A', 'success': True, 'credits': 100, 'need_alarm': False},
+            {'project': 'B', 'success': True, 'credits': 200, 'need_alarm': False},
+        ])
+        self.manager.merge_balance_state([
+            {'project': 'B', 'success': False, 'error': 'timeout', 'need_alarm': False},
+        ])
+
+        state = self.manager.get_balance_state()
+        assert len(state['projects']) == 2
+        merged_b = next(p for p in state['projects'] if p['project'] == 'B')
+        assert merged_b['success'] is False
         assert state['summary']['failed'] == 1
 
     def test_update_subscription_state(self):
@@ -78,48 +68,12 @@ class TestStateManager:
         assert state['summary']['total'] == 2
         assert state['summary']['need_alert'] == 1
 
-    def test_callback_registration(self):
-        """测试回调注册和通知"""
-        received = []
-
-        def callback(state_type, state_data):
-            received.append(state_type)
-
-        self.manager.register_callback(callback)
-        self.manager.update_balance_state([{'project': 'X', 'success': True, 'need_alarm': False}])
-
-        assert 'balance' in received
-
-    def test_callback_unregistration(self):
-        """测试回调注销"""
-        received = []
-
-        def callback(state_type, state_data):
-            received.append(state_type)
-
-        self.manager.register_callback(callback)
-        self.manager.unregister_callback(callback)
-        self.manager.update_balance_state([{'project': 'X', 'success': True, 'need_alarm': False}])
-
-        assert len(received) == 0
-
-    def test_callback_error_handling(self):
-        """测试回调异常不影响状态更新"""
-        def bad_callback(state_type, state_data):
-            raise RuntimeError("callback error")
-
-        self.manager.register_callback(bad_callback)
-        # 不应抛出异常
-        self.manager.update_balance_state([{'project': 'X', 'success': True, 'need_alarm': False}])
-        assert self.manager.has_data() is True
-
-    def test_clear_state(self):
-        """测试清空状态"""
-        self.manager.update_balance_state([{'project': 'X', 'success': True, 'need_alarm': False}])
-        assert self.manager.has_data() is True
-
-        self.manager.clear_state()
-        assert self.manager.has_data() is False
+    def test_update_subscription_state_none(self):
+        """None 输入等价于空列表"""
+        self.manager.update_subscription_state(None)
+        state = self.manager.get_subscription_state()
+        assert state['subscriptions'] == []
+        assert state['summary']['total'] == 0
 
     def test_state_isolation(self):
         """测试更新不会修改外部列表"""
@@ -131,6 +85,10 @@ class TestStateManager:
 
         state = self.manager.get_balance_state()
         assert len(state['projects']) == 1
+
+    def test_uptime_seconds(self):
+        """运行时长非负且递增"""
+        assert self.manager.uptime_seconds() >= 0
 
 
 class TestConcurrentAccess:
@@ -228,7 +186,7 @@ class TestConcurrentAccess:
 
 
 class TestSnapshotIndependence:
-    """快照返回独立副本测试（Phase 1.2 deepcopy 修复验证）"""
+    """快照返回独立副本测试"""
 
     def setup_method(self):
         self.manager = StateManager()

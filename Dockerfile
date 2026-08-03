@@ -49,14 +49,11 @@ COPY *.py ./
 COPY core ./core
 COPY services ./services
 COPY providers ./providers
-COPY models ./models
 COPY database ./database
 COPY web ./web
 COPY scripts ./scripts
 COPY templates ./templates
 COPY static ./static
-COPY alembic ./alembic
-COPY alembic.ini ./
 COPY start.sh crontab docker-entrypoint.sh ./
 
 # 创建非 root 用户和必要的目录/文件

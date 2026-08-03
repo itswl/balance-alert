@@ -3,13 +3,12 @@
 多项目余额监控主程序
 支持配置驱动的多项目余额检查和告警
 """
-import json
 import sys
 import argparse
 import hashlib
 import threading
 import time
-from typing import Dict, Any, List, Optional, Tuple, Callable, TypeVar, Generic
+from typing import Dict, Any, List, Optional, Tuple, TypeVar, Generic
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
@@ -17,9 +16,8 @@ from services.subscription_checker import SubscriptionChecker
 from services.email_scanner import EmailScanner
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
-from core.config_loader import make_project_id
+from core.config_loader import load_config, make_project_id
 from core.settings import get_settings
-from services.config_service import load_config
 
 # 创建 logger（必须在使用前定义）
 logger = get_logger('monitor')
@@ -33,8 +31,8 @@ except ImportError:
     logger.warning("数据库模块不可用，历史数据不会被保存")
 
 # 并发检查常量
-DEFAULT_MAX_CONCURRENT = 20  # 提升默认并发数from 5 to 20
-MAX_CONCURRENT_UPPER_BOUND = 50  # 提升上限 from 20 to 50
+DEFAULT_MAX_CONCURRENT = 20
+MAX_CONCURRENT_UPPER_BOUND = 50
 
 DEFAULT_RESPONSE_CACHE_TTL = 300  # 默认缓存 5 分钟
 PROVIDER_CACHE_TTL = 600  # 实例缓存 10 分钟
@@ -97,37 +95,13 @@ def _get_alert_cooldown_seconds(config: Dict[str, Any]) -> int:
         return 86400
 
 
-def _safe_metrics_call(action: Callable[[], None]) -> None:
-    try:
-        action()
-    except Exception:
-        return None
-
-
 def _get_metrics_collector():
+    """Prometheus 指标收集器；未启用或导入失败时返回 None"""
     try:
         from services.prometheus_exporter import metrics_collector
         return metrics_collector
     except Exception:
         return None
-
-
-def _set_active_projects_count(count: int) -> None:
-    collector = _get_metrics_collector()
-    if collector is None:
-        return None
-    _safe_metrics_call(lambda: collector.active_projects_count.set(count))
-
-
-def _observe_monitor_execution_time(seconds: float) -> None:
-    collector = _get_metrics_collector()
-    if collector is None:
-        return None
-    _safe_metrics_call(lambda: collector.monitor_execution_time.observe(seconds))
-
-
-def _project_id(provider_name: str, project_name: str) -> str:
-    return make_project_id(provider_name, project_name)
 
 
 def _provider_cache_key(provider_name: str, api_key: str) -> str:
@@ -201,7 +175,7 @@ class CreditMonitor:
         if not DB_AVAILABLE:
             return None
         try:
-            project_id = _project_id(provider_name, project_name)
+            project_id = make_project_id(provider_name, project_name)
             BalanceRepository.save_balance_record(
                 project_id=project_id,
                 project_name=project_name,
@@ -294,7 +268,7 @@ class CreditMonitor:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
 
             if not dry_run:
-                project_id = _project_id(provider_name, project_name)
+                project_id = make_project_id(provider_name, project_name)
                 alert_cooldown = _get_alert_cooldown_seconds(self.config)
                 if self._should_skip_alarm(project_id, 'low_balance', alert_cooldown):
                     logger.info(f"[{project_name}] 告警仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
@@ -323,44 +297,20 @@ class CreditMonitor:
         }
     
     def _send_alarm(self, project_config: Dict[str, Any], credits: float) -> bool:
-        """
-        发送告警到 webhook
-
-        Args:
-            project_config: 项目配置
-            credits: 当前余额
-
-        Returns:
-            bool: 是否发送成功
-        """
-        webhook_config = self.config.get('webhook', {})
-        webhook_url = webhook_config.get('url')
-        webhook_type = webhook_config.get('type', 'custom')
-        webhook_source = webhook_config.get('source', 'credit-monitor')
-        
-        if not webhook_url:
+        """发送告警到 webhook"""
+        adapter = WebhookAdapter.from_config(self.config, 'credit-monitor')
+        if adapter is None:
             logger.error("❌ 未配置 webhook 地址")
             return False
-        
-        # 创建 webhook 适配器
-        adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)
-        
-        # 获取项目信息
-        project_name = project_config.get('name')
-        provider = project_config.get('provider')
-        threshold = project_config.get('threshold')
-        balance_type = '余额'
-        unit = ''
-        
-        # 发送告警
+
         return adapter.send_balance_alert(
-            project_name=project_name,
+            project_name=project_config.get('name'),
             owner_project=project_config.get('owner_project') or project_config.get('project'),
-            provider=provider,
-            balance_type=balance_type,
+            provider=project_config.get('provider'),
+            balance_type='余额',
             current_value=credits,
-            threshold=threshold,
-            unit=unit
+            threshold=project_config.get('threshold'),
+            unit=''
         )
     
     def run(self, project_name: Optional[str] = None, dry_run: bool = False) -> None:
@@ -393,7 +343,9 @@ class CreditMonitor:
         if dry_run:
             logger.info("[测试模式] 不会发送实际告警")
 
-        _set_active_projects_count(len(projects))
+        collector = _get_metrics_collector()
+        if collector is not None:
+            collector.active_projects_count.set(len(projects))
 
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
@@ -423,9 +375,9 @@ class CreditMonitor:
         # 输出汇总
         self._print_summary()
 
-        # 记录执行时间（Prometheus 指标）
         execution_time = time.time() - start_time
-        _observe_monitor_execution_time(execution_time)
+        if collector is not None:
+            collector.monitor_execution_time.observe(execution_time)
         logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
     
     def _print_summary(self) -> None:
@@ -506,7 +458,8 @@ def _run_from_args(args) -> None:
     monitor = CreditMonitor(args.config)
     monitor.run(project_name=args.project, dry_run=args.dry_run)
 
-    if args.check_subscriptions or args.project is None:
+    # 与 Web 主流程同一开关语义：--check-subscriptions 可强制执行
+    if args.check_subscriptions or (args.project is None and get_settings().enable_subscriptions):
         subscription_checker = SubscriptionChecker(args.config)
         subscription_checker.check_subscriptions(dry_run=args.dry_run)
 

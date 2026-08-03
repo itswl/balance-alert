@@ -2,23 +2,15 @@
 """
 Web 中间件
 
-提供认证、请求验证等装饰器
+提供 API Key 认证与请求体验证
 """
 import hmac
 from functools import wraps
+
 from flask import request, jsonify
+from pydantic import ValidationError
 
 from core.settings import get_settings
-
-try:
-    from pydantic import ValidationError
-except ImportError:  # Optional routes use Pydantic; the core dashboard does not.
-    ValidationError = None
-
-
-def _get_api_key() -> str:
-    # 优先 WEB_API_KEY（含旧名 WEB_AUTH_API_KEY），再按开关回退到 legacy API_KEY。
-    return get_settings().resolved_web_api_key()
 
 
 def _extract_api_key() -> str:
@@ -33,55 +25,30 @@ def _extract_api_key() -> str:
     return ''
 
 
-def _auth_not_configured():
-    return jsonify({
-        'status': 'error',
-        'message': 'API Key 未配置，请设置 WEB_API_KEY'
-    }), 503
-
-
-def _unauthorized():
-    return jsonify({
-        'status': 'error',
-        'message': 'API Key 无效或未提供'
-    }), 401
-
-
-def validate_api_key_request() -> bool:
-    if request.method == 'OPTIONS':
-        return True
-
-    api_key = _get_api_key()
-    if not api_key:
-        return False
-
-    token = _extract_api_key()
-    return bool(token) and hmac.compare_digest(token, api_key)
-
-
-def require_api_key(f):
-    """API Key 认证装饰器"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not _get_api_key():
-            return _auth_not_configured()
-        if not validate_api_key_request():
-            return _unauthorized()
-        return f(*args, **kwargs)
-    return decorated
-
-
 def protect_api_endpoints(app) -> None:
+    """为所有 /api/ 路径启用 API Key 认证"""
+
     @app.before_request
     def _api_key_guard():
-        path = request.path or ''
-        if not path.startswith('/api/'):
+        if not (request.path or '').startswith('/api/'):
             return None
-        if not _get_api_key():
-            return _auth_not_configured()
-        if validate_api_key_request():
+        if request.method == 'OPTIONS':
             return None
-        return _unauthorized()
+
+        api_key = get_settings().resolved_web_api_key()
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'API Key 未配置，请设置 WEB_API_KEY'
+            }), 503
+
+        token = _extract_api_key()
+        if token and hmac.compare_digest(token, api_key):
+            return None
+        return jsonify({
+            'status': 'error',
+            'message': 'API Key 无效或未提供'
+        }), 401
 
 
 def validate_request(model_class):
@@ -91,47 +58,29 @@ def validate_request(model_class):
     用法：
         @validate_request(AddSubscriptionRequest)
         def my_endpoint(validated_data: AddSubscriptionRequest):
-            # validated_data 是已验证的 Pydantic 模型实例
             ...
     """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            if ValidationError is None:
+            data = request.get_json(silent=True)
+            if data is None:
                 return jsonify({
                     'status': 'error',
-                    'message': '请求验证依赖未安装，请安装可选依赖 pydantic'
-                }), 503
+                    'message': '请求体必须是有效的 JSON'
+                }), 400
 
             try:
-                # 获取请求数据
-                data = request.get_json()
-                if data is None:
-                    return jsonify({
-                        'status': 'error',
-                        'message': '请求体必须是有效的 JSON'
-                    }), 400
-
-                # 验证数据
                 validated_data = model_class(**data)
-
-                # 调用原函数，传入验证后的数据
-                return f(validated_data=validated_data, *args, **kwargs)
-
             except ValidationError as e:
-                # Pydantic 验证错误
                 errors = [
                     f"{' -> '.join(str(loc) for loc in error['loc'])}: {error['msg']}"
                     for error in e.errors()
                 ]
-                return jsonify({
-                    'status': 'error',
-                    'errors': errors
-                }), 400
+                return jsonify({'status': 'error', 'errors': errors}), 400
             except Exception as e:
-                return jsonify({
-                    'status': 'error',
-                    'message': f'验证失败: {str(e)}'
-                }), 400
+                return jsonify({'status': 'error', 'message': f'验证失败: {str(e)}'}), 400
+
+            return f(validated_data=validated_data, *args, **kwargs)
         return decorated
     return decorator

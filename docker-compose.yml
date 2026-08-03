@@ -19,7 +19,6 @@ services:
     environment:
       - TZ=Asia/Shanghai
     # 启动 Web 服务器 + Cron 定时任务
-    command: /app/start.sh
     networks:
       - monitor-network
 

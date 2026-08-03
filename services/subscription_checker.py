@@ -2,20 +2,17 @@
 """
 订阅续费提醒检查器
 """
-import json
-import sys
-import hashlib
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
-from core.config_loader import make_subscription_id
+from core.config_loader import load_config, make_subscription_id
 from core.settings import get_settings
 
 # 创建 logger
 logger = get_logger('subscription_checker')
 
 try:
-    from database.repository import AlertRepository, SubscriptionRepository
+    from database.repository import AlertRepository
     DB_AVAILABLE = True
 except ImportError:
     DB_AVAILABLE = False
@@ -35,6 +32,35 @@ def _get_alert_cooldown_seconds(config) -> int:
         return max(0, int(raw_value))
     except (TypeError, ValueError):
         return 86400
+
+
+def calculate_next_renewal_date(cycle_type: str, renewal_day: int, from_date: datetime = None) -> datetime:
+    """计算下次续费日期（Web 标记续费后展示用）"""
+    if from_date is None:
+        from_date = datetime.now()
+
+    if cycle_type == 'weekly':
+        # renewal_day: 1-7 (周一到周日)
+        days_ahead = renewal_day - from_date.isoweekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        return from_date + timedelta(days=days_ahead)
+
+    if cycle_type == 'monthly':
+        next_month = from_date.month + 1
+        next_year = from_date.year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+        return SubscriptionChecker._safe_month_date(next_year, next_month, renewal_day)
+
+    if cycle_type == 'yearly':
+        # renewal_day 为 MMDD (如 315 表示 3月15日)；兼容旧格式 1-31 时按周年日计算。
+        if renewal_day <= 31:
+            return SubscriptionChecker._safe_replace_year(from_date, from_date.year + 1)
+        return datetime(from_date.year + 1, renewal_day // 100, renewal_day % 100)
+
+    raise ValueError(f"不支持的周期类型: {cycle_type}")
 
 
 def _coerce_int(value, default: int) -> int:
@@ -66,7 +92,6 @@ class SubscriptionChecker:
     
     def _load_config(self):
         """加载配置文件"""
-        from services.config_service import load_config
         return load_config(self.config_path)
     
     def check_subscriptions(self, dry_run=False):
@@ -129,21 +154,6 @@ class SubscriptionChecker:
             )
         except Exception as e:
             logger.error(f"保存订阅提醒告警历史失败: {e}", exc_info=True)
-
-    def _save_subscription_history(self, subscription_id: str, name: str, cycle_type: str, days_until_renewal: int, amount: float, need_alert: bool) -> None:
-        if not DB_AVAILABLE:
-            return None
-        try:
-            SubscriptionRepository.save_subscription_record(
-                subscription_id=subscription_id,
-                subscription_name=name,
-                cycle_type=cycle_type,
-                days_until_renewal=days_until_renewal,
-                amount=amount,
-                need_renewal=need_alert
-            )
-        except Exception as e:
-            logger.error(f"保存订阅历史失败: {e}", exc_info=True)
 
     def _check_subscription(self, sub, today, dry_run):
         """检查单个订阅"""
@@ -213,9 +223,6 @@ class SubscriptionChecker:
         else:
             logger.info(f"✅ 无需提醒")
 
-        subscription_id = self._subscription_id(name)
-        self._save_subscription_history(subscription_id, name, cycle_type, days_until_renewal, amount, need_alert)
-        
         return {
             'name': name,
             'owner_project': owner_project,
@@ -231,25 +238,9 @@ class SubscriptionChecker:
         }
     
     def _get_cycle_text(self, cycle_type, renewal_day):
-        """获取周期描述文本"""
-        if cycle_type == 'weekly':
-            weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-            if 1 <= renewal_day <= 7:
-                return f"每周 {weekdays[renewal_day - 1]}"
-            return f"每周第 {renewal_day} 天"
-        elif cycle_type == 'yearly':
-            try:
-                renewal_day = int(renewal_day)
-            except (TypeError, ValueError):
-                return "每年（固定日期）"
-            if renewal_day > 31:
-                month = renewal_day // 100
-                day = renewal_day % 100
-                return f"每年 {month}月{day}日"
-            return "每年（固定日期）"
-        else:  # monthly
-            return f"每月 {renewal_day} 号"
-    
+        """获取周期描述文本（与告警消息保持同一实现）"""
+        return WebhookAdapter._format_subscription_cycle(cycle_type, renewal_day)
+
     @staticmethod
     def _safe_replace_year(dt, new_year):
         """安全地替换日期的年份，处理闰年2/29的情况"""
@@ -398,18 +389,11 @@ class SubscriptionChecker:
     
     def _send_alert(self, sub, days_until_renewal):
         """发送续费提醒告警"""
-        webhook_config = self.config.get('webhook', {})
-        webhook_url = webhook_config.get('url')
-        webhook_type = webhook_config.get('type', 'custom')
-        webhook_source = webhook_config.get('source', 'credit-monitor')
-        
-        if not webhook_url:
+        adapter = WebhookAdapter.from_config(self.config, 'credit-monitor')
+        if adapter is None:
             logger.error("❌ 未配置 webhook 地址")
             return False
-        
-        # 创建 webhook 适配器
-        adapter = WebhookAdapter(webhook_url, webhook_type, webhook_source)
-        
+
         # 获取订阅信息
         name = sub.get('name')
         owner_project = sub.get('owner_project') or sub.get('project')
@@ -449,27 +433,3 @@ class SubscriptionChecker:
                 logger.info(f"  {status} {r['name']}{owner_project}: 还有 {days} 天续费")
 
         logger.info(f"{'='*60}")
-
-
-def main():
-    """主函数"""
-    import argparse
-    from core.config_loader import get_default_config_path
-    
-    parser = argparse.ArgumentParser(description='订阅续费提醒检查')
-    parser.add_argument('--dry-run', action='store_true', help='测试模式，不发送告警')
-    default_config = get_default_config_path()
-    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
-    
-    args = parser.parse_args()
-    
-    try:
-        checker = SubscriptionChecker(args.config)
-        checker.check_subscriptions(dry_run=args.dry_run)
-    except Exception as e:
-        logger.error(f"❌ 错误: {e}", exc_info=True)
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()

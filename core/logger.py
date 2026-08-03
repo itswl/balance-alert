@@ -39,6 +39,8 @@ def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -
     if not isinstance(numeric_level, int):
         numeric_level = logging.INFO
     logger.setLevel(numeric_level)
+    # 不向 root 传播：waitress.serve() 会调用 logging.basicConfig()，否则每条日志打两遍
+    logger.propagate = False
     
     # 避免重复添加 handler
     if logger.handlers:

@@ -75,45 +75,20 @@ def create_app(state_manager: StateManager = None) -> Flask:
 
 
 def _register_blueprints(app: Flask, state_manager: StateManager):
-    """
-    注册所有蓝图
+    """注册所有蓝图；可选能力的蓝图按开关注册"""
+    from .routes import create_core_bp, create_subscription_bp, email_bp, history_bp, project_bp
 
-    Args:
-        app: Flask 应用实例
-        state_manager: 状态管理器实例
-    """
     settings = get_settings()
 
-    from .routes import create_core_bp
     app.register_blueprint(create_core_bp(state_manager))
+    # 订阅蓝图始终注册，未启用时由蓝图内部统一返回 503
+    app.register_blueprint(create_subscription_bp(state_manager))
 
-    def _subscription_bp():
-        from .routes import create_subscription_bp
-        return create_subscription_bp(state_manager)
-
-    def _dynamic_config_bps():
-        from .routes import project_bp, email_bp
-        return [project_bp, email_bp]
-
-    def _history_bp():
-        from .routes import history_bp
-        return history_bp
-
-    registrations = [
-        (settings.enable_subscriptions, _subscription_bp),
-        (settings.enable_dynamic_config, _dynamic_config_bps),
-        (settings.enable_history_api, _history_bp),
-    ]
-
-    for enabled, factory in registrations:
-        if not enabled:
-            continue
-        value = factory()
-        if isinstance(value, list):
-            for bp in value:
-                app.register_blueprint(bp)
-        else:
-            app.register_blueprint(value)
+    if settings.enable_dynamic_config:
+        app.register_blueprint(project_bp)
+        app.register_blueprint(email_bp)
+    if settings.enable_history_api:
+        app.register_blueprint(history_bp)
 
     logger.info("蓝图注册完成")
 

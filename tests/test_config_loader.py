@@ -53,7 +53,7 @@ class TestLoadConfigWithEnvVars:
         config_path = self._create_config_file_raw(raw_config)
         try:
             with patch.dict(os.environ, {'TEST_API_KEY': 'sk-replaced-key'}, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['projects'][0]['api_key'] == 'sk-replaced-key'
         finally:
             os.unlink(config_path)
@@ -73,7 +73,7 @@ class TestLoadConfigWithEnvVars:
             env = os.environ.copy()
             env.pop('NONEXISTENT_VAR_12345', None)
             with patch.dict(os.environ, env, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['custom_field'] == '${NONEXISTENT_VAR_12345}'
         finally:
             os.unlink(config_path)
@@ -91,7 +91,7 @@ class TestLoadConfigWithEnvVars:
         config_path = self._create_config_file(config_data)
         try:
             with patch.dict(os.environ, {'WEBHOOK_URL': 'https://env.com/hook'}, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['webhook']['url'] == 'https://env.com/hook'
         finally:
             os.unlink(config_path)
@@ -113,7 +113,7 @@ class TestLoadConfigWithEnvVars:
                 'WEBHOOK_SOURCE': 'balance-alert',
                 'WEBHOOK_TYPE': 'feishu',
             }, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['webhook']['url'] == 'https://open.feishu.cn/open-apis/bot/v2/hook/token'
                 assert config['webhook']['source'] == 'balance-alert'
                 assert config['webhook']['type'] == 'feishu'
@@ -135,7 +135,7 @@ class TestLoadConfigWithEnvVars:
         config_path = self._create_config_file(config_data)
         try:
             with patch.dict(os.environ, {'EMAIL_PASSWORD': 'env_pass'}, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['email'][0]['password'] == 'env_pass'
         finally:
             os.unlink(config_path)
@@ -152,14 +152,14 @@ class TestLoadConfigWithEnvVars:
         config_path = self._create_config_file(config_data)
         try:
             with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '1800'}, clear=True):
-                config = load_config_with_env_vars(config_path, validate=False)
+                config = load_config_with_env_vars(config_path)
                 assert config['settings']['balance_refresh_interval_seconds'] == 1800
         finally:
             os.unlink(config_path)
 
     def test_file_not_found(self):
         """测试配置文件不存在"""
-        config = load_config_with_env_vars('/nonexistent/config.json', validate=False)
+        config = load_config_with_env_vars('/nonexistent/config.json')
         assert 'settings' in config
         assert 'projects' in config
 

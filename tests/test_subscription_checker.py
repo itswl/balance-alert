@@ -269,7 +269,7 @@ class TestGetCycleText:
         assert self.checker._get_cycle_text('monthly', 15) == '每月 15 号'
 
     def test_yearly_text(self):
-        assert self.checker._get_cycle_text('yearly', 1) == '每年（固定日期）'
+        assert self.checker._get_cycle_text('yearly', 1) == '每年固定日期'
         assert self.checker._get_cycle_text('yearly', 315) == '每年 3月15日'
 
 
@@ -280,7 +280,6 @@ class TestSubscriptionDefaults:
         self.checker = SubscriptionChecker.__new__(SubscriptionChecker)
         self.checker.config = {'settings': {}}
         self.checker.results = []
-        self.checker._save_subscription_history = lambda *args, **kwargs: None
 
     def test_null_alert_days_before_uses_default(self):
         sub = {

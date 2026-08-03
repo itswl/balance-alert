@@ -12,7 +12,7 @@ from web import create_app
 from core.state_manager import StateManager
 from services.monitor import run_credit_monitor
 from core.logger import get_logger
-from core.config_loader import get_default_config_path, get_enable_web_alarm, get_refresh_interval
+from core.config_loader import get_default_config_path, get_refresh_interval
 from core.settings import get_settings
 
 logger = get_logger('web_server')
@@ -26,7 +26,7 @@ global_state_manager = StateManager()
 
 
 def _update_balance(state_mgr: StateManager):
-    result = run_credit_monitor(get_default_config_path(), dry_run=not get_enable_web_alarm())
+    result = run_credit_monitor(get_default_config_path(), dry_run=not get_settings().enable_web_alarm)
     if result.get('success'):
         state_mgr.update_balance_state(result.get('results') or [])
     return result.get('results') or []
@@ -39,7 +39,7 @@ def _update_subscriptions(state_mgr: StateManager):
 
     from services.subscription_checker import SubscriptionChecker
     subscription_checker = SubscriptionChecker(get_default_config_path())
-    subscription_results = subscription_checker.check_subscriptions(dry_run=not get_enable_web_alarm())
+    subscription_results = subscription_checker.check_subscriptions(dry_run=not get_settings().enable_web_alarm)
     state_mgr.update_subscription_state(subscription_results or [])
     return subscription_results or []
 
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         # 启动 Flask 服务器
         logger.info(f"\n🚀 余额监控 Web 服务器启动中（模块化版本）...")
         logger.info(f"📊 访问地址: http://localhost:{web_port}")
-        if get_enable_web_alarm():
+        if settings.enable_web_alarm:
             logger.warning("⚠️  告警模式: 已启用（Web 会发送真实告警）")
         else:
             logger.info("🔕 告警模式: 仅查询（不发送告警，由定时任务负责）")

@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
 Webhook 适配器
-支持多种 webhook 类型：飞书、自定义等
+支持多种 webhook 类型：飞书、钉钉、企业微信、自定义
 """
 import json
+import threading
 import time
-import requests
-import requests.adapters
-from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+from typing import Any, Dict, Optional
+
+import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from core.logger import get_logger
 from core.settings import get_settings
 
-# 创建 logger
 logger = get_logger('webhook_adapter')
 
-# HTTP 连接默认常量
-DEFAULT_POOL_CONNECTIONS = 10
-DEFAULT_POOL_MAXSIZE = 100
-DEFAULT_MAX_RETRIES = 3
+# 进程级共享 Session：告警是低频请求，所有 adapter 实例复用一个连接池
+_session_lock = threading.Lock()
+_shared_session: Optional[requests.Session] = None
 
-# HTTP 请求超时时间（秒），可用 REQUEST_TIMEOUT 覆盖
-REQUEST_TIMEOUT = get_settings().request_timeout
+
+def _get_shared_session() -> requests.Session:
+    global _shared_session
+    with _session_lock:
+        if _shared_session is None:
+            _shared_session = requests.Session()
+        return _shared_session
 
 
 def _mask_webhook_url(url: str) -> str:
@@ -61,31 +66,28 @@ class WebhookAdapter:
         self.webhook_url = webhook_url
         self.webhook_type = webhook_type.lower()
         self.source = source
-        self._session = None
+        self._session = None  # 测试可注入；为 None 时使用进程级共享 Session
 
         if self.webhook_type not in self.SUPPORTED_TYPES:
             logger.warning(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
             self.webhook_type = 'custom'
 
-    def _get_session(self):
-        """获取或创建复用的 HTTP Session"""
-        if self._session is None:
-            self._session = requests.Session()
-            adapter = requests.adapters.HTTPAdapter(
-                pool_connections=DEFAULT_POOL_CONNECTIONS,
-                pool_maxsize=DEFAULT_POOL_MAXSIZE,
-                max_retries=DEFAULT_MAX_RETRIES
-            )
-            self._session.mount('http://', adapter)
-            self._session.mount('https://', adapter)
-        return self._session
+    @classmethod
+    def from_config(cls, config: Dict[str, Any], default_source: str) -> Optional['WebhookAdapter']:
+        """从配置的 webhook 段构建 adapter，未配置 URL 时返回 None"""
+        webhook_config = config.get('webhook') or {}
+        url = webhook_config.get('url')
+        if not url:
+            return None
+        return cls(
+            url,
+            webhook_config.get('type', 'custom'),
+            webhook_config.get('source', default_source),
+        )
 
-    def close(self):
-        """关闭 HTTP Session"""
-        if self._session:
-            self._session.close()
-            self._session = None
-    
+    def _get_session(self):
+        return self._session if self._session is not None else _get_shared_session()
+
     @staticmethod
     def _payload_preview(payload: Any, limit: int = 500) -> str:
         try:
@@ -176,6 +178,7 @@ class WebhookAdapter:
                 "msgtype": "markdown",
                 "markdown": {"title": title, "text": f"## {title}\n\n{md_text}"}
             }
+        # wecom
         return {
             "msgtype": "text",
             "text": {"content": f"【{title}】\n{text}"}
@@ -183,21 +186,7 @@ class WebhookAdapter:
 
     def send_balance_alert(self, project_name: str, provider: str, balance_type: str, current_value: float,
                           threshold: float, unit: str = '', owner_project: str = None) -> bool:
-        """
-        发送余额告警
-
-        Args:
-            project_name: 项目名称
-            owner_project: 所属项目名称
-            provider: 服务商
-            balance_type: 类型 (余额)
-            current_value: 当前值
-            threshold: 阈值
-            unit: 单位
-
-        Returns:
-            bool: 是否发送成功
-        """
+        """发送余额告警"""
         if self.webhook_type == 'custom':
             return self._send_custom_balance_alert(
                 project_name, provider, balance_type, current_value, threshold, unit, owner_project
@@ -205,23 +194,11 @@ class WebhookAdapter:
         text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit, owner_project)
         payload = self._wrap_payload("余额告警", text)
         return self._send_request(payload)
-    
+
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
                                amount: float, owner_project: str = None,
                                cycle_type: str = 'monthly') -> bool:
-        """
-        发送订阅续费提醒
-
-        Args:
-            subscription_name: 订阅名称
-            owner_project: 所属项目名称
-            renewal_day: 续费日期
-            days_until_renewal: 距离续费天数
-            amount: 续费金额
-
-        Returns:
-            bool: 是否发送成功
-        """
+        """发送订阅续费提醒"""
         if self.webhook_type == 'custom':
             return self._send_custom_subscription_alert(
                 subscription_name, renewal_day, days_until_renewal, amount, owner_project, cycle_type
@@ -231,17 +208,24 @@ class WebhookAdapter:
             )
         payload = self._wrap_payload("订阅续费提醒", text)
         return self._send_request(payload)
-    
+
     # ==================== 自定义格式 ====================
-    
+
+    def _custom_envelope(self, type_: str, rule_name: str, level: str, resource: Dict[str, Any]) -> Dict[str, Any]:
+        """自定义 webhook 的统一 JSON 信封"""
+        return {
+            "Type": type_,
+            "RuleName": rule_name,
+            "Level": level,
+            "Resources": [resource],
+        }
+
     def _send_custom_balance_alert(self, project_name, provider, balance_type,
                                    current_value, threshold, unit, owner_project=None):
         """发送自定义格式余额告警"""
-        payload = {
-            "Type": "AlarmNotification",
-            "RuleName": f"{project_name}{balance_type}告警",
-            "Level": "critical",
-            "Resources": [{
+        payload = self._custom_envelope(
+            "AlarmNotification", f"{project_name}{balance_type}告警", "critical",
+            {
                 "ProjectName": project_name,
                 "OwnerProject": owner_project,
                 "Provider": provider,
@@ -250,21 +234,18 @@ class WebhookAdapter:
                 "Threshold": threshold,
                 "Unit": unit,
                 "Message": f"项目 [{project_name}] {balance_type}不足，当前: {unit}{current_value:,.2f}，阈值: {unit}{threshold:,.2f}"
-            }]
-        }
-        
+            })
         return self._send_request(payload)
-    
+
     def _send_custom_subscription_alert(self, subscription_name, renewal_day,
                                        days_until_renewal, amount, owner_project=None,
                                        cycle_type='monthly'):
         """发送自定义格式订阅提醒"""
         cycle_text = self._format_subscription_cycle(cycle_type, renewal_day)
-        payload = {
-            "Type": "SubscriptionReminder",
-            "RuleName": f"{subscription_name}续费提醒",
-            "Level": "warning" if days_until_renewal > 0 else "critical",
-            "Resources": [{
+        payload = self._custom_envelope(
+            "SubscriptionReminder", f"{subscription_name}续费提醒",
+            "warning" if days_until_renewal > 0 else "critical",
+            {
                 "SubscriptionName": subscription_name,
                 "OwnerProject": owner_project,
                 "RenewalDay": renewal_day,
@@ -272,19 +253,14 @@ class WebhookAdapter:
                 "DaysUntilRenewal": days_until_renewal,
                 "Amount": amount,
                 "Message": f"订阅 [{subscription_name}] 将在 {days_until_renewal} 天后（{cycle_text}）续费，金额: {amount}"
-            }]
-        }
-        
+            })
         return self._send_request(payload)
-    
+
     # ==================== 通用发送 ====================
-    
+
     def _send_request(self, payload):
         """
         发送 HTTP 请求（带自动重试）
-
-        Args:
-            payload: 请求体
 
         Returns:
             bool: 是否发送成功
@@ -317,12 +293,11 @@ class WebhookAdapter:
         """发送 HTTP 请求的内层方法（可重试）"""
         start_time = time.time()
 
-        session = self._get_session()
-        response = session.post(
+        response = self._get_session().post(
             self.webhook_url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=REQUEST_TIMEOUT
+            timeout=get_settings().request_timeout
         )
 
         elapsed_time = time.time() - start_time
@@ -343,18 +318,9 @@ class WebhookAdapter:
             # 4xx 等客户端错误，不重试
             logger.error(f"告警发送失败: HTTP {response.status_code} | 响应: {response.text[:500]}")
             return False
-    
+
     def send_custom_alert(self, title, content):
-        """
-        发送自定义告警
-        
-        Args:
-            title: 告警标题
-            content: 告警内容
-            
-        Returns:
-            bool: 是否发送成功
-        """
+        """发送自定义告警（邮箱扫描等场景的富文本消息）"""
         try:
             handlers = {
                 'feishu': self._send_feishu_custom,
@@ -366,25 +332,17 @@ class WebhookAdapter:
         except Exception as e:
             logger.error(f"发送自定义告警失败: {e}", exc_info=True)
             return False
-    
+
     def _send_feishu_custom(self, title, content):
-        """发送飞书自定义告警"""
+        """发送飞书自定义告警（卡片消息）"""
         payload = {
             "msg_type": "interactive",
             "card": {
                 "header": {
-                    "title": {
-                        "tag": "plain_text",
-                        "content": title
-                    },
+                    "title": {"tag": "plain_text", "content": title},
                     "template": "orange"
                 },
-                "elements": [
-                    {
-                        "tag": "markdown",
-                        "content": content
-                    }
-                ]
+                "elements": [{"tag": "markdown", "content": content}]
             }
         }
         return self._send_request(payload)
@@ -393,10 +351,7 @@ class WebhookAdapter:
         """发送钉钉自定义告警"""
         payload = {
             "msgtype": "markdown",
-            "markdown": {
-                "title": title,
-                "text": f"### {title}\n\n{content}"
-            }
+            "markdown": {"title": title, "text": f"### {title}\n\n{content}"}
         }
         return self._send_request(payload)
 
@@ -404,9 +359,7 @@ class WebhookAdapter:
         """发送企业微信自定义告警"""
         payload = {
             "msgtype": "markdown",
-            "markdown": {
-                "content": f"### {title}\n\n{content}"
-            }
+            "markdown": {"content": f"### {title}\n\n{content}"}
         }
         return self._send_request(payload)
 

@@ -216,33 +216,3 @@ class EmailAlertHistory(Base):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
 
-class SubscriptionHistory(Base):
-    """订阅历史记录"""
-    __tablename__ = 'subscription_history'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    subscription_id = Column(String(200), nullable=False, index=True, comment='订阅唯一标识')
-    subscription_name = Column(String(200), nullable=False, comment='订阅名称')
-    cycle_type = Column(String(20), nullable=False, comment='周期类型')
-    days_until_renewal = Column(Integer, comment='距离续费天数')
-    amount = Column(Float, default=0, comment='订阅金额')
-    need_renewal = Column(Boolean, default=False, comment='是否需要续费')
-    timestamp = Column(DateTime, default=utcnow, index=True, comment='记录时间')
-    
-    __table_args__ = (
-        Index('idx_subscription_time', 'subscription_id', 'timestamp'),
-        {'comment': '订阅历史记录表'}
-    )
-    
-    def to_dict(self):
-        """转换为字典"""
-        return {
-            'id': self.id,
-            'subscription_id': self.subscription_id,
-            'subscription_name': self.subscription_name,
-            'cycle_type': self.cycle_type,
-            'days_until_renewal': self.days_until_renewal,
-            'amount': self.amount,
-            'need_renewal': self.need_renewal,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None
-        }
