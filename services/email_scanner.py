@@ -16,6 +16,8 @@ from contextlib import contextmanager
 from typing import Optional, Dict, Any, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.webhook_adapter import WebhookAdapter
+from services import alert_store
+from core.config_loader import filter_enabled
 from core.logger import get_logger
 from core.settings import get_settings
 
@@ -142,19 +144,13 @@ class EmailScanner:
         return load_config(self.config_path)
     
     def _parse_email_configs(self):
-        """解析邮箱配置，支持单个或多个邮箱"""
+        """解析邮箱配置，兼容单个（dict）与多个（list）两种写法"""
         email_config = self.config.get('email', [])
-        
-        # 如果是列表，直接返回
-        if isinstance(email_config, list):
-            return [cfg for cfg in email_config if cfg.get('enabled', True)]
-        
-        # 如果是字典，转换为单元素列表
         if isinstance(email_config, dict):
-            if email_config.get('enabled', True):
-                return [email_config]
-        
-        return []
+            email_config = [email_config]
+        if not isinstance(email_config, list):
+            return []
+        return filter_enabled(email_config)
     
     def _decode_str(self, s):
         """解码邮件标题或内容"""
@@ -304,20 +300,6 @@ class EmailScanner:
     def _get_webhook_adapter(self, default_source: str) -> Optional[WebhookAdapter]:
         return WebhookAdapter.from_settings(default_source)
 
-    def _has_recent_email_alert(self, mailbox: str, sender: str, subject: str, date: str, days: int) -> bool:
-        try:
-            from database.repository import EmailRepository
-            return EmailRepository.has_recent_email_alert(
-                mailbox=mailbox,
-                sender=sender,
-                subject=subject,
-                date=date,
-                days=days
-            )
-        except Exception as e:
-            logger.error(f"查询邮件告警去重失败: {e}", exc_info=True)
-            return False
-
     def _parse_message(self, msg):
         subject = self._decode_str(msg.get('Subject', ''))
         sender = self._decode_str(msg.get('From', ''))
@@ -359,7 +341,7 @@ class EmailScanner:
     def _maybe_skip_duplicate(self, result: Dict[str, Any], mailbox_name: str, sender: str, subject: str, date: str, days: int, dry_run: bool) -> bool:
         if dry_run:
             return False
-        duplicate_sent = self._has_recent_email_alert(
+        duplicate_sent = alert_store.email_alert_sent_recently(
             mailbox=mailbox_name,
             sender=sender,
             subject=subject,
@@ -593,21 +575,16 @@ class EmailScanner:
         
         alert_sent = adapter.send_custom_alert(title, content)
 
-        # 保存到数据库
-        try:
-            from database.repository import EmailRepository
-            EmailRepository.save_email_alert(
-                mailbox=email_info.get('mailbox', '未知'),
-                sender=email_info['sender'],
-                subject=email_info['subject'],
-                date=email_info['date'],
-                service_name=email_info['service_name'],
-                amount=email_info['amount'],
-                matched_keywords=email_info['keywords'],
-                alert_sent=alert_sent
-            )
-        except Exception as e:
-            logger.error(f"保存邮件告警记录失败: {e}", exc_info=True)
+        alert_store.record_email_alert(
+            mailbox=email_info.get('mailbox', '未知'),
+            sender=email_info['sender'],
+            subject=email_info['subject'],
+            date=email_info['date'],
+            service_name=email_info['service_name'],
+            amount=email_info['amount'],
+            matched_keywords=email_info['keywords'],
+            alert_sent=alert_sent,
+        )
 
         return alert_sent
     

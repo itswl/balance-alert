@@ -6,6 +6,7 @@ Web 工具函数
 """
 import hashlib
 import json
+from functools import wraps
 from typing import Any, Dict
 
 from flask import jsonify, make_response, request
@@ -14,6 +15,34 @@ from core.config_loader import get_default_config_path, load_config
 from core.logger import get_logger
 
 logger = get_logger('web.utils')
+
+
+def handle_errors(action: str, *, bad_request_on_value_error: bool = False):
+    """统一端点的异常出口：记录日志并返回 500。
+
+    Args:
+        action: 日志里的动作名，如「查询余额历史」
+        bad_request_on_value_error: 查询参数由 parse_int_arg 校验的端点开启，
+            让 ValueError 返回 400 而不是 500
+
+    用法（放在 @route 之下、@validate_request 之上）：
+
+        @bp.route('/x')
+        @handle_errors('查询 X')
+        def x(): ...
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if bad_request_on_value_error and isinstance(e, ValueError):
+                    return json_error(f'参数错误: {e}', 400)
+                logger.error(f"{action}失败: {e}", exc_info=True)
+                return json_error(str(e), 500)
+        return wrapper
+    return decorator
 
 
 def json_error(message: str, status_code: int = 500):

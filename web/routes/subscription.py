@@ -20,7 +20,7 @@ from ..schemas import (
     DeleteSubscriptionRequest,
     UpdateSubscriptionRequest,
 )
-from ..utils import audit_log, config_db_write, json_error, json_success, load_config_safe, make_etag_response
+from ..utils import audit_log, config_db_write, handle_errors, json_error, json_success, load_config_safe, make_etag_response
 
 logger = get_logger('web.routes.subscription')
 
@@ -56,211 +56,189 @@ def create_subscription_bp(state_manager: StateManager) -> Blueprint:
         return data['name'], None
 
     @subscription_bp.route('/config/subscriptions', methods=['GET'])
+    @handle_errors('获取订阅配置')
     def get_subscriptions_config():
         """获取所有订阅配置（不含状态）"""
-        try:
-            config = load_config_safe()
-            subscriptions = config.get('subscriptions', [])
-            return make_etag_response({'status': 'success', 'subscriptions': subscriptions})
-        except Exception as e:
-            logger.error(f"获取订阅配置失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
+        config = load_config_safe()
+        subscriptions = config.get('subscriptions', [])
+        return make_etag_response({'status': 'success', 'subscriptions': subscriptions})
 
     @subscription_bp.route('/config/subscription', methods=['POST'])
     @validate_request(UpdateSubscriptionRequest)
+    @handle_errors('更新订阅配置')
     def update_subscription(validated_data: UpdateSubscriptionRequest):
         """更新订阅配置"""
-        try:
-            config = load_config_safe()
+        config = load_config_safe()
 
-            subscription_found = False
-            updated_fields = []
+        subscription_found = False
+        updated_fields = []
 
-            for sub in config.get('subscriptions', []):
-                if sub.get('name') == validated_data.name:
-                    subscription_found = True
-                    dyn_sub = sub.copy()
+        for sub in config.get('subscriptions', []):
+            if sub.get('name') == validated_data.name:
+                subscription_found = True
+                dyn_sub = sub.copy()
 
-                    if validated_data.new_name:
-                        dyn_sub['name'] = validated_data.new_name
-                        updated_fields.append('name')
-                        config_db_write(lambda repo: repo.delete_subscription(validated_data.name))
+                if validated_data.new_name:
+                    dyn_sub['name'] = validated_data.new_name
+                    updated_fields.append('name')
+                    config_db_write(lambda repo: repo.delete_subscription(validated_data.name))
 
-                    for field in ('cycle_type', 'renewal_day', 'alert_days_before', 'amount', 'enabled', 'last_renewed_date'):
-                        value = getattr(validated_data, field)
-                        if value is not None:
-                            dyn_sub[field] = value
-                            updated_fields.append(field)
+                for field in ('cycle_type', 'renewal_day', 'alert_days_before', 'amount', 'enabled', 'last_renewed_date'):
+                    value = getattr(validated_data, field)
+                    if value is not None:
+                        dyn_sub[field] = value
+                        updated_fields.append(field)
 
-                    if 'owner_project' in validated_data.model_fields_set:
-                        dyn_sub['owner_project'] = validated_data.owner_project
-                        updated_fields.append('owner_project')
+                if 'owner_project' in validated_data.model_fields_set:
+                    dyn_sub['owner_project'] = validated_data.owner_project
+                    updated_fields.append('owner_project')
 
-                    success = config_db_write(lambda repo: repo.upsert_subscription(dyn_sub))
-                    _clear_config_cache_if(success)
-                    break
+                success = config_db_write(lambda repo: repo.upsert_subscription(dyn_sub))
+                _clear_config_cache_if(success)
+                break
 
-            if not subscription_found:
-                return json_error(f'未找到订阅: {validated_data.name}', 404)
+        if not subscription_found:
+            return json_error(f'未找到订阅: {validated_data.name}', 404)
 
-            audit_log('update_subscription', {
-                'subscription': validated_data.name,
-                'fields': updated_fields
-            })
+        audit_log('update_subscription', {
+            'subscription': validated_data.name,
+            'fields': updated_fields
+        })
 
-            _refresh_cache()
+        _refresh_cache()
 
-            return json_success({
-                'status': 'success',
-                'message': f'订阅 [{validated_data.name}] 配置已更新',
-                'updated_fields': updated_fields
-            }, 200)
-
-        except Exception as e:
-            logger.error(f"更新订阅配置失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
+        return json_success({
+            'status': 'success',
+            'message': f'订阅 [{validated_data.name}] 配置已更新',
+            'updated_fields': updated_fields
+        }, 200)
 
     @subscription_bp.route('/subscription/add', methods=['POST'])
     @validate_request(AddSubscriptionRequest)
+    @handle_errors('添加订阅')
     def add_subscription(validated_data: AddSubscriptionRequest):
         """添加新订阅"""
-        try:
-            config = load_config_safe()
+        config = load_config_safe()
 
-            subscriptions = config.get('subscriptions', [])
-            for sub in subscriptions:
-                if sub.get('name') == validated_data.name:
-                    return json_error(f'订阅名称 [{validated_data.name}] 已存在', 400)
+        subscriptions = config.get('subscriptions', [])
+        for sub in subscriptions:
+            if sub.get('name') == validated_data.name:
+                return json_error(f'订阅名称 [{validated_data.name}] 已存在', 400)
 
-            new_subscription = {
-                'name': validated_data.name,
-                'owner_project': validated_data.owner_project,
-                'cycle_type': validated_data.cycle_type,
-                'renewal_day': validated_data.renewal_day,
-                'alert_days_before': validated_data.alert_days_before,
-                'amount': validated_data.amount,
-                'enabled': validated_data.enabled,
-            }
+        new_subscription = {
+            'name': validated_data.name,
+            'owner_project': validated_data.owner_project,
+            'cycle_type': validated_data.cycle_type,
+            'renewal_day': validated_data.renewal_day,
+            'alert_days_before': validated_data.alert_days_before,
+            'amount': validated_data.amount,
+            'enabled': validated_data.enabled,
+        }
 
-            if validated_data.last_renewed_date:
-                new_subscription['last_renewed_date'] = validated_data.last_renewed_date
+        if validated_data.last_renewed_date:
+            new_subscription['last_renewed_date'] = validated_data.last_renewed_date
 
-            success = config_db_write(lambda repo: repo.upsert_subscription(new_subscription))
-            _clear_config_cache_if(success)
+        success = config_db_write(lambda repo: repo.upsert_subscription(new_subscription))
+        _clear_config_cache_if(success)
 
-            audit_log('add_subscription', {
-                'subscription': validated_data.name,
-                'cycle_type': validated_data.cycle_type,
-                'amount': validated_data.amount
-            })
+        audit_log('add_subscription', {
+            'subscription': validated_data.name,
+            'cycle_type': validated_data.cycle_type,
+            'amount': validated_data.amount
+        })
 
-            _refresh_cache()
+        _refresh_cache()
 
-            return json_success({
-                'status': 'success',
-                'message': f'订阅 [{validated_data.name}] 已成功添加'
-            }, 200)
-
-        except Exception as e:
-            logger.error(f"添加订阅失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
+        return json_success({
+            'status': 'success',
+            'message': f'订阅 [{validated_data.name}] 已成功添加'
+        }, 200)
 
     @subscription_bp.route('/subscription/delete', methods=['POST', 'DELETE'])
     @validate_request(DeleteSubscriptionRequest)
+    @handle_errors('删除订阅')
     def delete_subscription_route(validated_data: DeleteSubscriptionRequest):
         """删除订阅"""
-        try:
-            config = load_config_safe()
-            subscriptions = config.get('subscriptions', [])
-            if not any(sub.get('name') == validated_data.name for sub in subscriptions):
-                return json_error(f'未找到订阅: {validated_data.name}', 404)
+        config = load_config_safe()
+        subscriptions = config.get('subscriptions', [])
+        if not any(sub.get('name') == validated_data.name for sub in subscriptions):
+            return json_error(f'未找到订阅: {validated_data.name}', 404)
 
-            success = config_db_write(lambda repo: repo.delete_subscription(validated_data.name))
-            _clear_config_cache_if(success)
+        success = config_db_write(lambda repo: repo.delete_subscription(validated_data.name))
+        _clear_config_cache_if(success)
 
-            audit_log('delete_subscription', {'subscription': validated_data.name})
-            _refresh_cache()
+        audit_log('delete_subscription', {'subscription': validated_data.name})
+        _refresh_cache()
 
-            return json_success({
-                'status': 'success',
-                'message': f'订阅 [{validated_data.name}] 已删除'
-            }, 200)
-
-        except Exception as e:
-            logger.error(f"删除订阅失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
+        return json_success({
+            'status': 'success',
+            'message': f'订阅 [{validated_data.name}] 已删除'
+        }, 200)
 
     @subscription_bp.route('/subscription/mark_renewed', methods=['POST'])
+    @handle_errors('标记续费')
     def mark_subscription_renewed():
         """标记订阅已续费"""
-        try:
-            subscription_name, error_response = _get_name_from_json()
-            if error_response:
-                return error_response
+        subscription_name, error_response = _get_name_from_json()
+        if error_response:
+            return error_response
 
-            data = request.get_json(silent=True) or {}
-            renewed_date = data.get('renewed_date')
+        data = request.get_json(silent=True) or {}
+        renewed_date = data.get('renewed_date')
 
-            success = config_db_write(lambda repo: repo.upsert_subscription({
-                'name': subscription_name,
-                'last_renewed_date': renewed_date or date.today().isoformat()
-            }))
+        success = config_db_write(lambda repo: repo.upsert_subscription({
+            'name': subscription_name,
+            'last_renewed_date': renewed_date or date.today().isoformat()
+        }))
 
-            if not success:
-                return json_error('更新订阅失败', 500)
+        if not success:
+            return json_error('更新订阅失败', 500)
 
-            clear_config_cache()
-            audit_log('mark_renewed', {'subscription': subscription_name})
-            _refresh_cache()
+        clear_config_cache()
+        audit_log('mark_renewed', {'subscription': subscription_name})
+        _refresh_cache()
 
-            config = load_config_safe()
+        config = load_config_safe()
 
-            sub_data = next((s for s in config.get('subscriptions', []) if s.get('name') == subscription_name), None)
-            if not sub_data:
-                return json_error('未找到订阅配置', 404)
-            next_renewal = calculate_next_renewal_date(
-                sub_data['cycle_type'],
-                sub_data['renewal_day'],
-                datetime.fromisoformat(sub_data['last_renewed_date'])
-            )
+        sub_data = next((s for s in config.get('subscriptions', []) if s.get('name') == subscription_name), None)
+        if not sub_data:
+            return json_error('未找到订阅配置', 404)
+        next_renewal = calculate_next_renewal_date(
+            sub_data['cycle_type'],
+            sub_data['renewal_day'],
+            datetime.fromisoformat(sub_data['last_renewed_date'])
+        )
 
-            return json_success({
-                'status': 'success',
-                'message': f'订阅 [{subscription_name}] 已标记为已续费',
-                'next_renewal_date': next_renewal.isoformat()
-            }, 200)
-
-        except Exception as e:
-            logger.error(f"标记续费失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
+        return json_success({
+            'status': 'success',
+            'message': f'订阅 [{subscription_name}] 已标记为已续费',
+            'next_renewal_date': next_renewal.isoformat()
+        }, 200)
 
     @subscription_bp.route('/subscription/clear_renewed', methods=['POST'])
+    @handle_errors('清除续费标记')
     def clear_subscription_renewed():
         """清除订阅的续费标记"""
-        try:
-            subscription_name, error_response = _get_name_from_json()
-            if error_response:
-                return error_response
+        subscription_name, error_response = _get_name_from_json()
+        if error_response:
+            return error_response
 
-            success = config_db_write(lambda repo: repo.upsert_subscription({
-                'name': subscription_name,
-                'last_renewed_date': None
-            }))
+        success = config_db_write(lambda repo: repo.upsert_subscription({
+            'name': subscription_name,
+            'last_renewed_date': None
+        }))
 
-            if not success:
-                return json_error('更新订阅失败', 500)
+        if not success:
+            return json_error('更新订阅失败', 500)
 
-            clear_config_cache()
-            audit_log('unmark_renewed', {'subscription': subscription_name})
-            _refresh_cache()
+        clear_config_cache()
+        audit_log('unmark_renewed', {'subscription': subscription_name})
+        _refresh_cache()
 
-            return json_success({
-                'status': 'success',
-                'message': f'订阅 [{subscription_name}] 的续费标记已清除'
-            }, 200)
+        return json_success({
+            'status': 'success',
+            'message': f'订阅 [{subscription_name}] 的续费标记已清除'
+        }, 200)
 
-        except Exception as e:
-            logger.error(f"清除续费标记失败: {e}", exc_info=True)
-            return json_error(str(e), 500)
 
     return subscription_bp

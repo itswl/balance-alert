@@ -16,19 +16,11 @@ from services.subscription_checker import SubscriptionChecker
 from services.email_scanner import EmailScanner
 from services.webhook_adapter import WebhookAdapter
 from core.logger import get_logger
-from core.config_loader import load_config, make_project_id
+from core.config_loader import filter_enabled, load_config, make_project_id, owner_project_of
 from core.settings import get_settings
+from services import alert_store
 
-# 创建 logger（必须在使用前定义）
 logger = get_logger('monitor')
-
-# 数据持久化（可选）
-try:
-    from database.repository import BalanceRepository, AlertRepository
-    DB_AVAILABLE = True
-except ImportError:
-    DB_AVAILABLE = False
-    logger.warning("数据库模块不可用，历史数据不会被保存")
 
 # 并发检查常量
 DEFAULT_MAX_CONCURRENT = 20
@@ -82,12 +74,6 @@ class _TTLCache(Generic[T]):
 
 _provider_cache: _TTLCache[Any] = _TTLCache()
 _response_cache: _TTLCache[Dict[str, Any]] = _TTLCache()
-
-
-def _get_alert_cooldown_seconds() -> int:
-    """告警冷却时间：环境变量 ALERT_COOLDOWN_SECONDS，默认 24 小时。"""
-    value = get_settings().alert_cooldown_seconds
-    return max(0, value) if value is not None else 86400
 
 
 def _get_metrics_collector():
@@ -161,47 +147,6 @@ class CreditMonitor:
             'alarm_sent': False
         }
 
-    def _save_balance_history(self, provider_name: str, project_name: str, credits: float, threshold: float, project_config: Dict[str, Any], need_alarm: bool) -> None:
-        if not DB_AVAILABLE:
-            return None
-        try:
-            project_id = make_project_id(provider_name, project_name)
-            BalanceRepository.save_balance_record(
-                project_id=project_id,
-                project_name=project_name,
-                provider=provider_name,
-                balance=credits,
-                threshold=threshold,
-                balance_type=project_config.get('type', 'credits'),
-                need_alarm=need_alarm
-            )
-        except Exception as e:
-            logger.error(f"保存余额历史失败: {e}", exc_info=True)
-
-    def _should_skip_alarm(self, project_id: str, alert_type: str, cooldown_seconds: int) -> bool:
-        if not DB_AVAILABLE:
-            return False
-        try:
-            return AlertRepository.has_recent_alert(project_id, alert_type, cooldown_seconds)
-        except Exception:
-            return False
-
-    def _save_alert_history(self, project_id: str, project_name: str, alert_type: str, message: str, credits: float, threshold: float) -> None:
-        if not DB_AVAILABLE:
-            return None
-        try:
-            AlertRepository.save_alert_record(
-                project_id=project_id,
-                project_name=project_name,
-                alert_type=alert_type,
-                message=message,
-                balance_value=credits,
-                threshold_value=threshold,
-                status='sent'
-            )
-        except Exception as e:
-            logger.error(f"保存告警历史失败: {e}", exc_info=True)
-    
     def check_project(self, project_config: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """
         检查单个项目的余额
@@ -214,7 +159,7 @@ class CreditMonitor:
             dict: 检查结果
         """
         project_name = project_config.get('name', 'Unknown')
-        owner_project = project_config.get('owner_project') or project_config.get('project')
+        owner_project = owner_project_of(project_config)
         provider_name = project_config.get('provider')
         api_key = project_config.get('api_key')
         threshold = project_config.get('threshold', 0)
@@ -252,21 +197,27 @@ class CreditMonitor:
         need_alarm = credits < threshold
         alarm_sent = False
 
-        self._save_balance_history(provider_name, project_name, credits, threshold, project_config, need_alarm)
-        
+        project_id = make_project_id(provider_name, project_name)
+        alert_store.record_balance(
+            project_id, project_name, provider_name, credits, threshold,
+            project_config.get('type', 'credits'), need_alarm,
+        )
+
         if need_alarm:
             logger.warning(f"[{project_name}] 余额不足! {credits} < {threshold}")
 
             if not dry_run:
-                project_id = make_project_id(provider_name, project_name)
-                alert_cooldown = _get_alert_cooldown_seconds()
-                if self._should_skip_alarm(project_id, 'low_balance', alert_cooldown):
+                alert_cooldown = alert_store.cooldown_seconds('balance')
+                if alert_store.in_cooldown(project_id, 'low_balance', alert_cooldown):
                     logger.info(f"[{project_name}] 告警仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
                 else:
                     alarm_sent = self._send_alarm(project_config, credits)
 
                     if alarm_sent:
-                        self._save_alert_history(project_id, project_name, 'low_balance', f"余额不足: {credits} < {threshold}", credits, threshold)
+                        alert_store.record_alert(
+                            project_id, project_name, 'low_balance',
+                            f"余额不足: {credits} < {threshold}", credits, threshold,
+                        )
             else:
                 logger.info(f"[{project_name}] [测试模式] 跳过发送告警")
         else:
@@ -295,7 +246,7 @@ class CreditMonitor:
 
         return adapter.send_balance_alert(
             project_name=project_config.get('name'),
-            owner_project=project_config.get('owner_project') or project_config.get('project'),
+            owner_project=owner_project_of(project_config),
             provider=project_config.get('provider'),
             balance_type='余额',
             current_value=credits,
@@ -327,7 +278,7 @@ class CreditMonitor:
                 logger.error(f"未找到项目: {project_name}")
                 return
         else:
-            projects = [p for p in projects if p.get('enabled', True)]
+            projects = filter_enabled(projects)
 
         logger.info(f"开始监控 {len(projects)} 个项目...")
         if dry_run:
@@ -360,7 +311,7 @@ class CreditMonitor:
                 except Exception as e:
                     logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
                     with self._results_lock:
-                        self.results.append(self._failure_result(project.get('name', 'Unknown'), project.get('owner_project') or project.get('project'), project.get('provider'), str(e)))
+                        self.results.append(self._failure_result(project.get('name', 'Unknown'), owner_project_of(project), project.get('provider'), str(e)))
         
         # 输出汇总
         self._print_summary()

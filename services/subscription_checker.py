@@ -4,30 +4,11 @@
 """
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
+from services import alert_store
 from core.logger import get_logger
-from core.config_loader import load_config, make_subscription_id
-from core.settings import get_settings
+from core.config_loader import filter_enabled, load_config, make_subscription_id, owner_project_of
 
-# 创建 logger
 logger = get_logger('subscription_checker')
-
-try:
-    from database.repository import AlertRepository
-    DB_AVAILABLE = True
-except ImportError:
-    DB_AVAILABLE = False
-
-
-def _get_alert_cooldown_seconds() -> int:
-    """订阅提醒冷却时间，默认 24 小时。
-
-    优先级：SUBSCRIPTION_ALERT_COOLDOWN_SECONDS > ALERT_COOLDOWN_SECONDS > 默认。
-    """
-    settings = get_settings()
-    value = settings.subscription_alert_cooldown_seconds
-    if value is None:
-        value = settings.alert_cooldown_seconds
-    return max(0, value) if value is not None else 86400
 
 
 def calculate_next_renewal_date(cycle_type: str, renewal_day: int, from_date: datetime = None) -> datetime:
@@ -107,7 +88,7 @@ class SubscriptionChecker:
             return []
         
         # 过滤启用的订阅
-        enabled_subs = [s for s in subscriptions if s.get('enabled', True)]
+        enabled_subs = filter_enabled(subscriptions)
         
         logger.info(f"📅 开始检查 {len(enabled_subs)} 个订阅...")
         if dry_run:
@@ -126,35 +107,10 @@ class SubscriptionChecker:
     def _subscription_id(name: str) -> str:
         return make_subscription_id(name)
 
-    def _should_skip_alert(self, subscription_id: str) -> bool:
-        if not DB_AVAILABLE:
-            return False
-        alert_cooldown = _get_alert_cooldown_seconds()
-        try:
-            return AlertRepository.has_recent_alert(subscription_id, 'subscription_renewal', alert_cooldown)
-        except Exception:
-            return False
-
-    def _save_alert_history(self, subscription_id: str, name: str, days_until_renewal: int, amount: float, alert_days_before: int) -> None:
-        if not DB_AVAILABLE:
-            return None
-        try:
-            AlertRepository.save_alert_record(
-                project_id=subscription_id,
-                project_name=name,
-                alert_type='subscription_renewal',
-                message=f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
-                balance_value=amount,
-                threshold_value=alert_days_before,
-                status='sent'
-            )
-        except Exception as e:
-            logger.error(f"保存订阅提醒告警历史失败: {e}", exc_info=True)
-
     def _check_subscription(self, sub, today, dry_run):
         """检查单个订阅"""
         name = sub.get('name', '未知订阅')
-        owner_project = sub.get('owner_project') or sub.get('project')
+        owner_project = owner_project_of(sub)
         renewal_day = _coerce_int(sub.get('renewal_day'), 1)
         alert_days_before = max(0, _coerce_int(sub.get('alert_days_before'), 3))
         amount = _coerce_float(sub.get('amount'), 0.0)
@@ -207,13 +163,17 @@ class SubscriptionChecker:
 
             if not dry_run:
                 subscription_id = self._subscription_id(name)
-                if self._should_skip_alert(subscription_id):
-                    alert_cooldown = _get_alert_cooldown_seconds()
+                alert_cooldown = alert_store.cooldown_seconds('subscription')
+                if alert_store.in_cooldown(subscription_id, 'subscription_renewal', alert_cooldown):
                     logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
                 else:
                     alert_sent = self._send_alert(sub, days_until_renewal)
                     if alert_sent:
-                        self._save_alert_history(subscription_id, name, days_until_renewal, amount, alert_days_before)
+                        alert_store.record_alert(
+                            subscription_id, name, 'subscription_renewal',
+                            f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
+                            amount, alert_days_before,
+                        )
             else:
                 logger.info("🔍 [测试模式] 跳过发送告警")
         else:
@@ -284,6 +244,9 @@ class SubscriptionChecker:
         Returns:
             (days, next_renewal_date): 距离续费的天数和下次续费日期
         """
+        # 续费日一律是 00:00，这里把"现在"截到当天零点，否则续费当天会算成 -1 天而漏提醒
+        today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+
         if cycle_type == 'weekly':
             return self._calculate_weekly_renewal(renewal_day, today)
         elif cycle_type == 'yearly':
@@ -392,7 +355,7 @@ class SubscriptionChecker:
 
         # 获取订阅信息
         name = sub.get('name')
-        owner_project = sub.get('owner_project') or sub.get('project')
+        owner_project = owner_project_of(sub)
         renewal_day = sub.get('renewal_day')
         amount = sub.get('amount', 0)
         

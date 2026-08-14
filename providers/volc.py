@@ -1,79 +1,68 @@
 """
 火山云余额查询适配器
+
+签名算法：火山引擎 V4（HMAC-SHA256），与 AWS SigV4 同构。
 """
-from .base import BaseProvider, mask_url
 import datetime
 import hashlib
 import hmac
 import json
 from urllib.parse import quote
+
 from core.logger import get_logger
+from .base import BaseProvider, mask_url
 
 logger = get_logger('volc_provider')
 
-_SENSITIVE_HEADER_KEYS = {'authorization', 'x-api-key', 'x-auth-token', 'api-key', 'token'}
-
-
-def mask_headers(headers):
-    if not isinstance(headers, dict):
-        return {}
-    masked = {}
-    for k, v in headers.items():
-        key = str(k)
-        if key.lower() in _SENSITIVE_HEADER_KEYS and v:
-            text = str(v)
-            masked[key] = f"{text[:4]}***{text[-4:]}" if len(text) > 8 else "***"
-        else:
-            masked[key] = v
-    return masked
+# 参与签名的请求头，顺序即签名顺序（规范请求与 Authorization 头共用这一处定义）
+SIGNED_HEADERS = ('content-type', 'host', 'x-content-sha256', 'x-date')
 
 
 class VolcProvider(BaseProvider):
     """火山云服务适配器"""
-    
+
+    SERVICE = 'billing'
+    ACTION = 'QueryBalanceAcct'
+    VERSION = '2022-01-01'
+    REGION = 'cn-shanghai'
+    HOST = 'open.volcengineapi.com'
+    CONTENT_TYPE = 'application/json'
+    PATH = '/'
+    METHOD = 'GET'
+
     def __init__(self, api_key):
         """
         初始化火山云适配器
-        
+
         Args:
-            api_key: 格式为 "AK:SK" 的密钥对，用冒号分隔
-                    例如: "AKLTxxx:TmpCa01xxx"
+            api_key: 格式为 "AK:SK" 的密钥对，用冒号分隔（例如 "AKLTxxx:TmpCa01xxx"）
         """
         if ':' not in api_key:
             raise ValueError("火山云 API Key 格式错误，应为 'AK:SK' 格式")
-        
+
         super().__init__(api_key)
         self.ak, self.sk = api_key.split(':', 1)
-        self.service = 'billing'
-        self.action = 'QueryBalanceAcct'
-        self.version = '2022-01-01'
-        self.region = 'cn-shanghai'
-        self.host = 'open.volcengineapi.com'
-        self.content_type = 'application/json'
-    
+        # 兼容旧属性名（测试与外部代码可能读取）
+        self.service = self.SERVICE
+        self.action = self.ACTION
+        self.version = self.VERSION
+        self.region = self.REGION
+        self.host = self.HOST
+        self.content_type = self.CONTENT_TYPE
+
     def get_credits(self):
         """
         获取当前余额
-        
+
         Returns:
-            dict: 包含以下字段的字典
-                - success (bool): 是否成功获取
-                - credits (float): 余额数值，失败时为 None
-                - error (str): 错误信息，成功时为 None
-                - raw_data (dict): 原始 API 响应数据
+            dict: success / credits / error / raw_data
         """
         try:
             response_data = self._send_request()
-            
+
             if not response_data:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': "API 返回空响应",
-                    'raw_data': None
-                }
-            
-            # 检查响应中的错误
+                return {'success': False, 'credits': None, 'error': "API 返回空响应", 'raw_data': None}
+
             if response_data.get('ResponseMetadata', {}).get('Error'):
                 error_info = response_data['ResponseMetadata']['Error']
                 return {
@@ -82,10 +71,8 @@ class VolcProvider(BaseProvider):
                     'error': f"API 返回错误: {error_info}",
                     'raw_data': response_data
                 }
-            
-            # 获取可用余额
+
             available_balance = response_data.get('Result', {}).get('AvailableBalance')
-            
             if available_balance is None:
                 return {
                     'success': False,
@@ -93,133 +80,92 @@ class VolcProvider(BaseProvider):
                     'error': "无法从响应中解析 AvailableBalance 字段",
                     'raw_data': response_data
                 }
-            
+
             return {
                 'success': True,
                 'credits': float(available_balance),
                 'error': None,
                 'raw_data': response_data
             }
-            
+
         except Exception as e:
             return self._classify_exception(e)
-    
+
+    @property
+    def _query(self):
+        return {'Action': self.ACTION, 'Version': self.VERSION}
+
     def _send_request(self):
-        """发送火山云 API 请求"""
-        now = datetime.datetime.now(datetime.UTC)
-        body = ''
-        
-        request_params = {
-            'body': body,
-            'host': self.host,
-            'path': '/',
-            'method': 'GET',
-            'content_type': self.content_type,
-            'date': now,
-            'query': {'Action': self.action, 'Version': self.version}
-        }
-        
-        headers = self._build_headers(request_params)
-        response = self._make_volc_request(request_params, headers)
-        
+        """签名并发送火山云 API 请求"""
+        headers = self._build_headers(datetime.datetime.now(datetime.UTC))
+        url = f"https://{self.HOST}{self.PATH}?{self._norm_query(self._query)}"
+
+        logger.debug(f"火山云请求 URL: {mask_url(url)} | 签名 {headers['Authorization'][:40]}***")
+        try:
+            response = self.session.request(
+                method=self.METHOD, url=url, headers=headers, data='', timeout=self.timeout
+            )
+            logger.debug(f"火山云响应 {response.status_code}: {response.text[:200]}")
+        except Exception as e:
+            logger.error(f"火山云请求失败: {e}", exc_info=True)
+            raise
+
         if response.status_code != 200:
             raise Exception(f'HTTP请求失败，状态码：{response.status_code}\n响应内容：{response.text}')
-        
+
         if not response.text.strip():
             return {}
-        
+
         try:
             return response.json()
         except json.JSONDecodeError:
             raise Exception(f'响应内容不是有效的JSON格式：{response.text}')
-    
-    def _build_headers(self, request_params):
-        """构建请求头"""
-        x_date = request_params['date'].strftime('%Y%m%dT%H%M%SZ')
+
+    def _build_headers(self, now, body=''):
+        """构建带签名的请求头"""
+        x_date = now.strftime('%Y%m%dT%H%M%SZ')
         short_date = x_date[:8]
-        content_sha256 = self._hash_sha256(request_params['body'])
-        
-        headers = {
-            'Host': request_params['host'],
-            'X-Content-Sha256': content_sha256,
-            'X-Date': x_date,
-            'Content-Type': request_params['content_type']
-        }
-        
-        signature = self._calculate_signature(request_params, x_date, short_date, content_sha256)
-        headers['Authorization'] = self._build_authorization_header(short_date, signature)
-        
-        return headers
-    
-    def _calculate_signature(self, request_params, x_date, short_date, content_sha256):
-        """计算签名"""
-        signed_headers = ['content-type', 'host', 'x-content-sha256', 'x-date']
-        signed_headers_str = ';'.join(signed_headers)
-        
-        canonical_request = self._build_canonical_request(
-            request_params, content_sha256, x_date, signed_headers_str
-        )
-        hashed_canonical_request = self._hash_sha256(canonical_request)
-        
-        credential_scope = f"{short_date}/{self.region}/{self.service}/request"
-        string_to_sign = f"HMAC-SHA256\n{x_date}\n{credential_scope}\n{hashed_canonical_request}"
-        
-        k_date = self._hmac_sha256(self.sk.encode('utf-8'), short_date)
-        k_region = self._hmac_sha256(k_date, self.region)
-        k_service = self._hmac_sha256(k_region, self.service)
-        k_signing = self._hmac_sha256(k_service, 'request')
-        
-        return self._hmac_sha256(k_signing, string_to_sign).hex()
-    
-    def _build_canonical_request(self, request_params, content_sha256, x_date, signed_headers_str):
-        """构建规范请求"""
-        canonical_headers = [
-            f"content-type:{request_params['content_type']}",
-            f"host:{request_params['host']}",
+        content_sha256 = self._hash_sha256(body)
+        credential_scope = f"{short_date}/{self.REGION}/{self.SERVICE}/request"
+        signed_headers_str = ';'.join(SIGNED_HEADERS)
+
+        # 规范请求：方法 / 路径 / 查询串 / 头 / 空行 / 签名头列表 / body 摘要
+        canonical_request = '\n'.join([
+            self.METHOD,
+            self.PATH,
+            self._norm_query(self._query),
+            f"content-type:{self.CONTENT_TYPE}",
+            f"host:{self.HOST}",
             f"x-content-sha256:{content_sha256}",
-            f"x-date:{x_date}"
-        ]
-        
-        return '\n'.join([
-            request_params['method'].upper(),
-            request_params['path'],
-            self._norm_query(request_params['query']),
-            '\n'.join(canonical_headers),
+            f"x-date:{x_date}",
             '',
             signed_headers_str,
-            content_sha256
+            content_sha256,
         ])
-    
-    def _build_authorization_header(self, short_date, signature):
-        """构建授权头"""
-        credential_scope = f"{short_date}/{self.region}/{self.service}/request"
-        return f"HMAC-SHA256 Credential={self.ak}/{credential_scope}, SignedHeaders=content-type;host;x-content-sha256;x-date, Signature={signature}"
-    
-    def _make_volc_request(self, request_params, headers):
-        """发起 HTTP 请求"""
-        url = f"https://{request_params['host']}{request_params['path']}?{self._norm_query(request_params['query'])}"
-        logger.debug(f"火山云请求 URL: {mask_url(url)}")
-        logger.debug(f"请求头: {mask_headers(headers)}")
-        logger.debug(f"超时设置: {self.timeout}秒")
-        
-        try:
-            response = self.session.request(
-                method=request_params['method'],
-                url=url,
-                headers=headers,
-                data=request_params['body'],
-                timeout=self.timeout
-            )
-            logger.debug(f"火山云响应状态码: {response.status_code}")
-            logger.debug(f"火山云响应内容: {response.text[:200]}...")
-            return response
-        except Exception as e:
-            logger.error(f"火山云请求失败: {e}", exc_info=True)
-            raise
-    
+
+        string_to_sign = '\n'.join([
+            'HMAC-SHA256', x_date, credential_scope, self._hash_sha256(canonical_request)
+        ])
+
+        signing_key = self.sk.encode('utf-8')
+        for part in (short_date, self.REGION, self.SERVICE, 'request'):
+            signing_key = self._hmac_sha256(signing_key, part)
+        signature = self._hmac_sha256(signing_key, string_to_sign).hex()
+
+        return {
+            'Host': self.HOST,
+            'X-Content-Sha256': content_sha256,
+            'X-Date': x_date,
+            'Content-Type': self.CONTENT_TYPE,
+            'Authorization': (
+                f"HMAC-SHA256 Credential={self.ak}/{credential_scope}, "
+                f"SignedHeaders={signed_headers_str}, Signature={signature}"
+            ),
+        }
+
     @staticmethod
     def _norm_query(params):
-        """规范化查询参数（RFC 3986 编码）"""
+        """规范化查询参数（RFC 3986 编码，按键排序）"""
         encode = lambda v: quote(str(v), safe='-_.~') if v is not None else ''
         query_items = []
         for key in sorted(params.keys()):
@@ -237,7 +183,7 @@ class VolcProvider(BaseProvider):
     def _hmac_sha256(key, content):
         """HMAC-SHA256"""
         return hmac.new(key, content.encode('utf-8'), hashlib.sha256).digest()
-    
+
     @classmethod
     def get_provider_name(cls):
         """返回服务商名称"""

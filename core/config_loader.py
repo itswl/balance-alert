@@ -189,6 +189,16 @@ def normalize_emails(emails: list) -> list:
     return emails
 
 
+def owner_project_of(item: Dict[str, Any]) -> Optional[str]:
+    """归属项目，兼容早期配置里写作 project 的情况"""
+    return item.get('owner_project') or item.get('project')
+
+
+def filter_enabled(items: list) -> list:
+    """只保留启用的条目（缺省视为启用）"""
+    return [item for item in items if item.get('enabled', True)]
+
+
 def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """对三类业务清单统一做规范化，使下游只面对补齐后的完整字段。"""
     normalize_projects(config.get('projects') or [])

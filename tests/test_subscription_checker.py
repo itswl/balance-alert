@@ -198,6 +198,44 @@ class TestYearlyCycle:
         assert days > 0
 
 
+class TestRenewalDayAtNonMidnight:
+    """定时任务在 9:00 / 15:00 运行，续费当天必须照常提醒（不能因时分秒算成 -1 天）"""
+
+    def setup_method(self, method):
+        self.checker = SubscriptionChecker.__new__(SubscriptionChecker)
+        self.checker.config = {'subscriptions': []}
+        self.checker.results = []
+
+    @pytest.mark.parametrize('cycle_type,renewal_day', [
+        ('weekly', 6),      # 2026-08-15 是周六
+        ('monthly', 15),
+        ('yearly', 815),    # MMDD = 8月15日
+    ])
+    @pytest.mark.parametrize('hour', [0, 9, 15, 23])
+    def test_same_day_returns_zero(self, cycle_type, renewal_day, hour):
+        """无论几点运行，续费当天都应返回 0 天"""
+        today = datetime(2026, 8, 15, hour, 30, 45)
+        days, next_date = self.checker._calculate_days_until_renewal(cycle_type, renewal_day, today)
+        assert days == 0, f"{cycle_type} 在 {hour}:30 运行时算出 {days} 天"
+        assert next_date.date() == today.date()
+
+    @pytest.mark.parametrize('day,expected', [
+        (12, 3), (13, 2), (14, 1), (15, 0),
+    ])
+    def test_alert_window_is_complete(self, day, expected):
+        """提前 3 天提醒应覆盖 12/13/14/15 四天，下午运行也不缩水"""
+        today = datetime(2026, 8, day, 15, 0, 0)
+        days, _ = self.checker._calculate_days_until_renewal('monthly', 15, today)
+        assert days == expected
+
+    def test_yearly_does_not_jump_to_next_year_on_due_date(self):
+        """年付在续费当天不应跳到明年（曾算出 364 天）"""
+        today = datetime(2026, 8, 15, 15, 0, 0)
+        days, next_date = self.checker._calculate_days_until_renewal('yearly', 815, today)
+        assert days == 0
+        assert next_date.year == 2026
+
+
 class TestCalculateCycleStart:
     """_calculate_cycle_start 测试"""
 

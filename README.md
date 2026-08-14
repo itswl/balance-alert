@@ -141,6 +141,8 @@ Webhook、刷新间隔、并发数、各类开关等**只由环境变量配置**
 { "name": "域名续费", "cycle_type": "yearly", "renewal_day": "03-15", "amount": 88 }
 ```
 
+`alert_days_before`（默认 3）表示提前几天开始提醒，**续费当天也会提醒**。
+
 `email` 的 `port`（993）和 `use_ssl`（true）可省略，只要 `host` / `username` / `password`。
 
 **配完跑一下自检**，它会告诉你每个密钥取自哪个环境变量、缺了什么、日期被理解成哪天：

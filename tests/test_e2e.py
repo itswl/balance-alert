@@ -67,119 +67,63 @@ def test_config_file():
 
 class TestE2EMonitoring:
     """端到端监控流程测试"""
-    
-    def test_complete_monitoring_flow(self, test_config_file):
+
+    @pytest.mark.parametrize('patch_kwargs, expect_success, expect_alarm', [
+        # 余额充足：正常返回，不触发告警
+        ({'return_value': {'success': True, 'credits': 150.0,
+                           'threshold': 100.0, 'need_alarm': False}}, True, False),
+        # 余额低于阈值 100：触发告警标记
+        ({'return_value': {'success': True, 'credits': 50.0,
+                           'threshold': 100.0, 'need_alarm': True}}, True, True),
+        # Provider 抛异常：错误被捕获并写入结果
+        ({'side_effect': Exception("API Error")}, False, False),
+    ], ids=['balance_ok', 'alarm_triggered', 'provider_failure'])
+    def test_complete_monitoring_flow(self, test_config_file, patch_kwargs, expect_success, expect_alarm):
         """
         测试完整监控流程：
         1. 加载配置
-        2. 执行监控检查
-        3. 验证结果存储到状态管理器
+        2. 执行监控检查（余额充足 / 低于阈值 / Provider 失败）
+        3. 验证结果格式、告警标记与错误处理
         """
         import services.monitor
         services.monitor._response_cache.clear()
-        # Mock provider 响应
-        mock_response = {
-            'success': True,
-            'credits': 150.0,
-            'threshold': 100.0,
-            'need_alarm': False
-        }
-        
-        with patch('providers.openrouter.OpenRouterProvider.get_credits', return_value=mock_response):
-            # 1. 创建监控器
-            monitor = CreditMonitor(test_config_file)
-            
-            # 2. 执行监控（dry_run 模式）
-            monitor.run(dry_run=True)
-            
-            # 3. 验证结果
-            assert len(monitor.results) > 0
-            
-            # 取出我们刚刚创建的配置里的 projects (应该有2个)
-            test_results = [r for r in monitor.results if 'Test' in r['project'] or r['project'] == 'OpenRouter']
-            
-            # 取第一个项目简单验证一下格式
-            if len(test_results) > 0:
-                result1 = test_results[0]
-                assert result1['success'] is True
-                assert 'credits' in result1 or 'error' in result1
-    
-    def test_concurrent_checks(self, test_config_file):
-        """测试并发检查能力"""
-        mock_response = {
-            'success': True,
-            'credits': 200.0,
-            'threshold': 100.0
-        }
-        
-        with patch('providers.openrouter.OpenRouterProvider.get_credits', return_value=mock_response):
-            monitor = CreditMonitor(test_config_file)
-            
-            start_time = time.time()
-            monitor.run(dry_run=True)
-            execution_time = time.time() - start_time
-            
-            # 并发检查应该比串行快
-            # 2个项目，每个假设 0.1 秒，并发应该 < 1 秒
-            assert execution_time < 2.0
-    
-    def test_alarm_logic(self, test_config_file):
-        """测试告警逻辑"""
-        # 模拟余额低于阈值的情况
-        import services.monitor
-        services.monitor._response_cache.clear()
-        mock_response = {
-            'success': True,
-            'credits': 50.0,  # 低于阈值 100
-            'threshold': 100.0,
-            'need_alarm': True
-        }
-        
-        with patch('providers.openrouter.OpenRouterProvider.get_credits', return_value=mock_response):
+
+        with patch('providers.openrouter.OpenRouterProvider.get_credits', **patch_kwargs):
             monitor = CreditMonitor(test_config_file)
             monitor.run(dry_run=True)
-            
-            # 验证告警标记
-            assert any(r.get('need_alarm', False) for r in monitor.results)
-    
-    def test_provider_failure_handling(self, test_config_file):
-        """测试 Provider 失败处理"""
-        import services.monitor
-        services.monitor._response_cache.clear()
-        # 模拟 Provider 异常
-        with patch('providers.openrouter.OpenRouterProvider.get_credits', side_effect=Exception("API Error")):
-            monitor = CreditMonitor(test_config_file)
-            monitor.run(dry_run=True)
-            
-            # 验证错误处理
-            test_results = [r for r in monitor.results if 'Test' in r['project'] or r['project'] == 'OpenRouter']
-            assert len(test_results) > 0
-            for result in test_results:
-                if not result['success']:
-                    assert 'error' in result
+
+        # 结果格式：monitor.run() 不会直接更新 StateManager，
+        # 实际应用中由 web_server 调用 update_balance_cache()，这里验证结果结构正确
+        assert len(monitor.results) > 0
+        assert all('project' in r for r in monitor.results)
+
+        # 取出我们刚刚创建的配置里的 projects (应该有2个)
+        test_results = [r for r in monitor.results if 'Test' in r['project'] or r['project'] == 'OpenRouter']
+        assert len(test_results) > 0
+        for result in test_results:
+            assert result['success'] is expect_success
+            if result['success']:
+                assert 'credits' in result or 'error' in result
+            else:
+                assert 'error' in result
+
+        # 告警标记
+        assert any(r.get('need_alarm', False) for r in monitor.results) is expect_alarm
 
 
 class TestE2EWebAPI:
     """端到端 Web API 测试"""
     
     @pytest.fixture
-    def app(self):
-        """创建测试 Flask 应用"""
+    def client(self):
+        """创建测试 Flask 应用与测试客户端"""
         # 动态导入避免副作用
         from web.app import create_app
         from core.state_manager import StateManager
         app = create_app(StateManager())
         app.config['TESTING'] = True
-        os.environ['WEB_API_KEY'] = ''
-        return app
-    
-    @pytest.fixture
-    def client(self, app):
-        """创建测试客户端"""
-        # 禁用 auth 或者提供 auth header
-        os.environ['WEB_AUTH_ENABLED'] = 'false'
+        # 提供 auth header 对应的 API Key
         os.environ['WEB_API_KEY'] = 'test-key'
-        app.config['TESTING'] = True
         with app.test_client() as client:
             yield client
     
@@ -276,7 +220,7 @@ class TestE2EPerformance:
     """性能基准测试"""
     
     def test_monitor_performance_benchmark(self, test_config_file):
-        """监控性能基准测试"""
+        """监控性能基准测试（同时覆盖 2 个项目的并发检查能力）"""
         mock_response = {
             'success': True,
             'credits': 100.0,
@@ -299,29 +243,6 @@ class TestE2EPerformance:
             assert avg_time < 2.0, f"Performance degradation: avg {avg_time:.2f}s"
             
             print(f"\n性能基准: 平均执行时间 {avg_time:.3f}s")
-
-
-class TestE2EIntegration:
-    """集成测试"""
-    
-    def test_monitor_and_state_integration(self, test_config_file):
-        """测试监控和状态管理器集成"""
-        mock_response = {
-            'success': True,
-            'credits': 123.45,
-            'threshold': 100.0,
-            'need_alarm': False
-        }
-        
-        with patch('providers.openrouter.OpenRouterProvider.get_credits', return_value=mock_response):
-            monitor = CreditMonitor(test_config_file)
-            monitor.run(dry_run=True)
-            
-            # 注意：monitor.run() 不会直接更新 StateManager
-            # 在实际应用中，web_server 会调用 update_balance_cache()
-            # 这里我们验证 monitor 的结果格式正确
-            assert len(monitor.results) > 0
-            assert all('project' in r for r in monitor.results)
 
 
 if __name__ == '__main__':
