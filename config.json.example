@@ -1,87 +1,23 @@
 {
-  "_comment": "config.json 只放业务列表（projects）。Webhook、刷新间隔、并发数等改由环境变量配置，见 .env.example。",
-  "email": [],
-  "subscriptions": [],
+  "_comment": "只放业务清单。密钥/开关/间隔等一律写 .env（见 .env.example）。字段能省的都省了：api_key 会自动从 {PROVIDER}_API_KEY 环境变量读取，type 按 provider 推导，enabled 默认 true。配完执行 python -m services.monitor --show-config 自检。",
+
   "projects": [
-    {
-      "name": "OpenRouter",
-      "owner_project": "AI 平台",
-      "provider": "openrouter",
-      "_comment": "API Key 建议只放在环境变量中",
-      "api_key": "${OPENROUTER_API_KEY}",
-      "threshold": 10000.0,
-      "type": "credits",
-      "enabled": true
-    },
-    {
-      "name": "UniAPI",
-      "owner_project": "AI 平台",
-      "provider": "uniapi",
-      "_comment": "API Key 建议只放在环境变量中",
-      "api_key": "${UNIAPI_API_KEY}",
-      "threshold": 5000.0,
-      "type": "credits",
-      "enabled": true
-    },
-    {
-      "name": "WxRank-微信公众号",
-      "owner_project": "增长工具",
-      "provider": "wxrank",
-      "_comment": "API Key 建议只放在环境变量中",
-      "api_key": "${WXRANK_API_KEY}",
-      "threshold": 500,
-      "type": "credits",
-      "enabled": true
-    },
-    {
-      "name": "Volc-火山引擎-云账号A",
-      "owner_project": "云服务",
-      "provider": "volc",
-      "_comment": "AK:SK（用冒号分隔）",
-      "api_key": "${VOLC_1_API_KEY}",
-      "threshold": 7000,
-      "type": "balance",
-      "enabled": true
-    },
-    {
-      "name": "Volc-火山引擎-云账号B",
-      "owner_project": "云服务",
-      "provider": "volc",
-      "_comment": "AK:SK（用冒号分隔）",
-      "api_key": "${VOLC_2_API_KEY}",
-      "threshold": 1000.0,
-      "type": "balance",
-      "enabled": true
-    },
-    {
-      "name": "Aliyun-阿里云-1",
-      "owner_project": "云服务",
-      "provider": "aliyun",
-      "_comment": "KeyId:Secret（用冒号分隔）",
-      "api_key": "${ALIYUN_1_API_KEY}",
-      "threshold": 10000.0,
-      "type": "balance",
-      "enabled": true
-    },
-    {
-      "name": "Aliyun-阿里云-2",
-      "owner_project": "云服务",
-      "provider": "aliyun",
-      "_comment": "KeyId:Secret（用冒号分隔）",
-      "api_key": "${ALIYUN_2_API_KEY}",
-      "threshold": 100000.0,
-      "type": "balance",
-      "enabled": true
-    },
-    {
-      "name": "TikHub",
-      "owner_project": "数据服务",
-      "provider": "tikhub",
-      "_comment": "API Key 建议只放在环境变量中",
-      "api_key": "${TIKHUB_API_KEY}",
-      "threshold": 10.0,
-      "type": "balance",
-      "enabled": true
-    }
+    { "provider": "openrouter", "threshold": 10000 },
+    { "provider": "uniapi", "threshold": 5000 },
+    { "provider": "wxrank", "threshold": 500 },
+    { "provider": "tikhub", "threshold": 10 },
+
+    { "name": "火山-主账号", "provider": "volc", "threshold": 7000, "owner_project": "云服务" },
+    { "name": "火山-备用", "provider": "volc", "threshold": 1000, "owner_project": "云服务" },
+    { "name": "阿里云-主账号", "provider": "aliyun", "threshold": 10000, "owner_project": "云服务" }
+  ],
+
+  "subscriptions": [
+    { "name": "ChatGPT Plus", "cycle_type": "monthly", "renewal_day": 15, "amount": 20 },
+    { "name": "域名续费", "cycle_type": "yearly", "renewal_day": "03-15", "amount": 88 }
+  ],
+
+  "email": [
+    { "host": "imap.example.com", "username": "me@example.com", "password": "${EMAIL_PASSWORD}" }
   ]
 }

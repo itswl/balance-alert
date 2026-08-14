@@ -420,8 +420,11 @@ class EmailScanner:
                 except Exception as e:
                     logger.error(f"❌ 扫描邮箱 {cfg.get('username', 'Unknown')} 失败: {e}", exc_info=True)
         
-        # 打印总汇总
-        self._print_total_summary(total_emails, total_alerts)
+        alerts_sent = sum(1 for r in self.results if r.get('alert_sent', False))
+        logger.info(
+            f"邮箱扫描总汇总: 邮箱数={len(self.email_configs)}, 总邮件={total_emails}, "
+            f"告警邮件={total_alerts}, 已发送告警={alerts_sent}"
+        )
     
     def _scan_single_mailbox(self, email_config, days=7, dry_run=False):
         """扫描单个邮箱中的告警邮件
@@ -513,12 +516,8 @@ class EmailScanner:
                     if processed_count > 0:
                         logger.info(f"扫描进度: {processed_count}/{total_emails} ({processed_count/total_emails*100:.1f}%)")
                 
-                # 打印单个邮箱汇总
-                self._print_mailbox_summary(mailbox_name, total_emails, alert_count)
-                
-                # 更新 Prometheus 指标
+                logger.info(f"[{mailbox_name}] 扫描汇总: 总邮件={total_emails}, 告警邮件={alert_count}")
                 _record_email_scan_metrics(mailbox_name, total_emails, alert_count)
-                
                 return total_emails, alert_count
                 
         except Exception as e:
@@ -612,17 +611,6 @@ class EmailScanner:
 
         return alert_sent
     
-    def _print_mailbox_summary(self, mailbox_name, total_emails, alert_count):
-        """打印单个邮箱扫描汇总"""
-        logger.info(f"[{mailbox_name}] 扫描汇总: 总邮件={total_emails}, 告警邮件={alert_count}")
-    
-    def _print_total_summary(self, total_emails, total_alerts):
-        """打印所有邮箱的总汇总"""
-        alerts_sent = sum(1 for r in self.results if r.get('alert_sent', False))
-        logger.info(
-            f"邮箱扫描总汇总: 邮箱数={len(self.email_configs)}, 总邮件={total_emails}, "
-            f"告警邮件={total_alerts}, 已发送告警={alerts_sent}"
-        )
 
 
 def main():

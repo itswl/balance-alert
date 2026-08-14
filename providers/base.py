@@ -5,7 +5,8 @@
 """
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 import requests
@@ -154,3 +155,60 @@ class BaseProvider(ABC):
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
+
+
+@dataclass(frozen=True)
+class ProviderSpec:
+    """声明一个「GET 一次、从 JSON 里取个数」的余额接口。
+
+    extract: 从响应 JSON 取余额；取不到就 ``raise ValueError('说明')``
+    check:   业务层成功校验，返回错误消息表示失败，返回 None 表示通过
+    """
+    name: str
+    url: str
+    extract: Callable[[Dict[str, Any]], float]
+    auth: str = 'bearer'          # bearer=Authorization 头；query=拼进查询参数
+    auth_param: str = 'key'       # auth='query' 时的参数名
+    headers: Dict[str, str] = field(default_factory=dict)
+    params: Dict[str, Any] = field(default_factory=dict)
+    check: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None
+
+
+class SimpleHTTPProvider(BaseProvider):
+    """按 ProviderSpec 声明式实现的 Provider，子类只需给出 SPEC。"""
+
+    SPEC: ProviderSpec
+
+    def get_credits(self) -> Dict[str, Any]:
+        spec = self.SPEC
+        try:
+            headers = dict(spec.headers)
+            params = dict(spec.params)
+            if spec.auth == 'bearer':
+                headers['Authorization'] = f"Bearer {self.api_key}"
+            else:
+                params[spec.auth_param] = self.api_key
+
+            result = self._handle_response(
+                self._make_request('GET', spec.url, headers=headers, params=params)
+            )
+            if not result['success']:
+                return result
+
+            data = result['raw_data']
+            business_error = spec.check(data) if spec.check else None
+            if business_error:
+                return {'success': False, 'credits': None, 'error': business_error, 'raw_data': data}
+
+            try:
+                result['credits'] = spec.extract(data)
+            except (ValueError, TypeError, AttributeError) as e:
+                return {'success': False, 'credits': None, 'error': str(e), 'raw_data': data}
+            return result
+
+        except Exception as e:
+            return self._classify_exception(e)
+
+    @classmethod
+    def get_provider_name(cls) -> str:
+        return cls.SPEC.name

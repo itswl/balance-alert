@@ -34,7 +34,7 @@ python -m services.monitor --show-config
 
 推荐原则：
 
-- Provider 密钥两种存法：本地用 `.env` + `${VAR}` 占位符；生产用数据库动态配置（配 `CONFIG_ENCRYPTION_KEY` 加密存储）。不要把真实密钥明文写进 `config.json`。
+- Provider 密钥放 `.env`（变量名 `{PROVIDER}_API_KEY`，`config.json` 里不用写 `api_key`）；生产可改用数据库动态配置，配上 `CONFIG_ENCRYPTION_KEY` 后加密存储。不要把真实密钥明文写进 `config.json`。
 - Web 登录密钥使用 `WEB_API_KEY`，不要复用云厂商或 Provider 的业务 API Key。
 
 ## 快速开始
@@ -106,31 +106,60 @@ python -m services.monitor --dry-run
 Webhook、刷新间隔、并发数、各类开关等**只由环境变量配置**（见下方「环境变量」）。
 文件里的 `settings` / `webhook` 块已不再生效，请迁移到环境变量。
 
-`projects` 是余额监控的核心配置。单个项目示例：
+`projects` 是余额监控的核心配置。**一个项目最少只要两个字段**——密钥自动从环境变量读，不用写占位符：
+
+```json
+{ "provider": "openrouter", "threshold": 10000 }
+```
+
+配合 `.env` 里的 `OPENROUTER_API_KEY=sk-or-v1-xxx` 即可工作。需要自定义时再补字段：
 
 ```json
 {
-  "name": "OpenRouter",
-  "owner_project": "AI 平台",
-  "provider": "openrouter",
-  "api_key": "${OPENROUTER_API_KEY}",
-  "threshold": 10000,
-  "type": "credits",
-  "enabled": true
+  "name": "火山-主账号",
+  "owner_project": "云服务",
+  "provider": "volc",
+  "threshold": 7000
 }
 ```
 
 字段说明：
 
-| 字段 | 必填 | 说明 |
+| 字段 | 必填 | 省略时 |
 | --- | --- | --- |
-| `name` | 是 | 项目显示名称，数据库动态配置中也作为唯一名称 |
-| `owner_project` | 否 | 归属项目或业务线，用于分组展示 |
-| `provider` | 是 | 平台类型，见下方 provider 表 |
-| `api_key` | 是 | API Key，推荐使用 `${VAR}` 占位符 |
-| `threshold` | 否 | 告警阈值，余额低于该值时触发告警 |
-| `type` | 否 | `balance` 或 `credits`，用于展示和告警语义 |
-| `enabled` | 否 | 是否启用，默认按启用处理 |
+| `provider` | 是 | — 见下方 provider 表 |
+| `threshold` | 建议 | 不填则永不告警（自检会提示） |
+| `api_key` | 否 | 自动读 `{PROVIDER}_API_KEY` 环境变量；同 provider 多账号读 `{PROVIDER}_{序号}_API_KEY`（序号按在 `projects` 里的出现顺序） |
+| `name` | 否 | 用 provider 名；数据库动态配置中作为唯一键 |
+| `type` | 否 | 按 provider 推导（`openrouter`/`uniapi`/`wxrank` → `credits`，其余 → `balance`） |
+| `owner_project` | 否 | 不分组 |
+| `enabled` | 否 | 视为启用 |
+
+`subscriptions` 的年付续费日可以直接写日期，不用记 MMDD 数字：
+
+```json
+{ "name": "域名续费", "cycle_type": "yearly", "renewal_day": "03-15", "amount": 88 }
+```
+
+`email` 的 `port`（993）和 `use_ssl`（true）可省略，只要 `host` / `username` / `password`。
+
+**配完跑一下自检**，它会告诉你每个密钥取自哪个环境变量、缺了什么、日期被理解成哪天：
+
+```bash
+python -m services.monitor --show-config
+```
+
+```text
+项目 (3)
+  ✓ OpenRouter [openrouter/credits] 阈值 10000 — Key 来自 环境变量 OPENROUTER_API_KEY
+  ✗ 火山-备用 [volc]: 缺少 API Key，请设置 VOLC_2_API_KEY
+  ! 忘填阈值 [tikhub/balance] 阈值 None — Key 来自 环境变量 TIKHUB_API_KEY（阈值为 None，不会触发告警）
+
+订阅 (1)
+  ✓ 域名续费: 每年 3月15日，提前 3 天提醒，金额 88
+```
+
+有问题时退出码非零，可用于部署前校验。
 
 支持的 Provider：
 

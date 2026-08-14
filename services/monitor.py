@@ -441,67 +441,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument('--check-subscriptions', action='store_true', help='检查订阅续费提醒')
     parser.add_argument('--check-email', action='store_true', help='扫描邮箱告警邮件')
     parser.add_argument('--email-days', type=int, default=1, help='扫描最近几天的邮件 (默认: 1天)')
-    parser.add_argument('--show-config', action='store_true', help='打印脱敏后的最终生效配置与各段来源')
+    parser.add_argument('--show-config', action='store_true',
+                        help='自检配置：显示每项配置来自哪里、缺什么，有问题时退出码非零')
     return parser
-
-
-def _show_effective_config(config_path: str) -> None:
-    """打印脱敏后的最终生效配置：环境变量层 + 业务清单层（含来源）"""
-    import json
-    from core.config_loader import get_config
-    from database.engine import _mask_database_url
-    from services.webhook_adapter import _mask_webhook_url
-
-    settings = get_settings()
-    settings_dump = settings.model_dump()
-    for key in ('web_api_key', 'config_encryption_key'):
-        if settings_dump.get(key):
-            settings_dump[key] = '***'
-    if settings_dump.get('webhook_url'):
-        settings_dump['webhook_url'] = _mask_webhook_url(settings_dump['webhook_url'])
-    settings_dump['database_url'] = _mask_database_url(settings_dump['database_url'])
-
-    # 与 load_config 相同的覆盖语义：动态配置开启且 DB 有数据时，DB 覆盖文件同名段落
-    db_counts = {}
-    if settings.enable_dynamic_config:
-        try:
-            from database.repository import ConfigRepository
-            db_counts = {
-                'projects': len(ConfigRepository.get_all_projects()),
-                'subscriptions': len(ConfigRepository.get_all_subscriptions()),
-                'email': len(ConfigRepository.get_all_emails()),
-            }
-        except Exception as e:
-            logger.warning(f"读取数据库动态配置失败: {e}")
-
-    file_config = get_config(config_path, use_cache=False)
-    effective = load_config(config_path, use_cache=False)
-
-    business = {}
-    for section in ('projects', 'subscriptions', 'email'):
-        items = effective.get(section) or []
-        if db_counts.get(section):
-            source = '数据库'
-        elif file_config.get(section):
-            source = config_path
-        else:
-            source = '(空)'
-        business[section] = {
-            'source': source,
-            'count': len(items),
-            'names': [i.get('name') for i in items],
-        }
-
-    print(json.dumps({
-        'settings（环境变量，已脱敏）': settings_dump,
-        '业务清单': business,
-    }, ensure_ascii=False, indent=2, default=str))
 
 
 def _run_from_args(args) -> None:
     if args.show_config:
-        _show_effective_config(args.config)
-        return
+        from core.config_check import check_config
+        sys.exit(1 if check_config(args.config) else 0)
 
     monitor = CreditMonitor(args.config)
     monitor.run(project_name=args.project, dry_run=args.dry_run)

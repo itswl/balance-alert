@@ -1,98 +1,46 @@
 """
 微信排名余额查询适配器
 """
-from .base import BaseProvider
 import re
 
+from .base import ProviderSpec, SimpleHTTPProvider
 
-class WxRankProvider(BaseProvider):
+
+def _check(data):
+    if data.get('code') != 0:
+        return f"API 返回错误: {data.get('msg', '未知错误')}"
+    return None
+
+
+def _extract(data):
+    """余额通常写在 msg 文本里（如 "剩余263419余额"），也兼容 data/score/credits 字段"""
+    msg = data.get('msg', '')
+    matched = re.search(r'(\d+)', msg)
+    if matched:
+        return float(matched.group(1))
+
+    raw = data.get('data')
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, dict):
+        value = raw.get('score') or raw.get('credits')
+        if value is not None:
+            return float(value)
+
+    value = data.get('score') or data.get('credits')
+    if value is None:
+        raise ValueError(f"无法从响应中解析余额: {msg}")
+    return float(value)
+
+
+class WxRankProvider(SimpleHTTPProvider):
     """微信排名服务适配器"""
-    
-    API_URL = "https://data.wxrank.com/weixin/score"
-    
-    def __init__(self, api_key):
-        """
-        初始化 WxRank 适配器
-        
-        Args:
-            api_key: WxRank API 密钥
-        """
-        super().__init__(api_key)
-    
-    def get_credits(self):
-        """
-        获取当前余额
-        
-        Returns:
-            dict: 包含以下字段的字典
-                - success (bool): 是否成功获取
-                - credits (float): 余额数值，失败时为 None
-                - error (str): 错误信息，成功时为 None
-                - raw_data (dict): 原始 API 响应数据
-        """
-        try:
-            # 使用基类的请求方法
-            response = self._make_request(
-                'GET',
-                self.API_URL,
-                params={'key': self.api_key}
-            )
-            
-            # 使用基类的响应处理方法
-            result = self._handle_response(response)
-            if not result['success']:
-                return result
-            
-            data = result['raw_data']
-            
-            # 检查返回码
-            if data.get('code') != 0:
-                error_msg = data.get('msg', '未知错误')
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"API 返回错误: {error_msg}",
-                    'raw_data': data
-                }
-            
-            # 从 msg 字段中提取余额数字
-            # 格式: "剩余263419余额"
-            msg = data.get('msg', '')
-            
-            # 尝试多种方式提取余额
-            credits = None
-            
-            # 方法1: 正则提取数字
-            match = re.search(r'(\d+)', msg)
-            if match:
-                credits = float(match.group(1))
-            
-            # 方法2: 尝试直接从 data 字段获取
-            if credits is None and 'data' in data:
-                if isinstance(data['data'], (int, float)):
-                    credits = float(data['data'])
-                elif isinstance(data['data'], dict):
-                    credits = data['data'].get('score') or data['data'].get('credits')
-            
-            # 方法3: 尝试从 score 字段获取
-            if credits is None:
-                credits = data.get('score') or data.get('credits')
-            
-            if credits is None:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"无法从响应中解析余额: {msg}",
-                    'raw_data': data
-                }
-            
-            result['credits'] = float(credits)
-            return result
-            
-        except Exception as e:
-            return self._classify_exception(e)
-    
-    @classmethod
-    def get_provider_name(cls):
-        """返回服务商名称"""
-        return "WxRank"
+
+    SPEC = ProviderSpec(
+        name="WxRank",
+        url="https://data.wxrank.com/weixin/score",
+        auth='query',
+        auth_param='key',
+        check=_check,
+        extract=_extract,
+    )

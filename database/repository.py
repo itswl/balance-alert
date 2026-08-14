@@ -2,69 +2,34 @@
 """
 数据访问层
 
-提供数据库 CRUD 操作封装
+提供数据库 CRUD 操作封装。所有方法用 @db_op 装饰：自动注入 session、
+统一异常兜底（默认吞掉并返回兜底值，STRICT_DATABASE_ERRORS=true 时向上抛）。
 """
-from typing import List, Optional, Dict, Any, Iterator
-from datetime import datetime, timedelta, timezone
-from contextlib import contextmanager
-from sqlalchemy import func, desc
-from sqlalchemy.exc import DBAPIError, OperationalError
-from core.logger import get_logger
-from core.settings import get_settings
-from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
-from .models import BalanceHistory, AlertHistory, ProjectConfig, SubscriptionConfig, EmailConfig, EmailAlertHistory
 import json
-from .engine import get_session, ENABLE_DATABASE
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from functools import wraps
+from typing import Any, Dict, Iterator, List, Optional
+
+from sqlalchemy import desc, func
+from sqlalchemy.exc import DBAPIError, OperationalError
+
+from core.logger import get_logger
+from core.secret_crypto import decrypt_secret, encrypt_secret, encryption_enabled
+from core.settings import get_settings
+from .engine import ENABLE_DATABASE, get_session
+from .models import (
+    AlertHistory,
+    BalanceHistory,
+    EmailAlertHistory,
+    EmailConfig,
+    ProjectConfig,
+    SubscriptionConfig,
+)
 
 logger = get_logger('repository')
 
-
-def _strict_database_errors_enabled() -> bool:
-    return get_settings().strict_database_errors
-
-
-def _auto_encrypt_on_read_enabled() -> bool:
-    return get_settings().auto_encrypt_on_read
-
-
-def _should_reraise_db_exception(e: Exception) -> bool:
-    if not _strict_database_errors_enabled():
-        return False
-    if isinstance(e, OperationalError):
-        return False
-    if isinstance(e, DBAPIError) and getattr(e, 'connection_invalidated', False):
-        return False
-    return True
-
-
-def _db_read(default_value, error_message: str, op, *, exc_info: bool = False):
-    if not ENABLE_DATABASE:
-        return default_value
-    try:
-        with session_scope() as session:
-            if session is None:
-                return default_value
-            return op(session)
-    except Exception as e:
-        logger.error(f"{error_message}: {e}", exc_info=exc_info)
-        if _should_reraise_db_exception(e):
-            raise
-        return default_value
-
-
-def _db_write(default_value, error_message: str, op, *, exc_info: bool = False):
-    if not ENABLE_DATABASE:
-        return default_value
-    try:
-        with session_scope(commit=True) as session:
-            if session is None:
-                return default_value
-            return op(session)
-    except Exception as e:
-        logger.error(f"{error_message}: {e}", exc_info=exc_info)
-        if _should_reraise_db_exception(e):
-            raise
-        return default_value
+DB_DISABLED_ERROR = {'error': '数据库未启用'}
 
 
 @contextmanager
@@ -85,6 +50,44 @@ def session_scope(commit: bool = False) -> Iterator:
     finally:
         if session is not None:
             session.close()
+
+
+def _should_reraise_db_exception(e: Exception) -> bool:
+    if not get_settings().strict_database_errors:
+        return False
+    if isinstance(e, OperationalError):
+        return False
+    if isinstance(e, DBAPIError) and getattr(e, 'connection_invalidated', False):
+        return False
+    return True
+
+
+def db_op(default: Any, error_message: str, *, commit: bool = False, exc_info: bool = False):
+    """把方法体包装成一次数据库操作。
+
+    被装饰的函数签名为 ``(session, *args)``，调用方按 ``(*args)`` 调用；
+    数据库未启用或出错时返回 ``default``（可变默认值会拷贝，避免调用方互相污染）。
+    """
+    def fallback():
+        return type(default)(default) if isinstance(default, (list, dict)) else default
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not ENABLE_DATABASE:
+                return fallback()
+            try:
+                with session_scope(commit=commit) as session:
+                    if session is None:
+                        return fallback()
+                    return func(session, *args, **kwargs)
+            except Exception as e:
+                logger.error(f"{error_message}: {e}", exc_info=exc_info)
+                if _should_reraise_db_exception(e):
+                    raise
+                return fallback()
+        return wrapper
+    return decorator
 
 
 def utcnow() -> datetime:
@@ -108,9 +111,8 @@ def _encrypt_model_field(model: Any, field: str) -> bool:
 
 
 def _maybe_encrypt_models(session, models: List[Any], field: str) -> None:
-    if not _auto_encrypt_on_read_enabled():
-        return None
-    if not encryption_enabled():
+    """把历史明文字段就地加密回写（AUTO_ENCRYPT_ON_READ）。"""
+    if not get_settings().auto_encrypt_on_read or not encryption_enabled():
         return None
 
     changed = False
@@ -127,125 +129,91 @@ def _encrypt_data_field(data: Dict[str, Any], field: str) -> Dict[str, Any]:
     return data
 
 
-def _project_to_dict(project: ProjectConfig) -> Dict[str, Any]:
-    return _decrypt_field(project.to_dict(), 'api_key')
+def _upsert(session, model_cls, data: Dict[str, Any], secret_field: Optional[str] = None) -> bool:
+    """按 name 插入或更新一条配置；secret_field 为 '***' 时保留原值不覆盖。"""
+    if secret_field:
+        data = _encrypt_data_field(data, secret_field)
+    row = session.query(model_cls).filter_by(name=data['name']).first()
+    if row is None:
+        session.add(model_cls(**data))
+        return True
+    for key, value in data.items():
+        if key == secret_field and value == '***':
+            continue
+        setattr(row, key, value)
+    return True
 
 
-def _email_to_dict(email: EmailConfig) -> Dict[str, Any]:
-    return _decrypt_field(email.to_dict(), 'password')
+def _delete_by_name(session, model_cls, name: str) -> bool:
+    row = session.query(model_cls).filter_by(name=name).first()
+    if row:
+        session.delete(row)
+    return True
 
 
 class ConfigRepository:
     """配置数据访问"""
-    
+
     @staticmethod
-    def get_all_emails() -> List[Dict[str, Any]]:
+    @db_op([], "获取邮箱配置失败")
+    def get_all_emails(session) -> List[Dict[str, Any]]:
         """获取所有邮箱配置"""
-        def op(session):
-            emails = session.query(EmailConfig).all()
-            _maybe_encrypt_models(session, emails, 'password')
-            return [_email_to_dict(e) for e in emails]
-
-        return _db_read([], "获取邮箱配置失败", op)
+        emails = session.query(EmailConfig).all()
+        _maybe_encrypt_models(session, emails, 'password')
+        return [_decrypt_field(e.to_dict(), 'password') for e in emails]
 
     @staticmethod
-    def upsert_email(email_data: Dict[str, Any]) -> bool:
+    @db_op(False, "保存邮箱配置失败", commit=True)
+    def upsert_email(session, email_data: Dict[str, Any]) -> bool:
         """添加或更新邮箱"""
-        def op(session):
-            encrypted_data = _encrypt_data_field(email_data, 'password')
-            email = session.query(EmailConfig).filter_by(name=encrypted_data['name']).first()
-            if email:
-                for k, v in encrypted_data.items():
-                    if k == 'password' and v == '***':
-                        continue
-                    setattr(email, k, v)
-            else:
-                email = EmailConfig(**encrypted_data)
-                session.add(email)
-            return True
+        return _upsert(session, EmailConfig, email_data, secret_field='password')
 
-        return _db_write(False, "保存邮箱配置失败", op)
-            
     @staticmethod
-    def delete_email(name: str) -> bool:
+    @db_op(False, "删除邮箱失败", commit=True)
+    def delete_email(session, name: str) -> bool:
         """删除邮箱"""
-        def op(session):
-            email = session.query(EmailConfig).filter_by(name=name).first()
-            if email:
-                session.delete(email)
-            return True
+        return _delete_by_name(session, EmailConfig, name)
 
-        return _db_write(False, "删除邮箱失败", op)
-            
     @staticmethod
-    def get_all_projects() -> List[Dict[str, Any]]:
+    @db_op([], "获取项目配置失败")
+    def get_all_projects(session) -> List[Dict[str, Any]]:
         """获取所有项目配置（含未启用的）"""
-        def op(session):
-            projects = session.query(ProjectConfig).all()
-            _maybe_encrypt_models(session, projects, 'api_key')
-            return [_project_to_dict(p) for p in projects]
-
-        return _db_read([], "获取项目配置失败", op)
+        projects = session.query(ProjectConfig).all()
+        _maybe_encrypt_models(session, projects, 'api_key')
+        return [_decrypt_field(p.to_dict(), 'api_key') for p in projects]
 
     @staticmethod
-    def get_all_subscriptions() -> List[Dict[str, Any]]:
+    @db_op([], "获取订阅配置失败")
+    def get_all_subscriptions(session) -> List[Dict[str, Any]]:
         """获取所有订阅配置（含未启用的）"""
-        def op(session):
-            subs = session.query(SubscriptionConfig).all()
-            return [s.to_dict() for s in subs]
-
-        return _db_read([], "获取订阅配置失败", op)
+        return [s.to_dict() for s in session.query(SubscriptionConfig).all()]
 
     @staticmethod
-    def upsert_project(project_data: Dict[str, Any]) -> bool:
+    @db_op(False, "保存项目配置失败", commit=True)
+    def upsert_project(session, project_data: Dict[str, Any]) -> bool:
         """添加或更新项目"""
-        def op(session):
-            encrypted_data = _encrypt_data_field(project_data, 'api_key')
-            project = session.query(ProjectConfig).filter_by(name=encrypted_data['name']).first()
-            if project:
-                for k, v in encrypted_data.items():
-                    if k == 'api_key' and v == '***':
-                        continue
-                    setattr(project, k, v)
-            else:
-                project = ProjectConfig(**encrypted_data)
-                session.add(project)
-            return True
-
-        return _db_write(False, "保存项目配置失败", op)
+        return _upsert(session, ProjectConfig, project_data, secret_field='api_key')
 
     @staticmethod
-    def upsert_subscription(sub_data: Dict[str, Any]) -> bool:
+    @db_op(False, "保存订阅配置失败", commit=True)
+    def upsert_subscription(session, sub_data: Dict[str, Any]) -> bool:
         """添加或更新订阅"""
-        def op(session):
-            sub = session.query(SubscriptionConfig).filter_by(name=sub_data['name']).first()
-            if sub:
-                for k, v in sub_data.items():
-                    setattr(sub, k, v)
-            else:
-                sub = SubscriptionConfig(**sub_data)
-                session.add(sub)
-            return True
+        return _upsert(session, SubscriptionConfig, sub_data)
 
-        return _db_write(False, "保存订阅配置失败", op)
-            
     @staticmethod
-    def delete_subscription(name: str) -> bool:
+    @db_op(False, "删除订阅失败", commit=True)
+    def delete_subscription(session, name: str) -> bool:
         """删除订阅"""
-        def op(session):
-            sub = session.query(SubscriptionConfig).filter_by(name=name).first()
-            if sub:
-                session.delete(sub)
-            return True
-
-        return _db_write(False, "删除订阅失败", op)
+        return _delete_by_name(session, SubscriptionConfig, name)
 
 
 class EmailRepository:
     """邮件历史数据访问"""
 
     @staticmethod
+    @db_op(None, "保存邮件告警记录失败", commit=True, exc_info=True)
     def save_email_alert(
+        session,
         mailbox: str,
         sender: str,
         subject: str,
@@ -256,28 +224,26 @@ class EmailRepository:
         alert_sent: bool = False
     ) -> Optional[int]:
         """保存邮件告警记录"""
-        def op(session):
-            keywords_json = json.dumps(matched_keywords or [], ensure_ascii=False)
-            record = EmailAlertHistory(
-                mailbox=mailbox,
-                sender=sender,
-                subject=subject,
-                date=date,
-                service_name=service_name,
-                amount=amount,
-                matched_keywords=keywords_json,
-                alert_sent=alert_sent,
-                timestamp=utcnow()
-            )
-            session.add(record)
-            session.flush()
-            logger.debug(f"保存邮件告警记录: {subject}")
-            return record.id
-
-        return _db_write(None, "保存邮件告警记录失败", op, exc_info=True)
+        record = EmailAlertHistory(
+            mailbox=mailbox,
+            sender=sender,
+            subject=subject,
+            date=date,
+            service_name=service_name,
+            amount=amount,
+            matched_keywords=json.dumps(matched_keywords or [], ensure_ascii=False),
+            alert_sent=alert_sent,
+            timestamp=utcnow()
+        )
+        session.add(record)
+        session.flush()
+        logger.debug(f"保存邮件告警记录: {subject}")
+        return record.id
 
     @staticmethod
+    @db_op(False, "查询邮件告警去重记录失败", exc_info=True)
     def has_recent_email_alert(
+        session,
         mailbox: str,
         sender: str,
         subject: str,
@@ -285,25 +251,24 @@ class EmailRepository:
         days: int = 30
     ) -> bool:
         """检查近期是否已经成功发送过同一封告警邮件。"""
-        def op(session):
-            since = utcnow() - timedelta(days=days)
-            return session.query(EmailAlertHistory.id)\
-                .filter(EmailAlertHistory.mailbox == mailbox)\
-                .filter(EmailAlertHistory.sender == sender)\
-                .filter(EmailAlertHistory.subject == subject)\
-                .filter(EmailAlertHistory.date == date)\
-                .filter(EmailAlertHistory.alert_sent.is_(True))\
-                .filter(EmailAlertHistory.timestamp >= since)\
-                .first() is not None
-
-        return _db_read(False, "查询邮件告警去重记录失败", op, exc_info=True)
+        since = utcnow() - timedelta(days=days)
+        return session.query(EmailAlertHistory.id)\
+            .filter(EmailAlertHistory.mailbox == mailbox)\
+            .filter(EmailAlertHistory.sender == sender)\
+            .filter(EmailAlertHistory.subject == subject)\
+            .filter(EmailAlertHistory.date == date)\
+            .filter(EmailAlertHistory.alert_sent.is_(True))\
+            .filter(EmailAlertHistory.timestamp >= since)\
+            .first() is not None
 
 
 class BalanceRepository:
     """余额历史数据访问"""
 
     @staticmethod
+    @db_op(None, "保存余额记录失败", commit=True, exc_info=True)
     def save_balance_record(
+        session,
         project_id: str,
         project_name: str,
         provider: str,
@@ -313,121 +278,86 @@ class BalanceRepository:
         need_alarm: bool = False
     ) -> Optional[int]:
         """保存余额记录"""
-        def op(session):
-            record = BalanceHistory(
-                project_id=project_id,
-                project_name=project_name,
-                provider=provider,
-                balance=balance,
-                threshold=threshold,
-                balance_type=balance_type,
-                need_alarm=need_alarm,
-                timestamp=utcnow()
-            )
-            session.add(record)
-            session.flush()
-            logger.debug(f"保存余额记录: {project_name} = {balance}")
-            return record.id
-
-        return _db_write(None, "保存余额记录失败", op, exc_info=True)
+        record = BalanceHistory(
+            project_id=project_id,
+            project_name=project_name,
+            provider=provider,
+            balance=balance,
+            threshold=threshold,
+            balance_type=balance_type,
+            need_alarm=need_alarm,
+            timestamp=utcnow()
+        )
+        session.add(record)
+        session.flush()
+        logger.debug(f"保存余额记录: {project_name} = {balance}")
+        return record.id
 
     @staticmethod
+    @db_op([], "查询余额历史失败", exc_info=True)
     def get_balance_history(
+        session,
         project_id: Optional[str] = None,
         provider: Optional[str] = None,
         days: int = 7,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """获取余额历史记录"""
-        def op(session):
-            query = session.query(BalanceHistory)
-            since = utcnow() - timedelta(days=days)
-            query = query.filter(BalanceHistory.timestamp >= since)
-            if project_id:
-                query = query.filter(BalanceHistory.project_id == project_id)
-            if provider:
-                query = query.filter(BalanceHistory.provider == provider)
-            records = query.order_by(desc(BalanceHistory.timestamp))\
-                .limit(limit)\
-                .all()
-            return [r.to_dict() for r in records]
-
-        return _db_read([], "查询余额历史失败", op, exc_info=True)
+        query = session.query(BalanceHistory)\
+            .filter(BalanceHistory.timestamp >= utcnow() - timedelta(days=days))
+        if project_id:
+            query = query.filter(BalanceHistory.project_id == project_id)
+        if provider:
+            query = query.filter(BalanceHistory.provider == provider)
+        records = query.order_by(desc(BalanceHistory.timestamp)).limit(limit).all()
+        return [r.to_dict() for r in records]
 
     @staticmethod
-    def get_balance_trend(project_id: str, days: int = 30) -> Dict[str, Any]:
+    @db_op(DB_DISABLED_ERROR, "获取余额趋势失败", exc_info=True)
+    def get_balance_trend(session, project_id: str, days: int = 30) -> Dict[str, Any]:
         """获取余额趋势分析"""
-        if not ENABLE_DATABASE:
-            return {'error': 'Database disabled'}
-        def op(session):
-            since = utcnow() - timedelta(days=days)
-            records = session.query(BalanceHistory)\
-                .filter(BalanceHistory.project_id == project_id)\
-                .filter(BalanceHistory.timestamp >= since)\
-                .order_by(BalanceHistory.timestamp)\
-                .all()
+        records = session.query(BalanceHistory)\
+            .filter(BalanceHistory.project_id == project_id)\
+            .filter(BalanceHistory.timestamp >= utcnow() - timedelta(days=days))\
+            .order_by(BalanceHistory.timestamp)\
+            .all()
 
-            if not records:
-                return {'error': 'No data found'}
+        if not records:
+            return {'error': 'No data found'}
 
-            balances = [r.balance for r in records]
+        balances = [r.balance for r in records]
+        trend_data = {
+            'project_id': project_id,
+            'project_name': records[0].project_name,
+            'days': days,
+            'data_points': len(records),
+            'current_balance': balances[-1],
+            'min_balance': min(balances),
+            'max_balance': max(balances),
+            'avg_balance': sum(balances) / len(balances),
+            'threshold': records[-1].threshold if records[-1].threshold is not None else 0,
+            'first_timestamp': records[0].timestamp.isoformat(),
+            'last_timestamp': records[-1].timestamp.isoformat(),
+            'history': [
+                {'timestamp': r.timestamp.isoformat(), 'balance': r.balance, 'need_alarm': r.need_alarm}
+                for r in records
+            ]
+        }
 
-            trend_data = {
-                'project_id': project_id,
-                'project_name': records[0].project_name,
-                'days': days,
-                'data_points': len(records),
-                'current_balance': balances[-1] if balances else 0,
-                'min_balance': min(balances) if balances else 0,
-                'max_balance': max(balances) if balances else 0,
-                'avg_balance': sum(balances) / len(balances) if balances else 0,
-                'threshold': records[-1].threshold if records[-1].threshold is not None else 0,
-                'first_timestamp': records[0].timestamp.isoformat(),
-                'last_timestamp': records[-1].timestamp.isoformat(),
-                'history': [
-                    {
-                        'timestamp': r.timestamp.isoformat(),
-                        'balance': r.balance,
-                        'need_alarm': r.need_alarm
-                    }
-                    for r in records
-                ]
-            }
+        if len(balances) >= 2:
+            trend_data['change'] = balances[-1] - balances[0]
+            trend_data['change_percent'] = ((balances[-1] - balances[0]) / balances[0] * 100) if balances[0] != 0 else 0
 
-            if len(balances) >= 2:
-                trend_data['change'] = balances[-1] - balances[0]
-                trend_data['change_percent'] = ((balances[-1] - balances[0]) / balances[0] * 100) if balances[0] != 0 else 0
-
-            return trend_data
-
-        return _db_read({'error': 'Database not available'}, "获取余额趋势失败", op, exc_info=True)
-
-    @staticmethod
-    def get_all_projects_summary() -> List[Dict[str, Any]]:
-        """获取所有项目的摘要信息"""
-        def op(session):
-            subquery = session.query(
-                BalanceHistory.project_id,
-                func.max(BalanceHistory.timestamp).label('max_timestamp')
-            ).group_by(BalanceHistory.project_id).subquery()
-
-            latest_records = session.query(BalanceHistory)\
-                .join(
-                    subquery,
-                    (BalanceHistory.project_id == subquery.c.project_id) &
-                    (BalanceHistory.timestamp == subquery.c.max_timestamp)
-                )\
-                .all()
-            return [r.to_dict() for r in latest_records]
-
-        return _db_read([], "获取项目摘要失败", op, exc_info=True)
+        return trend_data
 
 
 class AlertRepository:
     """告警历史数据访问"""
 
     @staticmethod
+    @db_op(None, "保存告警记录失败", commit=True, exc_info=True)
     def save_alert_record(
+        session,
         project_id: str,
         project_name: str,
         alert_type: str,
@@ -437,104 +367,88 @@ class AlertRepository:
         status: str = 'sent'
     ) -> Optional[int]:
         """保存告警记录"""
-        def op(session):
-            record = AlertHistory(
-                project_id=project_id,
-                project_name=project_name,
-                alert_type=alert_type,
-                status=status,
-                message=message,
-                balance_value=balance_value,
-                threshold_value=threshold_value,
-                timestamp=utcnow()
-            )
-            session.add(record)
-            session.flush()
-            logger.debug(f"保存告警记录: {project_name} - {alert_type}")
-            return record.id
-
-        return _db_write(None, "保存告警记录失败", op, exc_info=True)
+        record = AlertHistory(
+            project_id=project_id,
+            project_name=project_name,
+            alert_type=alert_type,
+            status=status,
+            message=message,
+            balance_value=balance_value,
+            threshold_value=threshold_value,
+            timestamp=utcnow()
+        )
+        session.add(record)
+        session.flush()
+        logger.debug(f"保存告警记录: {project_name} - {alert_type}")
+        return record.id
 
     @staticmethod
+    @db_op(False, "查询告警冷却记录失败", exc_info=True)
     def has_recent_alert(
+        session,
         project_id: str,
         alert_type: str,
         within_seconds: int,
         status: str = 'sent'
     ) -> bool:
         """检查指定告警在冷却窗口内是否已经发送过。"""
-        if not ENABLE_DATABASE or within_seconds <= 0:
+        if within_seconds <= 0:
             return False
-        def op(session):
-            since = utcnow() - timedelta(seconds=within_seconds)
-            query = session.query(AlertHistory.id)\
-                .filter(AlertHistory.project_id == project_id)\
-                .filter(AlertHistory.alert_type == alert_type)\
-                .filter(AlertHistory.timestamp >= since)
-            if status:
-                query = query.filter(AlertHistory.status == status)
-            return query.first() is not None
-
-        return _db_read(False, "查询告警冷却记录失败", op, exc_info=True)
+        query = session.query(AlertHistory.id)\
+            .filter(AlertHistory.project_id == project_id)\
+            .filter(AlertHistory.alert_type == alert_type)\
+            .filter(AlertHistory.timestamp >= utcnow() - timedelta(seconds=within_seconds))
+        if status:
+            query = query.filter(AlertHistory.status == status)
+        return query.first() is not None
 
     @staticmethod
+    @db_op([], "查询告警历史失败", exc_info=True)
     def get_recent_alerts(
+        session,
         project_id: Optional[str] = None,
         alert_type: Optional[str] = None,
         days: int = 7,
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         """获取最近的告警记录"""
-        def op(session):
-            query = session.query(AlertHistory)
-            since = utcnow() - timedelta(days=days)
-            query = query.filter(AlertHistory.timestamp >= since)
-            if project_id:
-                query = query.filter(AlertHistory.project_id == project_id)
-            if alert_type:
-                query = query.filter(AlertHistory.alert_type == alert_type)
-            records = query.order_by(desc(AlertHistory.timestamp))\
-                .limit(limit)\
-                .all()
-            return [r.to_dict() for r in records]
-
-        return _db_read([], "查询告警历史失败", op, exc_info=True)
+        query = session.query(AlertHistory)\
+            .filter(AlertHistory.timestamp >= utcnow() - timedelta(days=days))
+        if project_id:
+            query = query.filter(AlertHistory.project_id == project_id)
+        if alert_type:
+            query = query.filter(AlertHistory.alert_type == alert_type)
+        records = query.order_by(desc(AlertHistory.timestamp)).limit(limit).all()
+        return [r.to_dict() for r in records]
 
     @staticmethod
-    def get_alert_statistics(days: int = 30) -> Dict[str, Any]:
+    @db_op(DB_DISABLED_ERROR, "获取告警统计失败", exc_info=True)
+    def get_alert_statistics(session, days: int = 30) -> Dict[str, Any]:
         """获取告警统计信息"""
-        if not ENABLE_DATABASE:
-            return {'error': 'Database disabled'}
-        def op(session):
-            since = utcnow() - timedelta(days=days)
-            total_alerts = session.query(func.count(AlertHistory.id))\
-                .filter(AlertHistory.timestamp >= since)\
-                .scalar()
+        since = utcnow() - timedelta(days=days)
+        total_alerts = session.query(func.count(AlertHistory.id))\
+            .filter(AlertHistory.timestamp >= since)\
+            .scalar()
 
-            alerts_by_type = session.query(
-                AlertHistory.alert_type,
-                func.count(AlertHistory.id).label('count')
-            ).filter(AlertHistory.timestamp >= since)\
-                .group_by(AlertHistory.alert_type)\
-                .all()
+        alerts_by_type = session.query(
+            AlertHistory.alert_type,
+            func.count(AlertHistory.id).label('count')
+        ).filter(AlertHistory.timestamp >= since)\
+            .group_by(AlertHistory.alert_type)\
+            .all()
 
-            alerts_by_project = session.query(
-                AlertHistory.project_name,
-                func.count(AlertHistory.id).label('count')
-            ).filter(AlertHistory.timestamp >= since)\
-                .group_by(AlertHistory.project_name)\
-                .order_by(desc('count'))\
-                .limit(10)\
-                .all()
+        alerts_by_project = session.query(
+            AlertHistory.project_name,
+            func.count(AlertHistory.id).label('count')
+        ).filter(AlertHistory.timestamp >= since)\
+            .group_by(AlertHistory.project_name)\
+            .order_by(desc('count'))\
+            .limit(10)\
+            .all()
 
-            return {
-                'days': days,
-                'total_alerts': total_alerts,
-                'by_type': {t: c for t, c in alerts_by_type},
-                'top_projects': [
-                    {'project': p, 'count': c}
-                    for p, c in alerts_by_project
-                ]
-            }
-
-        return _db_read({'error': 'Database not available'}, "获取告警统计失败", op, exc_info=True)
+        return {
+            'days': days,
+            'total_alerts': total_alerts,
+            'by_type': {t: c for t, c in alerts_by_type},
+            'top_projects': [{'project': p, 'count': c} for p, c in alerts_by_project],
+        }

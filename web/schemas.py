@@ -5,9 +5,18 @@ API 请求验证模型
 使用 Pydantic 进行请求数据验证，配合 web.middleware.validate_request 使用
 """
 from datetime import date
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from core.config_loader import coerce_renewal_day
+
+
+def _normalize_renewal_day(value: Any, cycle_type: Any) -> Any:
+    """接受 "03-15" 这类直观写法，内部统一成 MMDD 整数"""
+    if isinstance(cycle_type, str):
+        return coerce_renewal_day(value, cycle_type)
+    return value
 
 
 def _validate_iso_date(v: Optional[str]) -> Optional[str]:
@@ -37,7 +46,7 @@ class AddSubscriptionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称")
     owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Literal['weekly', 'monthly', 'yearly'] = Field(..., description="续费周期类型")
-    renewal_day: int = Field(..., ge=1, le=1231, description="续费日期（月/周使用 1-31，年付使用 MMDD）")
+    renewal_day: int = Field(..., ge=1, le=1231, description='续费日期（月/周填 1-31，年付填 "03-15" 或 315）')
     alert_days_before: int = Field(..., ge=0, le=365, description="提前告警天数")
     amount: float = Field(..., ge=0, description="订阅金额")
     enabled: bool = Field(default=True, description="是否启用")
@@ -47,6 +56,11 @@ class AddSubscriptionRequest(BaseModel):
     @classmethod
     def validate_last_renewed_date(cls, v: Optional[str]) -> Optional[str]:
         return _validate_iso_date(v)
+
+    @field_validator('renewal_day', mode='before')
+    @classmethod
+    def coerce_day(cls, v: Any, info) -> Any:
+        return _normalize_renewal_day(v, info.data.get('cycle_type'))
 
     @field_validator('renewal_day')
     @classmethod
@@ -61,7 +75,7 @@ class UpdateSubscriptionRequest(BaseModel):
     new_name: Optional[str] = Field(default=None, min_length=1, max_length=200, description="新订阅名称")
     owner_project: Optional[str] = Field(default=None, min_length=1, max_length=200, description="所属项目名称")
     cycle_type: Optional[Literal['weekly', 'monthly', 'yearly']] = Field(default=None, description="续费周期类型")
-    renewal_day: Optional[int] = Field(default=None, ge=1, le=1231, description="续费日期（月/周使用 1-31，年付使用 MMDD）")
+    renewal_day: Optional[int] = Field(default=None, ge=1, le=1231, description='续费日期（月/周填 1-31，年付填 "03-15" 或 315）')
     alert_days_before: Optional[int] = Field(default=None, ge=0, le=365, description="提前告警天数")
     amount: Optional[float] = Field(default=None, ge=0, description="订阅金额")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
@@ -71,6 +85,11 @@ class UpdateSubscriptionRequest(BaseModel):
     @classmethod
     def validate_last_renewed_date(cls, v: Optional[str]) -> Optional[str]:
         return _validate_iso_date(v)
+
+    @field_validator('renewal_day', mode='before')
+    @classmethod
+    def coerce_day(cls, v: Any, info) -> Any:
+        return _normalize_renewal_day(v, info.data.get('cycle_type'))
 
     @model_validator(mode='after')
     def validate_cycle_renewal_day(self):

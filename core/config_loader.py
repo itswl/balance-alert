@@ -77,6 +77,126 @@ def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
+# ============ 配置规范化 ============
+# 目标：config.json 只写必要字段，其余按约定推导，文件/数据库/API 三条来路统一在此处理。
+
+# provider 的默认余额类型（仅影响展示与告警文案）
+_PROVIDER_DEFAULT_TYPE = {
+    'openrouter': 'credits',
+    'uniapi': 'credits',
+    'wxrank': 'credits',
+    'tikhub': 'balance',
+    'volc': 'balance',
+    'aliyun': 'balance',
+}
+
+_PLACEHOLDER_PATTERN = re.compile(r'\$\{[^}]+\}')
+
+
+def is_unresolved_placeholder(value: Any) -> bool:
+    """``${VAR}`` 没被环境变量替换时视为未配置，避免把字面量当密钥发出去。"""
+    return isinstance(value, str) and bool(_PLACEHOLDER_PATTERN.search(value))
+
+
+def provider_key_env_names(provider: str, ordinal: int = 1) -> list:
+    """项目省略 api_key 时，按约定推导候选环境变量名。
+
+    单实例：``OPENROUTER_API_KEY``（也接受 ``OPENROUTER_1_API_KEY``）
+    同一 provider 的第 n 个项目：``VOLC_2_API_KEY``
+    """
+    upper = (provider or '').upper()
+    if not upper:
+        return []
+    if ordinal <= 1:
+        return [f'{upper}_API_KEY', f'{upper}_1_API_KEY']
+    return [f'{upper}_{ordinal}_API_KEY']
+
+
+def resolve_api_key(project: Dict[str, Any], provider: str, ordinal: int) -> tuple:
+    """返回 (api_key, 来源说明)。显式 api_key 优先，其次按环境变量约定推导。"""
+    api_key = project.get('api_key')
+    if api_key and not is_unresolved_placeholder(api_key):
+        return str(api_key), 'api_key 字段'
+
+    for name in provider_key_env_names(provider, ordinal):
+        value = os.environ.get(name)
+        if value:
+            return value, f'环境变量 {name}'
+
+    return '', None
+
+
+def coerce_renewal_day(value: Any, cycle_type: str) -> Any:
+    """续费日归一化。
+
+    年付支持直观的 ``"03-15"`` / ``"3-15"`` 写法，内部统一存 MMDD 整数（315）；
+    周付/月付接受数字或数字字符串。无法解析时原样返回，交由下游兜底。
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        matched = re.fullmatch(r'(\d{1,2})\s*[-/月]\s*(\d{1,2})\s*日?', text)
+        if matched:
+            month, day = int(matched.group(1)), int(matched.group(2))
+            return month * 100 + day if cycle_type == 'yearly' else day
+        if text.isdigit():
+            return int(text)
+    return value
+
+
+def normalize_projects(projects: list) -> list:
+    """补齐项目的省略字段：provider 小写、name/type 默认值、api_key 按约定推导。"""
+    ordinals: Dict[str, int] = {}
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        provider = str(project.get('provider') or '').strip().lower()
+        project['provider'] = provider
+        if not project.get('name'):
+            project['name'] = provider or 'unknown'
+        if not project.get('type'):
+            project['type'] = _PROVIDER_DEFAULT_TYPE.get(provider, 'balance')
+
+        ordinals[provider] = ordinals.get(provider, 0) + 1
+        project['api_key'] = resolve_api_key(project, provider, ordinals[provider])[0]
+    return projects
+
+
+def normalize_subscriptions(subscriptions: list) -> list:
+    """补齐订阅的省略字段：周期默认按月，续费日支持 MM-DD 写法。"""
+    for sub in subscriptions:
+        if not isinstance(sub, dict):
+            continue
+        cycle_type = str(sub.get('cycle_type') or 'monthly').strip().lower()
+        sub['cycle_type'] = cycle_type
+        if sub.get('renewal_day') is not None:
+            sub['renewal_day'] = coerce_renewal_day(sub['renewal_day'], cycle_type)
+    return subscriptions
+
+
+def normalize_emails(emails: list) -> list:
+    """补齐邮箱的省略字段：端口与 SSL 用 IMAP 常规默认，name 缺省取账号。"""
+    for email_config in emails:
+        if not isinstance(email_config, dict):
+            continue
+        if not email_config.get('port'):
+            email_config['port'] = 993
+        if email_config.get('use_ssl') is None:
+            email_config['use_ssl'] = True
+        if not email_config.get('name'):
+            email_config['name'] = email_config.get('username') or 'mailbox'
+        if is_unresolved_placeholder(email_config.get('password')):
+            email_config['password'] = ''
+    return emails
+
+
+def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """对三类业务清单统一做规范化，使下游只面对补齐后的完整字段。"""
+    normalize_projects(config.get('projects') or [])
+    normalize_subscriptions(config.get('subscriptions') or [])
+    normalize_emails(config.get('email') or [])
+    return config
+
+
 def _substitute_env_placeholders(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _substitute_env_placeholders(v) for k, v in value.items()}
@@ -151,7 +271,7 @@ def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Di
     config = copy.deepcopy(get_config(config_file, use_cache=use_cache))
 
     if not get_settings().enable_dynamic_config:
-        return config
+        return normalize_config(config)
 
     try:
         from database.repository import ConfigRepository
@@ -160,7 +280,7 @@ def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Di
         db_emails = ConfigRepository.get_all_emails()
     except Exception as e:
         logger.warning(f"[Config] 读取数据库动态配置失败，回退到文件配置: {e}")
-        return config
+        return normalize_config(config)
 
     if db_projects:
         config['projects'] = _strip_meta_fields(db_projects)
@@ -169,7 +289,7 @@ def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Di
     if db_emails:
         config['email'] = _strip_meta_fields(db_emails)
 
-    return config
+    return normalize_config(config)
 
 
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
