@@ -1,7 +1,11 @@
-# Production manifest for common-prod.
+# 生产部署清单（namespace: common-prod）
 #
-# Before applying, make sure .env contains WEB_API_KEY, DATABASE_URL, and the
-# provider credentials used by the project_config rows in PostgreSQL.
+# apply 前需替换两个占位符：
+#   YOUR_REGISTRY  镜像仓库地址，如 registry.<region>.aliyuncs.com/<namespace>
+#   YOUR_DOMAIN    对外域名，Ingress host 与 TLS Secret 名各出现一次
+#
+# 并确认 .env 含 WEB_API_KEY、DATABASE_URL 以及 PostgreSQL 里 project_config
+# 各行用到的 provider 凭证，然后创建 Secret：
 #
 # kubectl create secret generic balance-alert-secret \
 #   --from-env-file=.env \

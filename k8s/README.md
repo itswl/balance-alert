@@ -2,6 +2,15 @@
 
 本目录只有一个部署清单：`common-prod.yaml`，包含 balance-alert 的 Deployment、Service 和 Ingress，全部部署在 `common-prod` 命名空间。
 
+## 先替换占位符
+
+清单里有两个占位符需要按自己的环境填写（仓库不保存这些值）：
+
+| 占位符 | 含义 | 出现位置 |
+| --- | --- | --- |
+| `YOUR_REGISTRY` | 镜像仓库地址，如 `registry.<region>.aliyuncs.com/<namespace>` | Deployment 的 `image` |
+| `YOUR_DOMAIN` | 对外域名 | Ingress 的 `host`（两处）与 TLS `secretName` |
+
 ## 部署步骤
 
 ### 1. 创建 Secret
