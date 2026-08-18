@@ -126,6 +126,23 @@ def resolve_api_key(project: Dict[str, Any], provider: str, ordinal: int) -> tup
     return '', None
 
 
+def split_mmdd(renewal_day: Any) -> Optional[tuple]:
+    """把年付的 MMDD 整数（如 315）拆成 (月, 日)；不是合法 MMDD 时返回 None。
+
+    小于等于 31 的值属于旧配置的"只写了日"，不是 MMDD，同样返回 None。
+    """
+    try:
+        value = int(renewal_day)
+    except (TypeError, ValueError):
+        return None
+    if value <= 31:
+        return None
+    month, day = value // 100, value % 100
+    if 1 <= month <= 12 and 1 <= day <= 31:
+        return month, day
+    return None
+
+
 def coerce_renewal_day(value: Any, cycle_type: str) -> Any:
     """续费日归一化。
 

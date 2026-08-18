@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from core.config_loader import split_mmdd
 from core.logger import get_logger
 from core.settings import get_settings
 
@@ -125,11 +126,9 @@ class WebhookAdapter:
             return f"每周第 {renewal_day} 天"
 
         if cycle_type == 'yearly':
-            if renewal_day > 31:
-                month = renewal_day // 100
-                day = renewal_day % 100
-                if 1 <= month <= 12 and 1 <= day <= 31:
-                    return f"每年 {month}月{day}日"
+            month_day = split_mmdd(renewal_day)
+            if month_day is not None:
+                return f"每年 {month_day[0]}月{month_day[1]}日"
             return "每年固定日期"
 
         return f"每月 {renewal_day} 号"

@@ -2,11 +2,12 @@
 """
 订阅续费提醒检查器
 """
+import calendar
 from datetime import datetime, timedelta
 from services.webhook_adapter import WebhookAdapter
 from services import alert_store
 from core.logger import get_logger
-from core.config_loader import filter_enabled, load_config, make_subscription_id, owner_project_of
+from core.config_loader import filter_enabled, load_config, make_subscription_id, owner_project_of, split_mmdd
 
 logger = get_logger('subscription_checker')
 
@@ -24,18 +25,14 @@ def calculate_next_renewal_date(cycle_type: str, renewal_day: int, from_date: da
         return from_date + timedelta(days=days_ahead)
 
     if cycle_type == 'monthly':
-        next_month = from_date.month + 1
-        next_year = from_date.year
-        if next_month > 12:
-            next_month = 1
-            next_year += 1
-        return SubscriptionChecker._safe_month_date(next_year, next_month, renewal_day)
+        return SubscriptionChecker._shift_month(from_date, 1, renewal_day)
 
     if cycle_type == 'yearly':
-        # renewal_day 为 MMDD (如 315 表示 3月15日)；兼容旧格式 1-31 时按周年日计算。
-        if renewal_day <= 31:
+        month_day = split_mmdd(renewal_day)
+        if month_day is None:
+            # 兼容旧格式：只写了 1-31 时按周年日计算
             return SubscriptionChecker._safe_replace_year(from_date, from_date.year + 1)
-        return datetime(from_date.year + 1, renewal_day // 100, renewal_day % 100)
+        return datetime(from_date.year + 1, *month_day)
 
     raise ValueError(f"不支持的周期类型: {cycle_type}")
 
@@ -209,9 +206,14 @@ class SubscriptionChecker:
     @staticmethod
     def _safe_month_date(year, month, day):
         """安全构造月内日期，目标日超出当月天数时回退到月末。"""
-        import calendar
         max_day = calendar.monthrange(year, month)[1]
         return datetime(year, month, min(day, max_day))
+
+    @classmethod
+    def _shift_month(cls, date_value, months, day):
+        """在 date_value 的月份上偏移 months 个月，取该月的 day（超出则回退月末）"""
+        total = date_value.month - 1 + months
+        return cls._safe_month_date(date_value.year + total // 12, total % 12 + 1, int(day))
 
     def _calculate_cycle_start(self, cycle_type, renewal_day, today, next_renewal_date):
         """计算当前续费周期的起始日期"""
@@ -221,15 +223,9 @@ class SubscriptionChecker:
         elif cycle_type == 'yearly':
             # 年周期：从去年的同日期开始
             return self._safe_replace_year(next_renewal_date, next_renewal_date.year - 1)
-        else:  # monthly
-            # 月周期：从上个月的续费日开始
-            if today.day < renewal_day:
-                if today.month == 1:
-                    return self._safe_month_date(today.year - 1, 12, renewal_day)
-                else:
-                    return self._safe_month_date(today.year, today.month - 1, renewal_day)
-            else:
-                return self._safe_month_date(today.year, today.month, renewal_day)
+        else:  # monthly：本月续费日还没到就算上个月的周期
+            months = -1 if today.day < renewal_day else 0
+            return self._shift_month(today, months, renewal_day)
     
     def _calculate_days_until_renewal(self, cycle_type, renewal_day, today, last_renewed_date=None):
         """
@@ -248,103 +244,45 @@ class SubscriptionChecker:
         today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
         if cycle_type == 'weekly':
-            return self._calculate_weekly_renewal(renewal_day, today)
+            # renewal_day: 1=周一 … 7=周日
+            days_ahead = renewal_day - (today.weekday() + 1)
+            if days_ahead < 0:  # 本周已过，看下周
+                days_ahead += 7
+            next_renewal_date = today + timedelta(days=days_ahead)
         elif cycle_type == 'yearly':
-            return self._calculate_yearly_renewal(renewal_day, today, last_renewed_date)
+            next_renewal_date = self._next_yearly_date(renewal_day, today, last_renewed_date)
         else:
-            return self._calculate_monthly_renewal(renewal_day, today)
+            # 本月的续费日还没过就用本月，否则下个月
+            months = 0 if today.day <= renewal_day else 1
+            next_renewal_date = self._shift_month(today, months, renewal_day)
 
-    def _calculate_weekly_renewal(self, renewal_day, today):
-        """计算周周期的下次续费日期
+        return (next_renewal_date - today).days, next_renewal_date
 
-        Args:
-            renewal_day: 1=周一, 2=周二, ..., 7=周日
-            today: 当前日期
-
-        Returns:
-            (days, next_renewal_date)
-        """
-        current_weekday = today.weekday() + 1  # Python的weekday: 0=周一, 6=周日
-        days_ahead = renewal_day - current_weekday
-
-        if days_ahead < 0:  # 本周已过
-            days_ahead += 7
-
-        next_renewal_date = today + timedelta(days=days_ahead)
-        return days_ahead, next_renewal_date
-
-    def _calculate_yearly_renewal(self, renewal_day, today, last_renewed_date=None):
-        """计算年周期的下次续费日期
-
-        Args:
-            renewal_day: 续费日
-            today: 当前日期
-            last_renewed_date: 上次续费日期字符串
-
-        Returns:
-            (days, next_renewal_date)
-        """
+    def _next_yearly_date(self, renewal_day, today, last_renewed_date=None):
+        """年付的下次续费日：优先按上次续费日推年，否则按 MMDD 取今年或明年"""
         if last_renewed_date:
             try:
                 last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
-                next_renewal_date = self._safe_replace_year(last_renewed, last_renewed.year + 1)
-
-                for _ in range(20):
-                    if next_renewal_date > today:
-                        break
-                    next_renewal_date = self._safe_replace_year(next_renewal_date, next_renewal_date.year + 1)
-                else:
-                    raise ValueError("年度续费日期计算异常")
-
-                delta = next_renewal_date - today
-                return delta.days, next_renewal_date
             except ValueError:
-                pass
+                last_renewed = None
+            if last_renewed is not None:
+                # 从上次续费日逐年推进到今天之后（上限 20 年，防脏数据死循环）
+                candidate = self._safe_replace_year(last_renewed, last_renewed.year + 1)
+                for _ in range(20):
+                    if candidate > today:
+                        return candidate
+                    candidate = self._safe_replace_year(candidate, candidate.year + 1)
 
-        # 没有上次续费日期时，优先按 MMDD 格式解析 renewal_day。
-        try:
-            renewal_day_int = int(renewal_day)
-            if renewal_day_int > 31:
-                month = renewal_day_int // 100
-                day = renewal_day_int % 100
-                next_renewal_date = datetime(today.year, month, day)
-                if next_renewal_date < today:
-                    next_renewal_date = self._safe_replace_year(next_renewal_date, today.year + 1)
-            else:
-                # 兼容旧配置：年付但只写了 1-31 时，使用明年今天。
-                next_renewal_date = self._safe_replace_year(today, today.year + 1)
-        except (TypeError, ValueError):
-            next_renewal_date = self._safe_replace_year(today, today.year + 1)
+        month_day = split_mmdd(renewal_day)
+        if month_day is None:
+            # 兼容旧配置：年付但只写了 1-31（或非法值）时，用明年今天
+            return self._safe_replace_year(today, today.year + 1)
 
-        delta = next_renewal_date - today
-        return delta.days, next_renewal_date
-
-    def _calculate_monthly_renewal(self, renewal_day, today):
-        """计算月周期的下次续费日期
-
-        Args:
-            renewal_day: 续费日 (1-31)
-            today: 当前日期
-
-        Returns:
-            (days, next_renewal_date)
-        """
-        current_day = today.day
-
-        if current_day <= renewal_day:
-            next_renewal_date = self._safe_month_date(today.year, today.month, int(renewal_day))
-        else:
-            if today.month == 12:
-                next_year = today.year + 1
-                next_month = 1
-            else:
-                next_year = today.year
-                next_month = today.month + 1
-
-            next_renewal_date = self._safe_month_date(next_year, next_month, int(renewal_day))
-
-        delta = next_renewal_date - today
-        return delta.days, next_renewal_date
+        # 用 _safe_month_date 而非 datetime()：2月29日的订阅在平年要落到 2月28日
+        candidate = self._safe_month_date(today.year, *month_day)
+        if candidate >= today:
+            return candidate
+        return self._safe_month_date(today.year + 1, *month_day)
     
     def _send_alert(self, sub, days_until_renewal):
         """发送续费提醒告警"""

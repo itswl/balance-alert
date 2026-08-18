@@ -236,6 +236,46 @@ class TestRenewalDayAtNonMidnight:
         assert next_date.year == 2026
 
 
+class TestLeapAndMonthEndBoundaries:
+    """闰日与月末：续费日在目标月份不存在时回退到月末，且不能抛异常"""
+
+    def setup_method(self, method):
+        self.checker = SubscriptionChecker.__new__(SubscriptionChecker)
+        self.checker.config = {'subscriptions': []}
+        self.checker.results = []
+
+    @pytest.mark.parametrize('now,expected_date', [
+        (datetime(2024, 2, 29, 15), '2024-02-29'),   # 闰年：正常落在 2/29
+        (datetime(2025, 2, 28, 15), '2025-02-28'),   # 平年：回退到 2/28（曾在此抛 ValueError）
+        (datetime(2025, 3, 1, 15), '2026-02-28'),    # 平年已过期：推到明年并回退
+    ])
+    def test_yearly_feb_29(self, now, expected_date):
+        """年付 2月29日（MMDD=229）在平年必须回退而不是崩溃"""
+        days, next_date = self.checker._calculate_days_until_renewal('yearly', 229, now)
+        assert next_date.strftime('%Y-%m-%d') == expected_date
+        assert days >= 0
+
+    @pytest.mark.parametrize('now,expected_date', [
+        (datetime(2026, 2, 10, 15), '2026-02-28'),   # 2 月没有 31 号 → 月末
+        (datetime(2026, 4, 10, 15), '2026-04-30'),   # 4 月没有 31 号 → 月末
+        (datetime(2026, 1, 10, 15), '2026-01-31'),   # 1 月有 31 号
+    ])
+    def test_monthly_day_31(self, now, expected_date):
+        """月付 31 号在小月回退到当月最后一天"""
+        _, next_date = self.checker._calculate_days_until_renewal('monthly', 31, now)
+        assert next_date.strftime('%Y-%m-%d') == expected_date
+
+    def test_monthly_crosses_year(self):
+        """12 月过了续费日应推到次年 1 月"""
+        _, next_date = self.checker._calculate_days_until_renewal('monthly', 5, datetime(2026, 12, 20, 15))
+        assert next_date.strftime('%Y-%m-%d') == '2027-01-05'
+
+    def test_cycle_start_crosses_year_backwards(self):
+        """1 月且续费日未到时，周期起点应回到上一年 12 月"""
+        start = self.checker._calculate_cycle_start('monthly', 20, datetime(2026, 1, 10), datetime(2026, 1, 20))
+        assert start.strftime('%Y-%m-%d') == '2025-12-20'
+
+
 class TestCalculateCycleStart:
     """_calculate_cycle_start 测试"""
 
