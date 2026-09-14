@@ -42,13 +42,6 @@ class VolcProvider(BaseProvider):
 
         super().__init__(api_key)
         self.ak, self.sk = api_key.split(':', 1)
-        # 兼容旧属性名（测试与外部代码可能读取）
-        self.service = self.SERVICE
-        self.action = self.ACTION
-        self.version = self.VERSION
-        self.region = self.REGION
-        self.host = self.HOST
-        self.content_type = self.CONTENT_TYPE
 
     def get_credits(self):
         """

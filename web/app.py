@@ -61,12 +61,11 @@ def create_app(state_manager: StateManager = None) -> Flask:
     from .middleware import protect_api_endpoints
     protect_api_endpoints(app)
 
-    # 初始化状态管理器
-    if state_manager is None:
-        state_manager = StateManager()
+    # 每应用状态：看板状态管理器、手动刷新 / 立即扫描的冷却器
+    from .utils import Runtime
+    app.extensions['balance_alert'] = Runtime(state_manager or StateManager())
 
-    # 注册蓝图
-    _register_blueprints(app, state_manager)
+    _register_blueprints(app)
     _register_error_handlers(app)
 
     logger.info("Flask 应用创建完成")
@@ -74,19 +73,19 @@ def create_app(state_manager: StateManager = None) -> Flask:
     return app
 
 
-def _register_blueprints(app: Flask, state_manager: StateManager):
+def _register_blueprints(app: Flask):
     """注册所有蓝图；可选能力的蓝图按开关注册"""
-    from .routes import create_core_bp, create_subscription_bp, email_bp, history_bp, project_bp
+    from .routes import core_bp, email_bp, history_bp, project_bp, subscription_bp
 
     settings = get_settings()
 
-    app.register_blueprint(create_core_bp(state_manager))
-    # 订阅蓝图始终注册，未启用时由蓝图内部统一返回 503
-    app.register_blueprint(create_subscription_bp(state_manager))
+    app.register_blueprint(core_bp)
+    # 订阅、邮箱蓝图始终注册，未启用的能力由蓝图内部统一返回 503
+    app.register_blueprint(subscription_bp)
+    app.register_blueprint(email_bp)
 
     if settings.enable_dynamic_config:
         app.register_blueprint(project_bp)
-        app.register_blueprint(email_bp)
     if settings.enable_history_api:
         app.register_blueprint(history_bp)
 

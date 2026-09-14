@@ -135,29 +135,30 @@ class TestAlertDispatch:
 
 
 class TestSendCustomAlert:
-    """自定义告警发送调度测试"""
+    """富文本告警按平台包装 payload"""
 
-    @pytest.mark.parametrize('webhook_type, handler_name', [
-        ('feishu', '_send_feishu_custom'),
-        ('dingtalk', '_send_dingtalk_custom'),
-        ('wecom', '_send_wecom_custom'),
-        ('custom', '_send_custom_webhook_custom'),
+    @pytest.mark.parametrize('webhook_type, check', [
+        ('feishu', lambda p: p['msg_type'] == 'interactive'
+                             and p['card']['header']['title']['content'] == '标题'
+                             and p['card']['elements'][0]['content'] == '内容'),
+        ('dingtalk', lambda p: p['msgtype'] == 'markdown'
+                               and p['markdown']['title'] == '标题' and '内容' in p['markdown']['text']),
+        ('wecom', lambda p: p['msgtype'] == 'markdown' and p['markdown']['content'] == '### 标题\n\n内容'),
+        ('custom', lambda p: p['title'] == '标题' and p['content'] == '内容'
+                             and p['source'] == 'credit-monitor' and 'timestamp' in p),
     ])
-    def test_dispatch_by_type(self, webhook_type, handler_name):
-        """测试按 webhook 类型调度到对应的处理方法"""
-        with patch.object(WebhookAdapter, handler_name, return_value=True) as mock_send:
+    def test_payload_by_type(self, webhook_type, check):
+        with patch.object(WebhookAdapter, '_send_request', return_value=True) as mock_send:
             adapter = WebhookAdapter(WEBHOOK_URL, webhook_type)
-            result = adapter.send_custom_alert('标题', '内容')
-
-        assert result is True
-        mock_send.assert_called_once_with('标题', '内容')
+            assert adapter.send_custom_alert('标题', '内容') is True
+        payload = mock_send.call_args[0][0]
+        assert check(payload), payload
 
     def test_exception_returns_false(self):
-        """测试发送异常时返回 False"""
+        """发送异常时返回 False 而不是抛出"""
         adapter = WebhookAdapter(WEBHOOK_URL, 'feishu')
-        with patch.object(adapter, '_send_feishu_custom', side_effect=RuntimeError('boom')):
-            result = adapter.send_custom_alert('标题', '内容')
-            assert result is False
+        with patch.object(adapter, '_send_request', side_effect=RuntimeError('boom')):
+            assert adapter.send_custom_alert('标题', '内容') is False
 
 
 class TestSendRequest:
@@ -340,6 +341,38 @@ class TestWrapPayload:
         assert payload['msgtype'] == 'text'
         assert '测试标题' in payload['text']['content']
         assert '内容' in payload['text']['content']
+
+
+class TestNotificationMetrics:
+    """每次对外发送都按 kind / 结果计一次指标"""
+
+    def test_balance_and_subscription_alerts_are_counted(self):
+        adapter = WebhookAdapter(WEBHOOK_URL, 'feishu')
+        with patch.object(WebhookAdapter, '_send_request', return_value=True), \
+             patch('services.webhook_adapter.metrics_collector') as collector:
+            assert adapter.send_balance_alert(**BALANCE_ARGS) is True
+            assert adapter.send_subscription_alert(**SUBSCRIPTION_ARGS) is True
+        assert collector.record_notification.call_args_list[0].args == ('balance', True)
+        assert collector.record_notification.call_args_list[1].args == ('subscription', True)
+
+    def test_custom_webhook_type_is_counted_too(self):
+        adapter = WebhookAdapter(WEBHOOK_URL, 'custom')
+        with patch.object(WebhookAdapter, '_send_request', return_value=False), \
+             patch('services.webhook_adapter.metrics_collector') as collector:
+            assert adapter.send_balance_alert(**BALANCE_ARGS) is False
+        collector.record_notification.assert_called_once_with('balance', False)
+
+    def test_custom_alert_uses_kind_and_counts_failures(self):
+        adapter = WebhookAdapter(WEBHOOK_URL, 'feishu')
+        with patch.object(adapter, '_send_request', return_value=True), \
+             patch('services.webhook_adapter.metrics_collector') as collector:
+            assert adapter.send_custom_alert('标题', '内容', kind='email') is True
+        collector.record_notification.assert_called_once_with('email', True)
+
+        with patch.object(adapter, '_send_request', side_effect=RuntimeError('boom')), \
+             patch('services.webhook_adapter.metrics_collector') as collector:
+            assert adapter.send_custom_alert('标题', '内容') is False
+        collector.record_notification.assert_called_once_with('custom', False)
 
 
 if __name__ == '__main__':

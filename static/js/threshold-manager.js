@@ -31,34 +31,14 @@ async function saveThreshold(event) {
         return;
     }
 
-    try {
-        UI.setLoading(true);
-
-        const { response, data: result } = await API.fetchJson('/api/config/threshold', {
-            method: 'POST',
-            body: JSON.stringify({
-                project_name: projectName,
-                new_threshold: newThreshold
-            })
-        });
-
-        if (response.ok && result.status === 'success') {
-            UI.showToast('✅ 阈值已更新', 'success');
-            closeThresholdModal();
-
-            // 重新加载项目数据（强制不使用缓存）
-            const balanceData = await API.getCredits();
-            AppState.balanceData = balanceData;
-            UI.updateStats(balanceData);
-            UI.renderProjects(balanceData);
-        } else {
-            UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
-        }
-    } catch (error) {
-        console.error('保存阈值失败:', error);
-        UI.showToast('❌ 保存失败，请稍后重试', 'error');
-    } finally {
-        UI.setLoading(false);
+    const result = await API.mutate(
+        '/api/config/threshold',
+        { project_name: projectName, new_threshold: newThreshold },
+        { success: '阈值已更新', fail: '保存失败' }
+    );
+    if (result) {
+        closeThresholdModal();
+        await App.reloadProjects();
     }
 }
 

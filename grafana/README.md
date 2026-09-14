@@ -1,310 +1,154 @@
 # Grafana Dashboard 使用指南
 
-## 📊 Dashboard 概览
+Dashboard 文件：`dashboards/balance-alert-dashboard.json`（uid `balance-alert`，版本 3）。
+`docker-compose --profile monitoring up -d` 会自动装载数据源和面板；也可以用 `import-dashboard.sh` 导入到已有的 Grafana。
 
-余额监控 Dashboard 提供了全面的项目余额、订阅续费和系统状态可视化。
+指标来自 Web 进程 `:9100/metrics`（`ENABLE_PROMETHEUS=true`）。所有定时任务都在这个进程里跑，所以看板刷新、定时告警检查、
+定时邮箱扫描、页面上的「立即扫描」都会反映到面板上；命令行手动跑的 `services.monitor` / `services.email_scanner` 不会。
+完整指标列表见项目根目录 README 的「Prometheus 指标」一节。
 
-### 面板布局
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  概览指标（6个）                                             │
-│  [项目总数] [正常数] [告警数] [订阅总数] [即将到期] [最后检查]│
-├─────────────────────────────────────────────────────────────┤
-│  项目余额对比（柱状图）    │  余额比例（仪表盘）              │
-├─────────────────────────────────────────────────────────────┤
-│  余额趋势图（时间序列）                                      │
-├─────────────────────────────────────────────────────────────┤
-│  项目余额详情表（可排序、可筛选）                             │
-├─────────────────────────────────────────────────────────────┤
-│  订阅续费倒计时           │  订阅状态详情表                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 🎯 核心功能
-
-### 1. 概览指标卡片
-
-**顶部 6 个关键指标**：
-- **监控项目总数**：当前监控的项目数量
-- **正常项目数**：余额充足的项目（绿色）
-- **告警项目数**：余额不足的项目（红色）
-- **订阅总数**：配置的订阅数量
-- **7天内到期订阅**：即将到期的订阅数
-- **最后检查时间**：系统最后一次检查的时间
-
-### 2. 项目余额对比
-
-**柱状图显示**：
-- 横向对比所有项目的余额
-- 颜色区分不同服务商
-- 图例显示：last, min, max 值
-
-### 3. 余额比例仪表盘
-
-**仪表盘显示**：
-- 余额/阈值比例（0-100%）
-- 颜色编码：
-  - 🔴 红色：< 20%（危险）
-  - 🟡 黄色：20-50%（警告）
-  - 🟢 绿色：> 50%（正常）
-- 横向布局，一目了然
-
-### 4. 余额趋势图
-
-**时间序列图表**：
-- Smooth 平滑曲线
-- 渐变填充效果
-- 图例统计：last, min, max, mean
-- 支持交互缩放和时间范围选择
-
-### 5. 项目余额详情表
-
-**表格功能**：
-- **列**：项目名、服务商、类型、余额、阈值、余额比例、状态
-- **排序**：点击列头排序
-- **颜色编码**：
-  - 余额：红 → 黄 → 绿
-  - 余额比例：仪表盘显示
-  - 状态：✅ 正常 / ❌ 告警
-- **筛选**：通过顶部变量筛选项目
-
-### 6. 订阅续费倒计时
-
-**横向卡片显示**：
-- 显示每个订阅距离续费的天数
-- 颜色编码：
-  - 🔴 红色：< 3 天
-  - 🟡 黄色：3-7 天
-  - 🟢 绿色：> 7 天
-- 自动排序（从近到远）
-
-### 7. 订阅状态详情表
-
-**表格功能**：
-- **列**：订阅名称、周期、剩余天数、货币、续费金额、状态
-- **状态显示**：
-  - 🟢 正常
-  - 🔴 需续费
-  - 🔵 已续费
-- **排序**：默认按剩余天数排序
-
-## 🎨 交互功能
-
-### 变量筛选器
-
-Dashboard 顶部提供两个筛选器：
-
-1. **项目筛选器** (`project`)
-   - 支持多选
-   - 默认显示所有项目
-   - 动态加载项目列表
-
-2. **订阅筛选器** (`subscription`)
-   - 支持多选
-   - 默认显示所有订阅
-   - 动态加载订阅列表
-
-**使用方法**：
-```
-1. 点击顶部变量下拉框
-2. 选择要查看的项目/订阅
-3. 所有面板自动更新
-4. 点击 "All" 查看全部
-```
-
-### 时间范围选择
-
-**默认时间范围**：最近 6 小时
-
-**修改方法**：
-1. 点击右上角时间选择器
-2. 选择预设范围（1h, 3h, 6h, 12h, 24h, 7d, 30d）
-3. 或自定义时间范围
-
-### 自动刷新
-
-**默认刷新间隔**：1 分钟
-
-**修改方法**：
-1. 点击右上角刷新间隔下拉框
-2. 选择刷新频率（5s, 10s, 30s, 1m, 5m, 15m, 30m, 1h）
-3. 或关闭自动刷新
-
-## 📈 告警阈值配置
-
-### 余额比例阈值
+## 面板布局
 
 ```
-🔴 危险：< 20%（余额严重不足）
-🟡 警告：20% - 50%（余额偏低）
-🟢 正常：> 50%（余额充足）
+┌──────────────────────────────────────────────────────────────────────┐
+│ 概览：项目总数 │ 正常 │ 告警 │ 检查失败 │ 7天内到期订阅 │ 上次余额检查 │
+├─ 余额 ───────────────────────────────────────────────────────────────┤
+│ 余额比例仪表盘（余额/阈值）           │ 余额比例趋势                  │
+│ 项目余额对比（原始值，按类型筛选）    │ 余额趋势图                    │
+│ 项目余额详情表：项目 / 服务商 / 类型 / 余额 / 阈值 / 比例 / 状态 / 检查 │
+├─ 订阅续费 ───────────────────────────────────────────────────────────┤
+│ 订阅续费倒计时                        │ 订阅状态详情表                │
+├─ 邮箱扫描 ───────────────────────────────────────────────────────────┤
+│ 邮箱数 │ 连接失败邮箱 │ 上次扫描命中 │ 上次邮箱扫描                    │
+│ 邮箱扫描明细（状态 / 上次邮件数 / 上次命中 / 累计命中） │ 每日命中告警邮件 │
+├─ 定时任务与通知 ─────────────────────────────────────────────────────┤
+│ 失败任务 │ 24h 通知发送 │ 24h 通知失败 │ 上次告警检查成功               │
+│ 定时任务状态表（状态 / 上次运行 / 上次成功 / 耗时 / 累计失败）│ 通知发送（按类型） │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-### 订阅续费阈值
+## 各区块说明
 
-```
-🔴 紧急：剩余 < 3 天
-🟡 提醒：剩余 3-7 天
-🟢 正常：剩余 > 7 天
-```
+### 概览
 
-### 余额数值阈值（示例）
+- **监控项目总数 / 正常 / 告警**：按 `balance_alert_status` 统计，项目删除或改名后旧序列会被清掉，不会多算。
+- **检查失败项目**：`balance_alert_check_status == 0`，指上次查余额时接口报错或网络失败的项目。失败时余额保留上次成功值，所以「告警」和「检查失败」是两回事。
+- **上次余额检查**：`balance_alert_last_check_timestamp{check_type="balance"}`，超过 3 个刷新周期没更新时 `/health` 也会变成 503。
 
-```
-🔴 低：< 1,000
-🟡 中：1,000 - 10,000
-🟢 高：> 10,000
-```
+### 余额
 
-**注意**：实际阈值根据项目配置自动调整
+不同 provider 的余额单位不同：火山 / 阿里云 / DeepSeek 是人民币，OpenRouter / UniAPI 是 credits，GLM Coding Plan 是剩余配额百分比。
+所以**跨项目比较请看比例面板**（余额 ÷ 阈值），原始值面板用顶部「类型」筛选器分开看。
 
-## 🔍 PromQL 查询示例
+- **余额比例仪表盘**：< 20% 红，20-50% 黄，> 50% 绿；比例低于 100% 就是已经触发告警。
+- **项目余额详情表**：类型列显示为「积分 / Credits」「余额」「配额 %」；状态列是阈值判断，检查列是接口是否成功。
 
-### 常用查询
+### 订阅续费
 
-**查看特定项目余额**：
+沿用旧版：倒计时按剩余天数排序（< 3 天红，3-7 天黄），详情表显示周期、金额、状态（正常 / 需续费 / 已续费）。
+
+### 邮箱扫描
+
+- **邮箱数 / 连接失败邮箱**：来自 `balance_alert_email_mailbox_status`，1 正常 0 失败。IMAP 登录不上、授权码过期都会在这里显示出来。
+- **上次扫描命中**：`balance_alert_email_last_scan_alerts` 求和，即上次扫描匹配到欠费 / 续费关键词的邮件数。
+- **每日命中告警邮件**：`increase(balance_alert_email_alerts_total[1d])`，按邮箱分组。
+- 累计类指标是进程启动以来的计数，服务重启后归零。
+
+### 定时任务与通知
+
+三个进程内任务：`dashboard_refresh`（看板刷新）、`alert_check`（真实告警检查，默认每天 09:00 / 15:00）、`email_scan`（邮箱扫描，默认每天 10:00）。
+
+- **上次运行失败的任务**：非 0 时 `/health` 返回 503，`GET /api/jobs` 能看到错误原文。
+- **通知发送**：`balance_alert_notifications_total{kind, status}`，kind 为 `balance` / `subscription` / `email` / `mailbox_error`。发送失败一般是 Webhook 地址、网络或限流问题。
+- **定时任务状态表**：任务标签名叫 `task`（不叫 `job`，因为 Prometheus 抓取时会把与自带 `job` 标签冲突的项改名成 `exported_job`）。
+
+## 筛选器
+
+| 变量 | 取值来源 | 作用范围 |
+| --- | --- | --- |
+| `project` | `label_values(balance_alert_balance, project)` | 余额区块 |
+| `type` | `label_values(balance_alert_balance, type)` | 余额区块，把不同单位的项目分开看 |
+| `subscription` | `label_values(balance_alert_subscription_days, name)` | 订阅区块 |
+| `mailbox` | `label_values(balance_alert_email_mailbox_status, mailbox)` | 邮箱区块 |
+
+默认时间范围最近 24 小时，自动刷新 1 分钟。
+
+## PromQL 速查
+
 ```promql
-balance_alert_balance{project="OpenRouter"}
+# 余额低于阈值的项目及其当前余额
+balance_alert_balance and on(project, provider, type) balance_alert_status == 0
+
+# 余额比例最低的 5 个项目
+bottomk(5, balance_alert_ratio)
+
+# 上次检查失败的项目
+balance_alert_check_status == 0
+
+# 7 天内到期且还没续费的订阅
+balance_alert_subscription_days <= 7 and balance_alert_subscription_status == 0
+
+# 连接失败的邮箱
+balance_alert_email_mailbox_status == 0
+
+# 最近 7 天每个邮箱命中的告警邮件
+increase(balance_alert_email_alerts_total[7d])
+
+# 定时任务超过 26 小时没成功过（alert_check 每天两次，email_scan 每天一次）
+time() - balance_alert_job_last_success_timestamp > 26 * 3600
+
+# 最近 1 小时发送失败的通知
+increase(balance_alert_notifications_total{status="failed"}[1h]) > 0
 ```
 
-**查看余额不足的项目**：
-```promql
-balance_alert_balance{balance_alert_status="0"}
+## 建议的 Prometheus 告警规则（可选）
+
+Balance Alert 自己通过 Webhook 发余额告警，下面这些是给「监控系统本身」用的：
+
+```yaml
+groups:
+  - name: balance-alert-self
+    rules:
+      - alert: BalanceAlertJobFailed
+        expr: balance_alert_job_last_status == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "balance-alert 任务 {{ $labels.task }} 上次运行失败" }
+      - alert: BalanceAlertJobStale
+        expr: time() - balance_alert_job_last_success_timestamp{task="alert_check"} > 26 * 3600
+        labels: { severity: warning }
+        annotations: { summary: "alert_check 超过 26 小时没有成功运行" }
+      - alert: BalanceAlertMailboxDown
+        expr: balance_alert_email_mailbox_status == 0
+        for: 1h
+        labels: { severity: warning }
+        annotations: { summary: "邮箱 {{ $labels.mailbox }} 连接失败" }
+      - alert: BalanceAlertNotificationFailed
+        expr: increase(balance_alert_notifications_total{status="failed"}[1h]) > 0
+        labels: { severity: warning }
+        annotations: { summary: "Webhook 通知发送失败（{{ $labels.kind }}）" }
 ```
 
-**计算平均余额比例**：
-```promql
-avg(balance_alert_ratio)
+## 导入与更新
+
+```bash
+# 导入 / 覆盖到已有 Grafana（需要 Prometheus 数据源名为 Prometheus）
+cd grafana && ./import-dashboard.sh http://localhost:3000 admin <password>
 ```
 
-**查询7天内到期的订阅**：
-```promql
-balance_alert_subscription_days <= 7
-```
+Compose 方式装载的面板允许在 UI 里改，但重启后会以文件为准；想保留改动请用 Settings → JSON Model 导出后覆盖 `dashboards/balance-alert-dashboard.json`。
 
-**统计告警项目数**：
-```promql
-count(balance_alert_status == 0)
-```
+## 故障排查
 
-## 🎯 最佳实践
+**面板显示 No Data**：确认 `ENABLE_PROMETHEUS=true` 且 `curl http://<host>:9100/metrics` 有 `balance_alert_` 开头的指标；再看 Prometheus → Status → Targets 里 `balance-alert` 是否 UP。
 
-### 1. 日常监控
+**邮箱区块为空**：只有跑过一次扫描（定时 `email_scan` 或页面「立即扫描」）才有邮箱指标；没有配置邮箱时也为空。
 
-**推荐配置**：
-- 时间范围：6 小时或 24 小时
-- 自动刷新：1-5 分钟
-- 关注面板：概览指标 + 余额详情表
+**定时任务区块为空**：任务至少运行过一次才有 `balance_alert_job_*`；`dashboard_refresh` 启动即跑，其它两个到设定时刻才跑。
 
-### 2. 趋势分析
-
-**推荐配置**：
-- 时间范围：7 天或 30 天
-- 面板：余额趋势图
-- 查看 min/max/mean 统计
-
-### 3. 告警处理
-
-**步骤**：
-1. 查看"告警项目数"指标
-2. 在"项目余额详情表"中找到红色项目
-3. 查看"余额趋势图"了解变化
-4. 根据需要调整阈值或充值
-
-### 4. 订阅管理
-
-**步骤**：
-1. 查看"7天内到期订阅"指标
-2. 在"订阅状态详情表"中查看详情
-3. 排序查看最紧急的订阅
-4. 提前续费
-
-## 🔧 自定义配置
-
-### 修改面板
-
-1. 编辑模式：点击面板标题 → Edit
-2. 修改查询、样式、阈值等
-3. 保存更改
-
-### 导出/导入
-
-**导出 Dashboard**：
-```
-Settings → JSON Model → Copy to Clipboard
-```
-
-**导入 Dashboard**：
-```
-Dashboards → Import → Paste JSON
-```
-
-### 共享 Dashboard
-
-**创建快照**：
-```
-Share → Snapshot → Create
-```
-
-**生成链接**：
-```
-Share → Link → Copy Link
-```
-
-## 📱 移动端查看
-
-Dashboard 支持响应式布局，在手机和平板上也能正常查看。
-
-**建议**：
-- 使用 Grafana App（iOS/Android）
-- 横屏查看获得最佳体验
-
-## 🆘 故障排查
-
-### 面板显示 "No Data"
-
-**原因**：
-1. Prometheus 未采集数据
-2. 时间范围内无数据
-3. 查询语句错误
-
-**解决**：
-1. 检查 Prometheus Targets 状态
-2. 调整时间范围
-3. 检查 Metrics 端点：`http://localhost:9100/metrics`
-
-### 数据不更新
-
-**原因**：
-1. 自动刷新已关闭
-2. 余额刷新间隔未到
-3. 服务异常
-
-**解决**：
-1. 启用自动刷新
-2. 等待下一次刷新（默认 1 小时）
-3. 检查容器日志
-
-### 变量筛选器无选项
-
-**原因**：
-- Prometheus 中无对应标签数据
-
-**解决**：
-1. 确认项目/订阅已配置
-2. 手动刷新一次余额
-3. 等待 Prometheus 采集
-
-## 📚 相关资源
-
-- [Prometheus 文档](https://prometheus.io/docs/)
-- [Grafana 文档](https://grafana.com/docs/)
-- [PromQL 查询指南](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Grafana 面板配置](https://grafana.com/docs/grafana/latest/panels/)
+**数据不更新**：余额指标随 `dashboard_refresh`（默认每小时）和页面刷新更新；检查 `/api/jobs` 里任务是否正常，容器时区（`TZ`）是否符合预期。
 
 ---
 
-**Dashboard 版本**: 2.0
-**最后更新**: 2024-02-24
-**维护者**: 项目团队
+**Dashboard 版本**: 3.0
+**最后更新**: 2026-09-14

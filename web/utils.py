@@ -6,15 +6,53 @@ Web 工具函数
 """
 import hashlib
 import json
+import threading
+import time
+from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from flask import jsonify, make_response, request
+from flask import current_app, jsonify, make_response, request
 
 from core.config_loader import get_default_config_path, load_config
 from core.logger import get_logger
+from core.state_manager import StateManager
 
 logger = get_logger('web.utils')
+
+
+@dataclass
+class Cooldown:
+    """重操作的并发互斥 + 完成后冷却：同一时间只跑一个，跑完 seconds 秒内不再接受。"""
+    seconds: int
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _last_done: float = 0.0
+
+    def acquire(self) -> Optional[str]:
+        """拿到返回 None；拿不到返回给用户看的原因（不带动作名，由调用方拼）"""
+        if not self._lock.acquire(blocking=False):
+            return '正在进行中，请稍候'
+        remaining = self.seconds - (time.time() - self._last_done)
+        if remaining > 0:
+            self._lock.release()
+            return f'过于频繁，请{max(1, int(remaining))}秒后重试'
+        return None
+
+    def release(self) -> None:
+        self._last_done = time.time()
+        self._lock.release()
+
+
+@dataclass
+class Runtime:
+    """create_app 时挂到 app.extensions 上的每应用状态，路由通过 runtime() 取。"""
+    state_manager: StateManager
+    refresh_guard: Cooldown = field(default_factory=lambda: Cooldown(30))
+    scan_guard: Cooldown = field(default_factory=lambda: Cooldown(30))
+
+
+def runtime() -> Runtime:
+    return current_app.extensions['balance_alert']
 
 
 def handle_errors(action: str, *, bad_request_on_value_error: bool = False):
@@ -61,7 +99,8 @@ def parse_int_arg(name: str, default: int, min_value: int, max_value: int) -> in
 
 
 def require_json_fields(*fields: str):
-    data = request.get_json()
+    """读取 JSON 请求体并检查必填字段，返回 (data, error_response)"""
+    data = request.get_json(silent=True)
     if not data:
         return None, json_error(f"缺少必要参数: {', '.join(fields)}", 400)
     missing = [f for f in fields if f not in data]
@@ -83,7 +122,7 @@ def config_db_write(action) -> bool:
     """执行一次数据库配置写操作。
 
     Args:
-        action: 接收 ConfigRepository 类的回调，如 ``lambda repo: repo.upsert_project(data)``
+        action: 接收 ConfigRepository 类的回调，如 ``lambda repo: repo.upsert('projects', data)``
 
     Returns:
         bool: 数据库不可用或写入失败时返回 False

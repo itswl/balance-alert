@@ -18,7 +18,7 @@ services:
       - .env  # 从 .env 文件加载环境变量（如果文件存在）
     environment:
       - TZ=Asia/Shanghai
-    # 启动 Web 服务器 + Cron 定时任务
+    # Web 服务器 + 进程内定时任务（告警检查、邮箱扫描），不再需要 cron
     networks:
       - monitor-network
 

@@ -9,11 +9,9 @@
 import os
 from typing import Any, Dict, List, Tuple
 
-from core.config_loader import (
-    get_config,
-    load_config,
-    provider_key_env_names,
-)
+from core.config_loader import load_config, load_config_with_env_vars, provider_key_env_names
+from core.config_loader import get_refresh_interval
+from core.timeutil import describe_daily_times
 from core.settings import get_settings
 
 OK, BAD, WARN = '✓', '✗', '!'
@@ -162,16 +160,12 @@ def _section_sources(config_path: str) -> Dict[str, str]:
     if settings.enable_dynamic_config:
         try:
             from database.repository import ConfigRepository
-            db_counts = {
-                'projects': len(ConfigRepository.get_all_projects()),
-                'subscriptions': len(ConfigRepository.get_all_subscriptions()),
-                'email': len(ConfigRepository.get_all_emails()),
-            }
+            db_counts = {section: len(ConfigRepository.get_all(section)) for section in ConfigRepository.SECTIONS}
         except Exception as e:
             db_counts = {}
             print(f"  {WARN} 读取数据库动态配置失败: {e}")
 
-    file_config = get_config(config_path, use_cache=False)
+    file_config = load_config_with_env_vars(config_path)
     sources = {}
     for section in ('projects', 'subscriptions', 'email'):
         if db_counts.get(section):
@@ -186,7 +180,7 @@ def _section_sources(config_path: str) -> Dict[str, str]:
 def check_config(config_path: str) -> int:
     """打印配置自检报告，返回发现的问题数量。"""
     settings = get_settings()
-    config = load_config(config_path, use_cache=False)
+    config = load_config(config_path)
     sources = _section_sources(config_path)
 
     lines = [
@@ -211,6 +205,11 @@ def check_config(config_path: str) -> int:
         ('Web 告警', settings.enable_web_alarm),
     ]
     lines.append("  可选能力: " + '  '.join(f"{name}{OK if on else '✗'}" for name, on in features))
+    lines.append(
+        f"  定时任务: 看板刷新 每 {get_refresh_interval()} 秒  "
+        f"告警检查 {describe_daily_times(settings.alert_schedule_times)}  "
+        f"邮箱扫描 {describe_daily_times(settings.email_scan_schedule_times)}（最近 {settings.email_scan_days} 天）"
+    )
 
     problems = _check_projects(config.get('projects') or [], lines)
     if settings.enable_subscriptions:

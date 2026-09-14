@@ -42,22 +42,19 @@ class TestCooldownSeconds:
         assert alert_store.cooldown_seconds('balance') == 0
 
 
-class TestDatabaseUnavailable:
-    """数据库导不进来时全部降级，不能影响告警发送"""
+class TestDatabaseDisabled:
+    """数据库未启用（测试环境默认）时全部降级，不能影响告警发送"""
 
     def test_in_cooldown_allows_alert(self):
-        with patch.object(alert_store, 'DB_AVAILABLE', False):
-            assert alert_store.in_cooldown('id', 'low_balance', 3600) is False
+        assert alert_store.in_cooldown('id', 'low_balance', 3600) is False
 
     def test_email_dedup_allows_alert(self):
-        with patch.object(alert_store, 'DB_AVAILABLE', False):
-            assert alert_store.email_alert_sent_recently('mb', 's', 'sub', 'd', 7) is False
+        assert alert_store.email_alert_sent_recently('mb', 's', 'sub', 'd', 7) is False
 
     def test_writes_are_noop(self):
-        with patch.object(alert_store, 'DB_AVAILABLE', False):
-            assert alert_store.record_alert('id', 'n', 't', 'm') is None
-            assert alert_store.record_balance('id', 'n', 'p', 1.0, 2.0, 'credits', False) is None
-            assert alert_store.record_email_alert('mb', 's', 'sub', 'd') is None
+        assert alert_store.record_alert('id', 'n', 't', 'm') is None
+        assert alert_store.record_balance('id', 'n', 'p', 1.0, 2.0, 'credits', False) is None
+        assert alert_store.record_email_alert('mb', 's', 'sub', 'd') is None
 
 
 if __name__ == '__main__':

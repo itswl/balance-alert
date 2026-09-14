@@ -58,6 +58,14 @@ spec:
               value: "true"
             - name: BALANCE_REFRESH_INTERVAL_SECONDS
               value: "3600"
+            # 进程内定时任务（按 TZ 时区）：真实告警检查与邮箱扫描时刻
+            - name: ALERT_SCHEDULE
+              value: "09:00,15:00"
+            - name: EMAIL_SCAN_SCHEDULE
+              value: "10:00"
+            # 有 prometheus.io/scrape 注解就得把指标端口真正开起来
+            - name: ENABLE_PROMETHEUS
+              value: "true"
             - name: MAX_CONCURRENT_CHECKS
               value: "5"
             - name: WEB_API_KEY

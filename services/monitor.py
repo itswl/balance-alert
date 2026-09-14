@@ -8,7 +8,7 @@ import argparse
 import hashlib
 import threading
 import time
-from typing import Dict, Any, List, Optional, Tuple, TypeVar, Generic
+from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from providers import get_provider
@@ -26,32 +26,30 @@ logger = get_logger('monitor')
 DEFAULT_MAX_CONCURRENT = 20
 MAX_CONCURRENT_UPPER_BOUND = 50
 
-PROVIDER_CACHE_TTL = 600  # 实例缓存 10 分钟
-
-T = TypeVar('T')
+PROVIDER_CACHE_TTL = 600  # Provider 实例（含 HTTP Session）缓存 10 分钟
 
 
-class _TTLCache(Generic[T]):
+class _TTLCache:
+    """线程安全的 {key: (写入时间, 值)} 缓存，读取时按 TTL 判断过期"""
+
     def __init__(self) -> None:
-        self._data: Dict[str, Tuple[float, T]] = {}
+        self._data: Dict[str, Tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
-    def get(self, key: str, ttl_seconds: int) -> Optional[T]:
+    def get(self, key: str, ttl_seconds: int) -> Optional[Any]:
         if ttl_seconds <= 0:
             return None
-
-        now = time.time()
         with self._lock:
             hit = self._data.get(key)
-            if not hit:
+            if hit is None:
                 return None
             cached_at, value = hit
-            if now - cached_at >= ttl_seconds:
+            if time.time() - cached_at >= ttl_seconds:
                 self._data.pop(key, None)
                 return None
             return value
 
-    def set(self, key: str, value: T) -> None:
+    def set(self, key: str, value: Any) -> None:
         with self._lock:
             self._data[key] = (time.time(), value)
 
@@ -59,30 +57,9 @@ class _TTLCache(Generic[T]):
         with self._lock:
             self._data.clear()
 
-    def keys(self):
-        with self._lock:
-            return list(self._data.keys())
 
-    def __getitem__(self, key: str):
-        with self._lock:
-            return self._data[key]
-
-    def __setitem__(self, key: str, value):
-        with self._lock:
-            self._data[key] = value
-
-
-_provider_cache: _TTLCache[Any] = _TTLCache()
-_response_cache: _TTLCache[Dict[str, Any]] = _TTLCache()
-
-
-def _get_metrics_collector():
-    """Prometheus 指标收集器；未启用或导入失败时返回 None"""
-    try:
-        from services.prometheus_exporter import metrics_collector
-        return metrics_collector
-    except Exception:
-        return None
+_provider_cache = _TTLCache()
+_response_cache = _TTLCache()
 
 
 def _provider_cache_key(provider_name: str, api_key: str) -> str:
@@ -109,27 +86,12 @@ class CreditMonitor:
     """余额监控器"""
     
     def __init__(self, config_path: str = 'config.json') -> None:
-        """
-        初始化监控器
-
-        Args:
-            config_path: 配置文件路径
-        """
         self.config_path: Path = Path(config_path)
-        self.config: Dict[str, Any] = self._load_config()
-        self.results: List[Dict[str, Any]] = []
-        self._results_lock = threading.Lock()
-
-    def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件
-
-        Returns:
-            Dict[str, Any]: 配置字典
-        """
         if not self.config_path.exists() and not get_settings().enable_dynamic_config:
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
-        return load_config(str(self.config_path))
-    
+        self.config: Dict[str, Any] = load_config(str(self.config_path))
+        self.results: List[Dict[str, Any]] = []
+
     def _get_max_concurrent_checks(self) -> int:
         """最大并发检查数：环境变量 MAX_CONCURRENT_CHECKS，钳制在 [1, 50]。"""
         max_concurrent = get_settings().max_concurrent_checks
@@ -137,11 +99,13 @@ class CreditMonitor:
             max_concurrent = DEFAULT_MAX_CONCURRENT
         return max(1, min(max_concurrent, MAX_CONCURRENT_UPPER_BOUND))
 
-    def _failure_result(self, project_name: str, owner_project: Optional[str], provider_name: Optional[str], error_msg: str) -> Dict[str, Any]:
+    def _failure_result(self, project_name: str, owner_project: Optional[str], provider_name: Optional[str],
+                        error_msg: str, balance_type: Optional[str] = None) -> Dict[str, Any]:
         return {
             'project': project_name,
             'owner_project': owner_project,
             'provider': provider_name,
+            'type': balance_type,
             'success': False,
             'error': error_msg,
             'alarm_sent': False
@@ -170,8 +134,8 @@ class CreditMonitor:
             provider = _get_or_create_provider(provider_name, api_key)
         except ValueError as e:
             error_msg = str(e)
-            logger.error(f"❌ {error_msg}")
-            return self._failure_result(project_name, owner_project, provider_name, error_msg)
+            logger.error(f"{error_msg}")
+            return self._failure_result(project_name, owner_project, provider_name, error_msg, project_config.get('type'))
         
         cache_ttl = get_settings().response_cache_ttl
         cache_key = _provider_cache_key(provider_name, api_key)
@@ -183,8 +147,8 @@ class CreditMonitor:
             result = provider.get_credits()
         
         if not result['success']:
-            logger.error(f"❌ 获取余额失败: {result['error']}")
-            return self._failure_result(project_name, owner_project, provider_name, result['error'])
+            logger.error(f"获取余额失败: {result['error']}")
+            return self._failure_result(project_name, owner_project, provider_name, result['error'], project_config.get('type'))
         
         credits = result['credits']
         logger.info(f"[{project_name}] 当前余额: {credits}")
@@ -241,7 +205,7 @@ class CreditMonitor:
         """发送告警到 webhook"""
         adapter = WebhookAdapter.from_settings('credit-monitor')
         if adapter is None:
-            logger.error("❌ 未配置 webhook 地址")
+            logger.error("未配置 webhook 地址")
             return False
 
         return adapter.send_balance_alert(
@@ -262,13 +226,12 @@ class CreditMonitor:
             project_name: 指定项目名称，None 表示检查所有启用的项目
             dry_run: 测试模式，不发送告警
         """
-        # 记录开始时间（用于 Prometheus 指标）
         start_time = time.time()
 
         projects = self.config.get('projects', [])
 
         if not projects:
-            logger.warning("⚠️  配置文件中没有项目")
+            logger.warning("配置文件中没有项目")
             return
 
         # 过滤项目
@@ -284,68 +247,41 @@ class CreditMonitor:
         if dry_run:
             logger.info("[测试模式] 不会发送实际告警")
 
-        collector = _get_metrics_collector()
-        if collector is not None:
-            collector.active_projects_count.set(len(projects))
-
         # 获取配置的并发数
         max_workers = self._get_max_concurrent_checks()
         actual_workers = min(max_workers, len(projects))
         logger.info(f"并发检查数: {actual_workers} (配置: {max_workers}, 项目数: {len(projects)})")
         
-        # 使用线程池并发检查项目
+        # 并发检查，结果在本线程按完成顺序收集
         with ThreadPoolExecutor(max_workers=actual_workers) as executor:
-            # 提交所有任务
-            future_to_project = {
-                executor.submit(self.check_project, project, dry_run): project 
-                for project in projects
-            }
-            
-            # 收集结果
-            for future in as_completed(future_to_project):
-                project = future_to_project[future]
+            futures = {executor.submit(self.check_project, project, dry_run): project for project in projects}
+            for future in as_completed(futures):
+                project = futures[future]
                 try:
-                    result = future.result()
-                    with self._results_lock:
-                        self.results.append(result)
+                    self.results.append(future.result())
                 except Exception as e:
-                    logger.error(f"❌ 检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
-                    with self._results_lock:
-                        self.results.append(self._failure_result(project.get('name', 'Unknown'), owner_project_of(project), project.get('provider'), str(e)))
-        
-        # 输出汇总
-        self._print_summary()
+                    logger.error(f"检查项目 {project.get('name', 'Unknown')} 时发生错误: {e}", exc_info=True)
+                    self.results.append(self._failure_result(
+                        project.get('name', 'Unknown'), owner_project_of(project), project.get('provider'), str(e), project.get('type')))
 
-        execution_time = time.time() - start_time
-        if collector is not None:
-            collector.monitor_execution_time.observe(execution_time)
-        logger.info(f"✅ 监控完成，耗时 {execution_time:.2f} 秒")
+        self._print_summary()
+        logger.info(f"监控完成，耗时 {time.time() - start_time:.2f} 秒")
     
     def _print_summary(self) -> None:
         """打印检查汇总"""
-        total = len(self.results)
         success = sum(1 for r in self.results if r['success'])
-        failed = total - success
-        need_alarm = sum(1 for r in self.results if r.get('need_alarm', False))
-        alarm_sent = sum(1 for r in self.results if r.get('alarm_sent', False))
+        need_alarm = sum(1 for r in self.results if r.get('need_alarm'))
+        alarm_sent = sum(1 for r in self.results if r.get('alarm_sent'))
+        logger.info(f"检查汇总: 总项目={len(self.results)}, 成功={success}, 失败={len(self.results) - success}, "
+                    f"需告警={need_alarm}, 已告警={alarm_sent}")
 
-        logger.info(f"检查汇总: 总项目={total}, 成功={success}, 失败={failed}, 需告警={need_alarm}, 已告警={alarm_sent}")
-
-        # 详细列表
         for r in self.results:
-            project = r['project']
-            if r['success']:
-                credits = r['credits']
-                threshold = r['threshold']
-                if r.get('alarm_sent'):
-                    logger.warning(f"  {project}: {credits} / {threshold} - 已告警")
-                elif r.get('need_alarm'):
-                    logger.warning(f"  {project}: {credits} / {threshold} - 需告警")
-                else:
-                    logger.info(f"  {project}: {credits} / {threshold} - 正常")
-            else:
-                error = r.get('error', 'Unknown error')
-                logger.error(f"  {project}: {error}")
+            if not r['success']:
+                logger.error(f"  {r['project']}: {r.get('error', 'Unknown error')}")
+                continue
+            state = '已告警' if r.get('alarm_sent') else ('需告警' if r.get('need_alarm') else '正常')
+            log = logger.warning if r.get('need_alarm') else logger.info
+            log(f"  {r['project']}: {r['credits']} / {r['threshold']} - {state}")
 
 
 def run_credit_monitor(config_path: str, project_name: Optional[str] = None, dry_run: bool = True) -> Dict[str, Any]:

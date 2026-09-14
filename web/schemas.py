@@ -101,3 +101,19 @@ class UpdateSubscriptionRequest(BaseModel):
 class DeleteSubscriptionRequest(BaseModel):
     """删除订阅请求"""
     name: str = Field(..., min_length=1, max_length=200, description="订阅名称")
+
+
+class EmailConfigRequest(BaseModel):
+    """添加或更新邮箱配置请求。name 是唯一键；更新时只改传了的字段，密码留空表示不变。"""
+    name: str = Field(..., min_length=1, max_length=200, description="邮箱显示名称（唯一键）")
+    host: Optional[str] = Field(default=None, min_length=1, max_length=200, description="IMAP 服务器地址")
+    port: Optional[int] = Field(default=None, ge=1, le=65535, description="IMAP 端口，默认 993")
+    username: Optional[str] = Field(default=None, min_length=1, max_length=200, description="邮箱账号")
+    password: Optional[str] = Field(default=None, max_length=500, description="密码或授权码，留空表示不修改")
+    use_ssl: Optional[bool] = Field(default=None, description="是否使用 SSL，默认 true")
+    enabled: Optional[bool] = Field(default=None, description="是否启用，默认 true")
+
+    @field_validator('name', 'host', 'username', mode='before')
+    @classmethod
+    def strip_text(cls, v: Any) -> Any:
+        return v.strip() if isinstance(v, str) else v

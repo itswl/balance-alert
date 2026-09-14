@@ -8,10 +8,8 @@ import tempfile
 from unittest.mock import patch, MagicMock
 from core.config_loader import (
     load_config_with_env_vars,
-    get_config,
     mask_sensitive_data,
     load_env_file,
-    clear_config_cache,
 )
 
 
@@ -219,59 +217,6 @@ class TestMaskSensitiveData:
         config = {}
         masked = mask_sensitive_data(config)
         assert masked == {}
-
-
-class TestGetConfig:
-    """配置缓存行为测试"""
-
-    def setup_method(self):
-        """每个测试前清除缓存"""
-        clear_config_cache()
-
-    def teardown_method(self):
-        """每个测试后清除缓存"""
-        clear_config_cache()
-
-    @patch('core.config_loader.load_config_with_env_vars')
-    def test_first_call_loads_config(self, mock_load):
-        """测试首次调用加载配置"""
-        mock_load.return_value = {'projects': [], 'settings': {}}
-        result = get_config('config.json', use_cache=True)
-
-        assert result == {'projects': [], 'settings': {}}
-        mock_load.assert_called_once()
-
-    @patch('core.config_loader.load_config_with_env_vars')
-    def test_cached_second_call(self, mock_load):
-        """测试第二次调用使用缓存"""
-        mock_load.return_value = {'projects': [], 'settings': {}}
-
-        result1 = get_config('config.json', use_cache=True)
-        result2 = get_config('config.json', use_cache=True)
-
-        assert result1 == result2
-        mock_load.assert_called_once()  # 只调用一次
-
-    @patch('core.config_loader.load_config_with_env_vars')
-    def test_no_cache_reloads(self, mock_load):
-        """测试禁用缓存时每次重新加载"""
-        mock_load.return_value = {'projects': [], 'settings': {}}
-
-        get_config('config.json', use_cache=False)
-        get_config('config.json', use_cache=False)
-
-        assert mock_load.call_count == 2
-
-    @patch('core.config_loader.load_config_with_env_vars')
-    def test_clear_cache_forces_reload(self, mock_load):
-        """测试清除缓存后重新加载"""
-        mock_load.return_value = {'projects': [], 'settings': {}}
-
-        get_config('config.json', use_cache=True)
-        clear_config_cache()
-        get_config('config.json', use_cache=True)
-
-        assert mock_load.call_count == 2
 
 
 class TestLoadEnvFile:

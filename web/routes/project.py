@@ -6,7 +6,6 @@
 """
 from flask import Blueprint
 
-from core.config_loader import clear_config_cache
 from ..utils import (
     audit_log,
     config_db_write,
@@ -57,8 +56,7 @@ def update_project_threshold():
     old_threshold = target_project.get('threshold', 0)
     target_project['threshold'] = new_threshold
 
-    if config_db_write(lambda repo: repo.upsert_project(target_project)):
-        clear_config_cache()
+    config_db_write(lambda repo: repo.upsert('projects', target_project))
 
     audit_log('update_project_threshold', {
         'project': project_name,
