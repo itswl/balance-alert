@@ -1,40 +1,41 @@
-# ========================================
-# Stage 1: Builder - 构建依赖
-# ========================================
-FROM --platform=linux/amd64 swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11-slim AS builder
+# syntax=docker/dockerfile:1
+# 多架构通用：不锁定 --platform，由 docker build / buildx 的目标平台决定；
+# 基础镜像与 pip 源用 build-arg 覆盖，例如国内环境：
+#   docker build \
+#     --build-arg BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11-slim \
+#     --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple -t balance-alert .
+# 一次构建多架构：
+#   docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
+ARG BASE_IMAGE=python:3.11-slim
 
+# ---------- Stage 1: 依赖装进独立 venv，运行镜像整目录拷走，不依赖 site-packages 路径 ----------
+FROM ${BASE_IMAGE} AS builder
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-
-# 复制依赖文件
 COPY requirements.txt .
+RUN python -m venv /opt/venv && /opt/venv/bin/pip install -r requirements.txt
 
-# 安装依赖到用户目录（不需要 root 权限）
-RUN pip install --user --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# ---------- Stage 2: 运行镜像 ----------
+FROM ${BASE_IMAGE}
+ENV TZ=Asia/Shanghai \
+    PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1
 
-# ========================================
-# Stage 2: Runtime - 最终镜像
-# ========================================
-FROM --platform=linux/amd64 swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11-slim
-
-# 设置时区
-ENV TZ=Asia/Shanghai
-
-# 安装运行时依赖：curl（用于健康检查）。定时任务由 main.py 进程内调度，不再需要 cron。
+# 只需要时区数据（定时任务时刻按 TZ）；健康检查用 Python 自带的 urllib，不再装 curl
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends tzdata && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
 
-# 从 builder 复制已安装的 Python 包到系统 site-packages
-# 这样所有用户都可以访问
-COPY --from=builder /root/.local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /root/.local/bin /usr/local/bin
-
-# 复制项目文件（分层复制，优化缓存）
+# 分层复制项目文件，优化缓存
 COPY *.py ./
 COPY core ./core
 COPY services ./services
@@ -46,22 +47,17 @@ COPY templates ./templates
 COPY static ./static
 COPY docker-entrypoint.sh ./
 
-# 创建非 root 用户和必要的目录/文件
+# 非 root 运行
 RUN groupadd -r appuser && \
     useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
     mkdir -p /app/logs /app/data && \
     touch /app/config.json && \
     chmod +x /app/docker-entrypoint.sh && \
     chown -R appuser:appuser /app
-
-# 以非 root 用户运行
 USER appuser
 
-# 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/live || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:' + os.environ.get('WEB_PORT', '8080') + '/live', timeout=5)" || exit 1
 
-# 暴露端口（文档用途）
 EXPOSE 8080 9100
-
 CMD ["/app/docker-entrypoint.sh"]
