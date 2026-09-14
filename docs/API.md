@@ -1,311 +1,95 @@
-# API 使用指南
+# API
 
-## 基础信息
+所有 `/api/*` 需要请求头 `X-API-Key: <WEB_API_KEY>`（或 `Authorization: Bearer <key>`）；`/health` 与 `/live` 不需要。响应是 JSON，出错时 `{"status": "error", "message": "..."}`，参数校验失败还会带 `errors` 列表。
 
-- **Base URL**: `http://localhost:8080`
-- **格式**: JSON
-- **认证**: API Key
+| 状态码 | 含义 |
+| --- | --- |
+| 400 | 参数错误 |
+| 401 | API Key 无效或未提供 |
+| 404 | 不存在，或该能力的蓝图未注册（项目配置、历史 API） |
+| 429 | 正在执行或冷却中（刷新、扫描） |
+| 503 | `WEB_API_KEY` 未配置、能力未启用（订阅、邮箱写入）、服务未就绪 |
 
-## 认证
+## 端点
 
-所有 `/api/*` 接口都需要 API Key。前端会将输入的 API Key 保存在浏览器 `localStorage`，后续请求会自动通过 `X-API-Key` 请求头发送。
+| 方法与路径 | 说明 | 依赖开关 |
+| --- | --- | --- |
+| `GET /live` | 存活检查 | — |
+| `GET /health` | 就绪检查：有数据、不过期、定时任务上次都成功才 200 | — |
+| `GET /api/features` | 启用了哪些可选能力 | — |
+| `GET /api/credits` | 所有项目的余额状态 | — |
+| `GET/POST /api/refresh` | 立即检查余额，POST 可带 `project_name` 只刷一个；同一时间一个，完成后冷却 30 秒 | — |
+| `GET /api/jobs` | 定时任务运行情况 | — |
+| `GET /api/subscriptions` | 订阅状态，未启用时为空 | — |
+| `GET /api/config/subscriptions` | 订阅配置 | 订阅 |
+| `POST /api/subscription/add` | 添加订阅 | 订阅 |
+| `POST /api/config/subscription` | 更新订阅，`name` 定位，`new_name` 改名，其余字段按需传 | 订阅 |
+| `POST\|DELETE /api/subscription/delete` | 删除订阅 `{name}` | 订阅 |
+| `POST /api/subscription/mark_renewed` `clear_renewed` | 标记 / 取消已续费，可带 `renewed_date` | 订阅 |
+| `GET /api/config/projects` | 项目配置，密钥脱敏 | 动态配置 |
+| `POST /api/config/threshold` | 改阈值 `{project_name, new_threshold}` | 动态配置 |
+| `GET /api/config/emails` | 邮箱配置，密码脱敏 | — |
+| `POST /api/config/email` | 新增或更新邮箱；`name` 是唯一键，新增需 `host` `username` `password`，更新时密码留空不改 | 动态配置 |
+| `POST /api/config/email/delete` | 删除邮箱 `{name}` | 动态配置 |
+| `GET /api/email/scan` | 上次扫描结果（进程内存，重启清空） | — |
+| `POST /api/email/scan` | 立即扫描 `{days}`，1-30；同一时间一个，冷却 30 秒 | — |
+| `GET /api/history/balance` `trend/<project_id>` `alerts` `stats` `email-alerts` | 历史查询；通用参数 `days` `limit`，余额可加 `project_id` `provider`，邮件可加 `mailbox` | 历史 API |
+
+订阅 = `ENABLE_SUBSCRIPTIONS`，动态配置 = `ENABLE_DYNAMIC_CONFIG`（写入还需 `ENABLE_DATABASE`），历史 API = `ENABLE_HISTORY_API`。页面触发的刷新与扫描是否真发通知由 `ENABLE_WEB_ALARM` 决定。
+
+## 示例
 
 ```bash
-export WEB_API_KEY="your-secret-key"
-
-curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
+curl -H "X-API-Key: $WEB_API_KEY" http://localhost:8080/api/credits
+curl -X POST -H "X-API-Key: $WEB_API_KEY" http://localhost:8080/api/refresh
+curl -X POST -H "X-API-Key: $WEB_API_KEY" -H "Content-Type: application/json" \
+  -d '{"days": 3}' http://localhost:8080/api/email/scan
+curl -X POST -H "X-API-Key: $WEB_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"alert_days_before":3,"amount":99}' \
+  http://localhost:8080/api/subscription/add
 ```
 
-## 核心 API
+`GET /api/credits`
 
-### 1. 健康检查
-
-```bash
-GET /health   # 就绪检查：有数据且不过期才返回 200
-GET /live     # 存活检查：进程能响应即返回 200
-```
-
-**响应**：
 ```json
 {
-  "status": "healthy",
-  "has_data": true,
-  "is_stale": false,
-  "jobs_healthy": true,
-  "failed_jobs": [],
-  "last_update": "2024-02-24T10:30:00Z",
-  "uptime_seconds": 3600,
-  "version": "1.0.0"
-}
-```
-
-`status` 为 `degraded`（HTTP 503）的三种情况：还没有余额数据、数据超过 3 个刷新周期没更新、任一定时任务上次运行失败（名字列在 `failed_jobs`）。
-
-### 2. 查询功能开关
-
-```bash
-GET /api/features
-```
-
-**响应**：
-```json
-{
-  "status": "success",
-  "features": {
-    "subscriptions": false,
-    "dynamic_config": false,
-    "history": false
-  }
-}
-```
-
-### 3. 获取所有项目余额
-
-```bash
-GET /api/credits
-```
-
-**响应**：
-```json
-{
+  "last_update": "2026-09-14T03:35:17Z",
   "projects": [
-    {
-      "name": "OpenRouter Main",
-      "owner_project": "AI 平台",
-      "provider": "openrouter",
-      "balance": 150.75,
-      "threshold": 100.0,
-      "currency": "USD",
-      "need_alarm": false,
-      "last_update": "2024-02-24T10:30:00Z"
-    }
+    { "project": "deepseek", "provider": "deepseek", "type": "balance", "owner_project": null,
+      "success": true, "credits": 430.37, "threshold": 50, "need_alarm": false, "alarm_sent": false,
+      "error": null, "cached": false }
   ],
-  "last_update": "2024-02-24T10:30:00Z"
+  "summary": { "total": 2, "success": 2, "failed": 0, "need_alarm": 0 }
 }
 ```
 
-### 4. 手动刷新余额
+`GET /health`
 
-```bash
-GET /api/refresh
-POST /api/refresh
-Content-Type: application/json
-
-{
-  "project_name": "OpenRouter Main"  // 可选：仅刷新指定项目
-}
+```json
+{ "status": "healthy", "has_data": true, "is_stale": false, "jobs_healthy": true, "failed_jobs": [],
+  "last_update": "2026-09-14T03:35:17Z", "uptime_seconds": 3600, "version": "1.0.0" }
 ```
 
-**限制**：30 秒冷却时间（触发时返回 429）
+`GET /api/jobs`
 
-### 5. 定时任务状态
-
-```bash
-GET /api/jobs
-```
-
-**响应**：
 ```json
 {
   "healthy": true,
   "jobs": [
-    {
-      "name": "alert_check",
-      "description": "余额与订阅告警检查，发送真实通知",
-      "schedule": "每天 09:00 / 15:00",
-      "enabled": true,
-      "next_run": "2026-09-15T01:00:00Z",
-      "last_run": "2026-09-14T07:00:00Z",
-      "last_success": "2026-09-14T07:00:00Z",
-      "last_error": null,
-      "last_duration_seconds": 1.42,
+    { "name": "alert_check", "description": "余额与订阅告警检查，发送真实通知", "schedule": "每天 09:00 / 15:00",
+      "enabled": true, "next_run": "2026-09-15T01:00:00Z", "last_run": "2026-09-14T07:00:00Z",
+      "last_success": "2026-09-14T07:00:00Z", "last_error": null, "last_duration_seconds": 1.42,
       "last_detail": { "projects": 8, "failed": 0, "need_alarm": 1, "subscriptions": 2, "need_alert": 0, "dry_run": false },
-      "runs": 12,
-      "failures": 0
-    }
+      "runs": 12, "failures": 0 }
   ]
 }
 ```
 
-三个任务：`dashboard_refresh`（看板刷新）、`alert_check`（真实告警检查）、`email_scan`（定时邮箱扫描）。时间均为 UTC ISO 格式。
+`GET /api/email/scan`
 
-## 订阅 API（可选）
-
-需启用：`ENABLE_SUBSCRIPTIONS=true`（未启用时下列写接口统一返回 503；`GET /api/subscriptions` 始终可用，未启用时返回空状态）
-
-### 6. 获取订阅状态
-
-```bash
-GET /api/subscriptions
-```
-
-**响应**：
 ```json
 {
-  "subscriptions": [
-    {
-      "name": "GitHub Copilot",
-      "owner_project": "AI 平台",
-      "cycle_type": "monthly",
-      "renewal_date": "2024-03-01",
-      "days_until_renewal": 5,
-      "amount": 10.0,
-      "currency": "USD",
-      "need_renewal": true
-    }
-  ]
-}
-```
-
-### 7. 添加订阅
-
-```bash
-POST /api/subscription/add
-Content-Type: application/json
-
-{
-  "name": "Netflix Premium",
-  "owner_project": "AI 平台",
-  "cycle_type": "monthly",
-  "renewal_day": 15,
-  "alert_days_before": 3,
-  "amount": 99.0
-}
-```
-
-必填字段：`name`、`cycle_type`、`renewal_day`、`alert_days_before`、`amount`。
-年付（`cycle_type=yearly`）的 `renewal_day` 使用 MMDD 格式，如 `315` 表示 3 月 15 日。
-
-### 8. 删除订阅
-
-```bash
-POST /api/subscription/delete
-DELETE /api/subscription/delete
-Content-Type: application/json
-
-{
-  "name": "Netflix Premium"
-}
-```
-
-### 9. 获取订阅配置列表
-
-```bash
-GET /api/config/subscriptions
-```
-
-### 10. 更新订阅配置
-
-```bash
-POST /api/config/subscription
-Content-Type: application/json
-
-{
-  "name": "Netflix Premium",
-  "amount": 129.0,
-  "renewal_day": 20
-}
-```
-
-`name` 用于定位订阅，其余字段（`new_name` / `cycle_type` / `renewal_day` / `alert_days_before` / `amount` / `enabled` / `last_renewed_date` / `owner_project`）按需提供。
-
-### 11. 标记/清除已续费
-
-```bash
-POST /api/subscription/mark_renewed
-Content-Type: application/json
-
-{
-  "name": "Netflix Premium",
-  "renewed_date": "2026-08-01"  // 可选，默认今天
-}
-```
-
-```bash
-POST /api/subscription/clear_renewed
-Content-Type: application/json
-
-{
-  "name": "Netflix Premium"
-}
-```
-
-## 动态配置 API（可选）
-
-需启用：`ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true`
-
-### 12. 获取项目配置
-
-```bash
-GET /api/config/projects
-```
-
-### 13. 更新项目阈值
-
-```bash
-POST /api/config/threshold
-Content-Type: application/json
-
-{
-  "project_name": "OpenRouter Main",
-  "new_threshold": 100
-}
-```
-
-### 14. 获取邮箱配置
-
-```bash
-GET /api/config/emails
-```
-
-始终可用（不依赖动态配置），`password` 一律返回 `***`。
-
-### 15. 添加/更新邮箱配置
-
-```bash
-POST /api/config/email
-Content-Type: application/json
-
-{
-  "name": "mail-1",
-  "host": "imap.example.com",
-  "port": 993,
-  "username": "user@example.com",
-  "password": "app-password",
-  "use_ssl": true,
-  "enabled": true
-}
-```
-
-`name` 是唯一键。新增时 `host` / `username` / `password` 必填；更新时只改传了的字段，`password` 留空或不传表示保持原密码。
-
-### 16. 删除邮箱配置
-
-```bash
-POST /api/config/email/delete
-Content-Type: application/json
-
-{
-  "name": "mail-1"
-}
-```
-
-## 邮箱扫描 API
-
-不需要额外开关；扫描是否真发 Webhook 通知由 `ENABLE_WEB_ALARM` 决定（默认只查不发）。
-
-### 17. 查看上次扫描结果
-
-```bash
-GET /api/email/scan
-```
-
-**响应**（结果保存在进程内存，服务重启后清空）：
-```json
-{
-  "last_update": "2026-09-14T03:00:00Z",
-  "days": 3,
-  "dry_run": true,
+  "last_update": "2026-09-14T03:00:00Z", "days": 3, "dry_run": true,
   "mailboxes": [
     { "name": "工作邮箱", "host": "imap.example.com", "port": 993, "username": "me@example.com",
       "total_emails": 12, "alert_count": 1, "success": true, "error": null }
@@ -318,172 +102,3 @@ GET /api/email/scan
   "summary": { "total_mailboxes": 1, "failed_mailboxes": 0, "total_emails": 12, "total_alerts": 1, "alerts_sent": 0 }
 }
 ```
-
-### 18. 立即扫描
-
-```bash
-POST /api/email/scan
-Content-Type: application/json
-
-{ "days": 3 }
-```
-
-`days` 为 1-30，默认 1。同一时间只允许一次扫描，完成后 30 秒内再次调用返回 429；未配置邮箱返回 400。
-
-**响应**：
-```json
-{
-  "status": "success",
-  "message": "扫描完成：12 封邮件，1 封告警",
-  "summary": { "total_mailboxes": 1, "failed_mailboxes": 0, "total_emails": 12, "total_alerts": 1, "alerts_sent": 0 },
-  "mailboxes": [ { "name": "工作邮箱", "total_emails": 12, "alert_count": 1, "success": true, "error": null } ],
-  "dry_run": true,
-  "execution_time_seconds": 4.21
-}
-```
-
-## 历史数据 API
-
-需启用：`ENABLE_HISTORY_API=true` 且 `ENABLE_DATABASE=true`
-
-### 19. 查询余额历史
-
-```bash
-GET /api/history/balance?project_id=abc123&days=7
-```
-
-**查询参数**：
-- `project_id`: 项目ID（可选）
-- `provider`: Provider类型（可选）
-- `days`: 查询天数（默认7）
-- `limit`: 返回记录数（默认100）
-
-### 20. 获取趋势分析
-
-```bash
-GET /api/history/trend/<project_id>?days=30
-```
-
-**响应**：
-```json
-{
-  "data": {
-    "current_balance": 150.75,
-    "min_balance": 120.00,
-    "max_balance": 200.50,
-    "avg_balance": 165.30,
-    "change": -15.25,
-    "change_percent": -9.19,
-    "history": [...]
-  }
-}
-```
-
-### 21. 查询告警历史
-
-```bash
-GET /api/history/alerts?days=7&limit=50
-```
-
-### 22. 获取告警统计
-
-```bash
-GET /api/history/stats?days=30
-```
-
-### 23. 查询邮件告警历史
-
-```bash
-GET /api/history/email-alerts?days=30&limit=100&mailbox=工作邮箱
-```
-
-返回扫描时发过通知的告警邮件（`email_alert_history` 表），`matched_keywords` 为列表。`mailbox` 可选。
-
-## 错误处理
-
-### 标准错误响应
-
-```json
-{
-  "status": "error",
-  "message": "错误描述",
-  "errors": ["详细错误1"]  // 可选
-}
-```
-
-### HTTP 状态码
-
-| 状态码 | 说明 |
-|--------|------|
-| 200 | 成功 |
-| 400 | 请求错误（参数验证失败） |
-| 401 | API Key 无效或未提供 |
-| 404 | 资源不存在 |
-| 429 | 刷新过于频繁（冷却中） |
-| 503 | API Key 未配置或服务不可用 |
-| 500 | 服务器错误 |
-
-## Python 示例
-
-```python
-import requests
-
-class BalanceAlertClient:
-    def __init__(self, base_url, api_key):
-        self.base_url = base_url
-        self.session = requests.Session()
-        self.session.headers.update({'X-API-Key': api_key})
-
-    def get_credits(self):
-        """获取所有项目余额"""
-        resp = self.session.get(f'{self.base_url}/api/credits')
-        resp.raise_for_status()
-        return resp.json()['projects']
-
-    def refresh(self, project_name=None):
-        """刷新余额"""
-        data = {'project_name': project_name} if project_name else {}
-        resp = self.session.post(f'{self.base_url}/api/refresh', json=data)
-        resp.raise_for_status()
-        return resp.json()
-
-# 使用
-client = BalanceAlertClient('http://localhost:8080', 'your-secret-key')
-projects = client.get_credits()
-for p in projects:
-    print(f"{p['name']}: {p['balance']} {p['currency']}")
-```
-
-## cURL 速查表
-
-```bash
-# 健康检查
-curl http://localhost:8080/health
-curl http://localhost:8080/live
-
-# 功能开关
-curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/features
-
-# 获取余额
-curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
-
-# 定时任务状态
-curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/jobs
-
-# 刷新余额
-curl -X POST -H "X-API-Key: your-secret-key" http://localhost:8080/api/refresh
-
-# 立即扫描邮箱（最近 3 天）
-curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \
-  -d '{"days": 3}' http://localhost:8080/api/email/scan
-
-# 添加订阅
-curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \
-     -d '{"name":"Netflix","cycle_type":"monthly","renewal_day":15,"alert_days_before":3,"amount":99}' \
-     http://localhost:8080/api/subscription/add
-
-# 查询趋势
-curl -H "X-API-Key: your-secret-key" "http://localhost:8080/api/history/trend/abc123?days=30"
-```
-
-**最后更新**: 2026-08-03
