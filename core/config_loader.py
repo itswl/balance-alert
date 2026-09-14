@@ -88,6 +88,8 @@ _PROVIDER_DEFAULT_TYPE = {
     'tikhub': 'balance',
     'volc': 'balance',
     'aliyun': 'balance',
+    'deepseek': 'balance',
+    'glm': 'quota',  # Coding Plan 剩余配额百分比
 }
 
 _PLACEHOLDER_PATTERN = re.compile(r'\$\{[^}]+\}')

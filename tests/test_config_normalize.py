@@ -82,10 +82,14 @@ class TestNormalizeProjects:
                 {'provider': 'volc'},
                 {'provider': 'uniapi'},
                 {'provider': 'unknown-vendor'},
+                {'provider': 'deepseek'},
+                {'provider': 'glm'},
             ])
         assert projects[0]['type'] == 'balance'
         assert projects[1]['type'] == 'credits'
         assert projects[2]['type'] == 'balance'  # 未知 provider 兜底
+        assert projects[3]['type'] == 'balance'
+        assert projects[4]['type'] == 'quota'    # GLM Coding Plan 是配额百分比
 
     def test_explicit_fields_preserved(self):
         with patch.dict(os.environ, {'VOLC_API_KEY': 'env'}, clear=True):
