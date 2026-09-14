@@ -25,9 +25,9 @@ database/
 
 ## Repository
 
-- `ConfigRepository`：动态配置的读写（`get_all_projects/subscriptions/emails`、`upsert_*`、`delete_*`）。
+- `ConfigRepository`：动态配置的读写，三段（`projects` / `subscriptions` / `email`）共用 `get_all(section)`、`upsert(section, data)`、`delete(section, name)`。
   设置 `CONFIG_ENCRYPTION_KEY` 后，`api_key` / 邮箱 `password` 自动加密存储（`enc:v1:` 前缀）。
-- `BalanceRepository`：余额历史写入与查询（`get_balance_history`、`get_balance_trend`、`get_all_projects_summary`）。
+- `BalanceRepository`：余额历史写入与查询（`get_balance_history`、`get_balance_trend`）。
 - `AlertRepository`：告警历史写入、冷却判断（`has_recent_alert`）与统计。
 - `EmailRepository`：邮件告警记录与去重（`has_recent_email_alert`）。
 

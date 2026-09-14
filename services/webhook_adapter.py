@@ -15,6 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from core.config_loader import split_mmdd
 from core.logger import get_logger
 from core.settings import get_settings
+from services.prometheus_exporter import metrics_collector
 
 logger = get_logger('webhook_adapter')
 
@@ -70,7 +71,7 @@ class WebhookAdapter:
         self._session = None  # 测试可注入；为 None 时使用进程级共享 Session
 
         if self.webhook_type not in self.SUPPORTED_TYPES:
-            logger.warning(f"⚠️  未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
+            logger.warning(f"未知的 webhook 类型: {webhook_type}，使用默认类型 'custom'")
             self.webhook_type = 'custom'
 
     @classmethod
@@ -186,26 +187,30 @@ class WebhookAdapter:
                           threshold: float, unit: str = '', owner_project: str = None) -> bool:
         """发送余额告警"""
         if self.webhook_type == 'custom':
-            return self._send_custom_balance_alert(
+            sent = self._send_custom_balance_alert(
                 project_name, provider, balance_type, current_value, threshold, unit, owner_project
             )
-        text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit, owner_project)
-        payload = self._wrap_payload("余额告警", text)
-        return self._send_request(payload)
+        else:
+            text = self._build_balance_text(project_name, provider, balance_type, current_value, threshold, unit, owner_project)
+            sent = self._send_request(self._wrap_payload("余额告警", text))
+        metrics_collector.record_notification('balance', sent)
+        return sent
 
     def send_subscription_alert(self, subscription_name: str, renewal_day: int, days_until_renewal: int,
                                amount: float, owner_project: str = None,
                                cycle_type: str = 'monthly') -> bool:
         """发送订阅续费提醒"""
         if self.webhook_type == 'custom':
-            return self._send_custom_subscription_alert(
+            sent = self._send_custom_subscription_alert(
                 subscription_name, renewal_day, days_until_renewal, amount, owner_project, cycle_type
             )
-        text = self._build_subscription_text(
+        else:
+            text = self._build_subscription_text(
                 subscription_name, renewal_day, days_until_renewal, amount, owner_project, cycle_type
             )
-        payload = self._wrap_payload("订阅续费提醒", text)
-        return self._send_request(payload)
+            sent = self._send_request(self._wrap_payload("订阅续费提醒", text))
+        metrics_collector.record_notification('subscription', sent)
+        return sent
 
     # ==================== 自定义格式 ====================
 
@@ -317,56 +322,28 @@ class WebhookAdapter:
             logger.error(f"告警发送失败: HTTP {response.status_code} | 响应: {response.text[:500]}")
             return False
 
-    def send_custom_alert(self, title, content):
-        """发送自定义告警（邮箱扫描等场景的富文本消息）"""
+    def send_custom_alert(self, title, content, kind: str = 'custom'):
+        """发送富文本告警（邮箱扫描等场景）；kind 只用于指标分类"""
         try:
-            handlers = {
-                'feishu': self._send_feishu_custom,
-                'dingtalk': self._send_dingtalk_custom,
-                'wecom': self._send_wecom_custom,
-            }
-            handler = handlers.get(self.webhook_type, self._send_custom_webhook_custom)
-            return handler(title, content)
+            sent = bool(self._send_request(self._custom_payload(title, content)))
         except Exception as e:
             logger.error(f"发送自定义告警失败: {e}", exc_info=True)
-            return False
+            sent = False
+        metrics_collector.record_notification(kind, sent)
+        return sent
 
-    def _send_feishu_custom(self, title, content):
-        """发送飞书自定义告警（卡片消息）"""
-        payload = {
-            "msg_type": "interactive",
-            "card": {
-                "header": {
-                    "title": {"tag": "plain_text", "content": title},
-                    "template": "orange"
+    def _custom_payload(self, title, content) -> Dict[str, Any]:
+        """按平台包装富文本消息：飞书卡片、钉钉 / 企微 markdown、自定义 JSON"""
+        if self.webhook_type == 'feishu':
+            return {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {"title": {"tag": "plain_text", "content": title}, "template": "orange"},
+                    "elements": [{"tag": "markdown", "content": content}],
                 },
-                "elements": [{"tag": "markdown", "content": content}]
             }
-        }
-        return self._send_request(payload)
-
-    def _send_dingtalk_custom(self, title, content):
-        """发送钉钉自定义告警"""
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {"title": title, "text": f"### {title}\n\n{content}"}
-        }
-        return self._send_request(payload)
-
-    def _send_wecom_custom(self, title, content):
-        """发送企业微信自定义告警"""
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {"content": f"### {title}\n\n{content}"}
-        }
-        return self._send_request(payload)
-
-    def _send_custom_webhook_custom(self, title, content):
-        """发送自定义 Webhook 告警"""
-        payload = {
-            "title": title,
-            "content": content,
-            "source": self.source,
-            "timestamp": datetime.now().isoformat()
-        }
-        return self._send_request(payload)
+        if self.webhook_type == 'dingtalk':
+            return {"msgtype": "markdown", "markdown": {"title": title, "text": f"### {title}\n\n{content}"}}
+        if self.webhook_type == 'wecom':
+            return {"msgtype": "markdown", "markdown": {"content": f"### {title}\n\n{content}"}}
+        return {"title": title, "content": content, "source": self.source, "timestamp": datetime.now().isoformat()}

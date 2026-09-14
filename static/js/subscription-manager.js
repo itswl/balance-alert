@@ -117,44 +117,20 @@ async function saveSubscription(event) {
         data.last_renewed_date = lastRenewed;
     }
 
-    try {
-        UI.setLoading(true);
-
-        let endpoint, method;
-        if (isEdit) {
-            endpoint = '/api/config/subscription';
-            method = 'POST';
-            // 如果名称改变了，需要传递新名称
-            if (data.name !== originalName) {
-                data.new_name = data.name;
-                data.name = originalName;
-            }
-        } else {
-            endpoint = '/api/subscription/add';
-            method = 'POST';
+    let endpoint = '/api/subscription/add';
+    if (isEdit) {
+        endpoint = '/api/config/subscription';
+        // 名称改了要同时传旧名（查找）和新名
+        if (data.name !== originalName) {
+            data.new_name = data.name;
+            data.name = originalName;
         }
+    }
 
-        const { response, data: result } = await API.fetchJson(endpoint, {
-            method: method,
-            body: JSON.stringify(data),
-        });
-
-        if (response.ok && result.status === 'success') {
-            UI.showToast(isEdit ? '✅ 订阅已更新' : '✅ 订阅已添加', 'success');
-            closeSubscriptionModal();
-
-            // 重新加载订阅数据（强制不使用缓存）
-            const subscriptionData = await API.getSubscriptions(true);
-            AppState.subscriptionData = subscriptionData;
-            UI.renderSubscriptions(subscriptionData);
-        } else {
-            UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
-        }
-    } catch (error) {
-        console.error('保存订阅失败:', error);
-        UI.showToast('❌ 保存失败，请稍后重试', 'error');
-    } finally {
-        UI.setLoading(false);
+    const result = await API.mutate(endpoint, data, { success: isEdit ? '订阅已更新' : '订阅已添加', fail: '保存失败' });
+    if (result) {
+        closeSubscriptionModal();
+        await App.reloadSubscriptions();
     }
 }
 
@@ -182,86 +158,22 @@ async function deleteSubscription(name) {
     if (!confirm(`确定要删除订阅"${name}"吗？\n\n此操作不可恢复。`)) {
         return;
     }
-
-    try {
-        UI.setLoading(true);
-
-        const { response, data: result } = await API.fetchJson('/api/subscription/delete', {
-            method: 'POST',
-            body: JSON.stringify({ name })
-        });
-
-        if (response.ok && result.status === 'success') {
-            UI.showToast('✅ 订阅已删除', 'success');
-
-            // 重新加载订阅数据（强制不使用缓存）
-            const subscriptionData = await API.getSubscriptions(true);
-            AppState.subscriptionData = subscriptionData;
-            UI.renderSubscriptions(subscriptionData);
-        } else {
-            UI.showToast(`❌ ${result.message || '删除失败'}`, 'error');
-        }
-    } catch (error) {
-        console.error('删除订阅失败:', error);
-        UI.showToast('❌ 删除失败，请稍后重试', 'error');
-    } finally {
-        UI.setLoading(false);
+    if (await API.mutate('/api/subscription/delete', { name }, { success: '订阅已删除', fail: '删除失败' })) {
+        await App.reloadSubscriptions();
     }
 }
 
 // 标记订阅已续费
 async function markSubscriptionRenewed(name) {
-    try {
-        UI.setLoading(true);
-
-        const { response, data: result } = await API.fetchJson('/api/subscription/mark_renewed', {
-            method: 'POST',
-            body: JSON.stringify({ name })
-        });
-
-        if (response.ok && result.status === 'success') {
-            UI.showToast('✅ 已标记为已续费', 'success');
-
-            // 重新加载订阅数据（强制不使用缓存）
-            const subscriptionData = await API.getSubscriptions(true);
-            AppState.subscriptionData = subscriptionData;
-            UI.renderSubscriptions(subscriptionData);
-        } else {
-            UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
-        }
-    } catch (error) {
-        console.error('标记续费失败:', error);
-        UI.showToast('❌ 操作失败，请稍后重试', 'error');
-    } finally {
-        UI.setLoading(false);
+    if (await API.mutate('/api/subscription/mark_renewed', { name }, { success: '已标记为已续费' })) {
+        await App.reloadSubscriptions();
     }
 }
 
 // 取消订阅续费标记
 async function clearSubscriptionRenewed(name) {
-    try {
-        UI.setLoading(true);
-
-        const { response, data: result } = await API.fetchJson('/api/subscription/clear_renewed', {
-            method: 'POST',
-            body: JSON.stringify({ name })
-        });
-
-        if (response.ok && result.status === 'success') {
-            UI.showToast('✅ 已取消续费标记', 'success');
-
-            // 重新加载订阅数据（强制不使用缓存）
-            const subscriptionData = await API.getSubscriptions(true);
-            AppState.subscriptionData = subscriptionData;
-            UI.renderSubscriptions(subscriptionData);
-        } else {
-            UI.showToast(`❌ ${result.message || '操作失败'}`, 'error');
-        }
-    } catch (error) {
-        console.error('取消续费标记失败:', error);
-        UI.showToast('❌ 操作失败，请稍后重试', 'error');
-    } finally {
-        UI.setLoading(false);
+    if (await API.mutate('/api/subscription/clear_renewed', { name }, { success: '已取消续费标记' })) {
+        await App.reloadSubscriptions();
     }
 }
 

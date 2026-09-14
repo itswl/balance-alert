@@ -92,11 +92,11 @@ def init_database():
     try:
         engine = get_engine()
         Base.metadata.create_all(engine)
-        logger.info("✅ 数据库初始化完成")
+        logger.info("数据库初始化完成")
         return True
 
     except Exception as e:
-        logger.error(f"❌ 数据库初始化失败: {e}", exc_info=True)
+        logger.error(f"数据库初始化失败: {e}", exc_info=True)
         return False
 
 

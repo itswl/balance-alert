@@ -5,6 +5,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 from services.subscription_checker import SubscriptionChecker
+from services.webhook_adapter import WebhookAdapter
 
 
 class TestSafeReplaceYear:
@@ -331,24 +332,19 @@ class TestCalculateCycleStart:
         assert start == datetime(2024, 2, 29)
 
 
-class TestGetCycleText:
-    """_get_cycle_text 测试"""
-
-    def setup_method(self, method):
-        self.checker = SubscriptionChecker.__new__(SubscriptionChecker)
-        self.checker.config = {'subscriptions': []}
-        self.checker.results = []
+class TestCycleText:
+    """周期描述文本：日志与告警消息共用 WebhookAdapter._format_subscription_cycle"""
 
     def test_weekly_text(self):
-        assert self.checker._get_cycle_text('weekly', 1) == '每周 周一'
-        assert self.checker._get_cycle_text('weekly', 7) == '每周 周日'
+        assert WebhookAdapter._format_subscription_cycle('weekly', 1) == '每周 周一'
+        assert WebhookAdapter._format_subscription_cycle('weekly', 7) == '每周 周日'
 
     def test_monthly_text(self):
-        assert self.checker._get_cycle_text('monthly', 15) == '每月 15 号'
+        assert WebhookAdapter._format_subscription_cycle('monthly', 15) == '每月 15 号'
 
     def test_yearly_text(self):
-        assert self.checker._get_cycle_text('yearly', 1) == '每年固定日期'
-        assert self.checker._get_cycle_text('yearly', 315) == '每年 3月15日'
+        assert WebhookAdapter._format_subscription_cycle('yearly', 1) == '每年固定日期'
+        assert WebhookAdapter._format_subscription_cycle('yearly', 315) == '每年 3月15日'
 
 
 class TestSubscriptionDefaults:

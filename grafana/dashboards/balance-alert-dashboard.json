@@ -15,6 +15,7 @@
       }
     ]
   },
+  "description": "Balance Alert：项目余额、订阅续费、邮箱扫描、定时任务与通知",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -51,7 +52,7 @@
         "x": 0,
         "y": 0
       },
-      "id": 10,
+      "id": 1,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -74,10 +75,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_balance)",
+          "expr": "count(balance_alert_balance) or vector(0)",
           "legendFormat": "项目总数",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "监控项目总数",
@@ -98,16 +100,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              },
-              {
                 "color": "green",
-                "value": 5
+                "value": null
               }
             ]
           }
@@ -120,10 +114,10 @@
         "x": 4,
         "y": 0
       },
-      "id": 11,
+      "id": 2,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -143,10 +137,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_status == 1)",
+          "expr": "count(balance_alert_status == 1) or vector(0)",
           "legendFormat": "正常项目",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "正常项目数",
@@ -185,7 +180,7 @@
         "x": 8,
         "y": 0
       },
-      "id": 12,
+      "id": 3,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -210,8 +205,9 @@
           "editorMode": "code",
           "expr": "count(balance_alert_status == 0) or vector(0)",
           "legendFormat": "告警项目",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "告警项目数",
@@ -234,6 +230,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
               }
             ]
           }
@@ -246,7 +246,7 @@
         "x": 12,
         "y": 0
       },
-      "id": 13,
+      "id": 4,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -269,14 +269,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_subscription_days)",
-          "legendFormat": "订阅总数",
+          "expr": "count(balance_alert_check_status == 0) or vector(0)",
+          "legendFormat": "检查失败",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
-      "title": "订阅总数",
-      "type": "stat"
+      "title": "检查失败项目",
+      "type": "stat",
+      "description": "上次余额检查失败（接口报错 / 网络问题）的项目数，失败时余额保留上次成功值"
     },
     {
       "datasource": {
@@ -297,7 +299,7 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "orange",
                 "value": 1
               }
             ]
@@ -311,10 +313,10 @@
         "x": 16,
         "y": 0
       },
-      "id": 14,
+      "id": 5,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -336,8 +338,9 @@
           "editorMode": "code",
           "expr": "count(balance_alert_subscription_days <= 7 and balance_alert_subscription_status == 0) or vector(0)",
           "legendFormat": "即将到期",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "7天内到期订阅",
@@ -373,7 +376,7 @@
         "x": 20,
         "y": 0
       },
-      "id": 15,
+      "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -396,108 +399,28 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_last_check_timestamp * 1000",
-          "legendFormat": "最后检查时间",
+          "expr": "balance_alert_last_check_timestamp{check_type=\"balance\"} * 1000",
+          "legendFormat": "上次余额检查",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
-      "title": "最后检查时间",
+      "title": "上次余额检查",
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "余额",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 1,
+        "w": 24,
         "x": 0,
         "y": 4
       },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sort_desc(balance_alert_balance{project=~\"$project\"})",
-          "legendFormat": "{{project}} ({{provider}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "项目余额对比",
-      "type": "timeseries"
+      "id": 7,
+      "panels": [],
+      "title": "余额",
+      "type": "row"
     },
     {
       "datasource": {
@@ -536,10 +459,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 4
+        "x": 0,
+        "y": 5
       },
-      "id": 2,
+      "id": 8,
       "options": {
         "orientation": "horizontal",
         "reduceOptions": {
@@ -560,14 +483,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_ratio{project=~\"$project\"}",
+          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "{{project}}",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "余额比例（余额/阈值）",
-      "type": "gauge"
+      "type": "gauge",
+      "description": "余额 ÷ 阈值，跨币种、跨类型可比；低于 20% 红，20-50% 黄"
     },
     {
       "datasource": {
@@ -586,12 +511,109 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 20,
+            "fillOpacity": 10,
             "gradientMode": "opacity",
             "hideFrom": {
+              "legend": false,
               "tooltip": false,
-              "viz": false,
-              "legend": false
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
+          "legendFormat": "{{project}} ({{provider}})",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "余额比例趋势",
+      "type": "timeseries",
+      "description": "各项目余额相对阈值的比例走势，掉到 100% 以下就是触发告警的点"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
             },
             "lineInterpolation": "smooth",
             "lineWidth": 2,
@@ -624,16 +646,112 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 12
+        "y": 13
       },
-      "id": 3,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [
-            "last",
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(balance_alert_balance{project=~\"$project\", type=~\"$type\"})",
+          "legendFormat": "{{project}} ({{provider}}, {{type}})",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "项目余额对比",
+      "type": "timeseries",
+      "description": "原始余额，不同类型单位不同（人民币 / 美元 credits / 配额百分比），用顶部「类型」筛选器分开看"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
             "min",
             "max",
             "mean"
@@ -647,6 +765,7 @@
           "sort": "desc"
         }
       },
+      "pluginVersion": "10.0.0",
       "targets": [
         {
           "datasource": {
@@ -654,14 +773,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_balance{project=~\"$project\"}",
-          "legendFormat": "{{project}}",
+          "expr": "balance_alert_balance{project=~\"$project\", type=~\"$type\"}",
+          "legendFormat": "{{project}} ({{type}})",
+          "refId": "A",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
       "title": "余额趋势图",
-      "type": "timeseries"
+      "type": "timeseries",
+      "description": "原始余额走势，建议按类型筛选"
     },
     {
       "datasource": {
@@ -680,23 +801,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "❌ 告警"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "✅ 正常"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -711,34 +816,54 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "类型"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "credits": {
+                        "text": "积分 / Credits",
+                        "index": 0
+                      },
+                      "balance": {
+                        "text": "余额",
+                        "index": 1
+                      },
+                      "quota": {
+                        "text": "配额 %",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "余额"
             },
             "properties": [
               {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "阈值"
+            },
+            "properties": [
               {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 1000
-                    },
-                    {
-                      "color": "green",
-                      "value": 10000
-                    }
-                  ]
-                }
+                "id": "decimals",
+                "value": 2
               }
             ]
           },
@@ -779,16 +904,84 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "状态"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "❌ 告警",
+                        "index": 0,
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "✅ 正常",
+                        "index": 1,
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "检查"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "❌ 失败",
+                        "index": 0,
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "✅ 成功",
+                        "index": 1,
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 21
       },
-      "id": 6,
+      "id": 12,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -815,13 +1008,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "balance_alert_balance{project=~\"$project\"}",
-          "format": "table",
-          "instant": true,
+          "expr": "balance_alert_balance{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
+          "refId": "A",
           "range": false,
-          "refId": "A"
+          "instant": true,
+          "format": "table",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -829,14 +1022,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "balance_alert_threshold{project=~\"$project\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
+          "expr": "balance_alert_threshold{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
+          "refId": "B",
           "range": false,
-          "refId": "B"
+          "instant": true,
+          "format": "table",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -844,14 +1036,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "balance_alert_ratio{project=~\"$project\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
+          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
+          "refId": "C",
           "range": false,
-          "refId": "C"
+          "instant": true,
+          "format": "table",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -859,14 +1050,27 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "balance_alert_status{project=~\"$project\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
+          "expr": "balance_alert_status{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
+          "refId": "D",
           "range": false,
-          "refId": "D"
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_check_status{project=~\"$project\", type=~\"$type\"}",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
         }
       ],
       "title": "项目余额详情表",
@@ -882,30 +1086,48 @@
               "Time": true,
               "__name__": true,
               "instance": true,
-              "job": true
+              "job": true,
+              "service": true,
+              "environment": true
             },
             "indexByName": {
+              "project": 0,
+              "provider": 1,
+              "type": 2,
               "Value #A": 3,
               "Value #B": 4,
               "Value #C": 5,
               "Value #D": 6,
-              "project": 0,
-              "provider": 1,
-              "type": 2
+              "Value #E": 7
             },
             "renameByName": {
+              "project": "项目",
+              "provider": "服务商",
+              "type": "类型",
               "Value #A": "余额",
               "Value #B": "阈值",
               "Value #C": "余额比例",
               "Value #D": "状态",
-              "project": "项目",
-              "provider": "服务商",
-              "type": "类型"
+              "Value #E": "检查"
             }
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "description": "余额比例按低到高排序；余额列是原始数值，单位随类型不同"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 13,
+      "panels": [],
+      "title": "订阅续费",
+      "type": "row"
     },
     {
       "datasource": {
@@ -943,9 +1165,9 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 29
+        "y": 31
       },
-      "id": 4,
+      "id": 14,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -1085,9 +1307,9 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 31
       },
-      "id": 5,
+      "id": 15,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -1166,7 +1388,9 @@
               "Time": true,
               "__name__": true,
               "instance": true,
-              "job": true
+              "job": true,
+              "service": true,
+              "environment": true
             },
             "indexByName": {
               "Value #A": 2,
@@ -1188,6 +1412,1241 @@
         }
       ],
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 16,
+      "panels": [],
+      "title": "邮箱扫描",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 39
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(balance_alert_email_mailbox_status) or vector(0)",
+          "legendFormat": "邮箱数",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "邮箱数",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 39
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(balance_alert_email_mailbox_status == 0) or vector(0)",
+          "legendFormat": "连接失败",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "连接失败邮箱",
+      "type": "stat",
+      "description": "上次扫描时 IMAP 登录或读取失败的邮箱数"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 39
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(balance_alert_email_last_scan_alerts) or vector(0)",
+          "legendFormat": "命中",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "上次扫描命中告警邮件",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 39
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_last_check_timestamp{check_type=\"email\"} * 1000",
+          "legendFormat": "上次邮箱扫描",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "上次邮箱扫描",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "状态"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "❌ 连接失败",
+                        "index": 0,
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "✅ 正常",
+                        "index": 1,
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上次命中"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "状态"
+          }
+        ]
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_email_mailbox_status{mailbox=~\"$mailbox\"}",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_email_last_scan_emails{mailbox=~\"$mailbox\"}",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_email_last_scan_alerts{mailbox=~\"$mailbox\"}",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_email_alerts_total{mailbox=~\"$mailbox\"}",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        }
+      ],
+      "title": "邮箱扫描明细",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "service": true,
+              "environment": true
+            },
+            "indexByName": {
+              "mailbox": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4
+            },
+            "renameByName": {
+              "mailbox": "邮箱",
+              "Value #A": "状态",
+              "Value #B": "上次扫描邮件数",
+              "Value #C": "上次命中",
+              "Value #D": "累计命中"
+            }
+          }
+        }
+      ],
+      "type": "table",
+      "description": "累计命中是进程启动以来的计数，服务重启会归零"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "increase(balance_alert_email_alerts_total{mailbox=~\"$mailbox\"}[1d])",
+          "legendFormat": "{{mailbox}}",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "每日命中的告警邮件",
+      "type": "timeseries",
+      "description": "按邮箱统计每天新发现的欠费 / 续费类邮件数"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 23,
+      "panels": [],
+      "title": "定时任务与通知",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 52
+      },
+      "id": 24,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(balance_alert_job_last_status == 0) or vector(0)",
+          "legendFormat": "失败任务",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "上次运行失败的任务",
+      "type": "stat",
+      "description": "dashboard_refresh / alert_check / email_scan 里上次运行失败的个数，非 0 时 /health 返回 503"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 52
+      },
+      "id": 25,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(balance_alert_notifications_total{status=\"success\"}[24h])) or vector(0)",
+          "legendFormat": "已发送",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "24h 通知发送",
+      "type": "stat",
+      "description": "最近 24 小时成功发出的 Webhook 通知数（余额 / 订阅 / 邮件）"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 52
+      },
+      "id": 26,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(balance_alert_notifications_total{status=\"failed\"}[24h])) or vector(0)",
+          "legendFormat": "发送失败",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "24h 通知失败",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 52
+      },
+      "id": 27,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_job_last_success_timestamp{task=\"alert_check\"} * 1000",
+          "legendFormat": "alert_check",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "上次告警检查成功",
+      "type": "stat",
+      "description": "alert_check 任务最近一次成功运行的时间，默认每天 09:00 / 15:00"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "状态"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "❌ 失败",
+                        "index": 0,
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "✅ 成功",
+                        "index": 1,
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上次运行"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "上次成功"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "耗时"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "累计失败"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 56
+      },
+      "id": 28,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "任务"
+          }
+        ]
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_job_last_status",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_job_last_run_timestamp * 1000",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_job_last_success_timestamp * 1000",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "balance_alert_job_last_duration_seconds",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (task) (balance_alert_job_runs_total{status=\"failed\"})",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "exemplar": false
+        }
+      ],
+      "title": "定时任务状态",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "service": true,
+              "environment": true
+            },
+            "indexByName": {
+              "task": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5
+            },
+            "renameByName": {
+              "task": "任务",
+              "Value #A": "状态",
+              "Value #B": "上次运行",
+              "Value #C": "上次成功",
+              "Value #D": "耗时",
+              "Value #E": "累计失败"
+            }
+          }
+        }
+      ],
+      "type": "table",
+      "description": "三个进程内定时任务的运行情况；累计失败为进程启动以来的次数"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 56
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (kind) (increase(balance_alert_notifications_total{status=\"success\"}[1h]))",
+          "legendFormat": "{{kind}} 成功",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (kind) (increase(balance_alert_notifications_total{status=\"failed\"}[1h]))",
+          "legendFormat": "{{kind}} 失败",
+          "refId": "B",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "title": "通知发送（按类型，每小时）",
+      "type": "timeseries",
+      "description": "kind：balance 余额 / subscription 订阅 / email 告警邮件 / mailbox_error 邮箱连接失败"
     }
   ],
   "refresh": "1m",
@@ -1196,7 +2655,9 @@
   "tags": [
     "balance",
     "monitoring",
-    "subscription"
+    "subscription",
+    "email",
+    "jobs"
   ],
   "templating": {
     "list": [
@@ -1217,6 +2678,7 @@
         "definition": "label_values(balance_alert_balance, project)",
         "hide": 0,
         "includeAll": true,
+        "label": "项目",
         "multi": true,
         "name": "project",
         "options": [],
@@ -1244,9 +2706,41 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
+        "definition": "label_values(balance_alert_balance, type)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "类型",
+        "multi": true,
+        "name": "type",
+        "options": [],
+        "query": {
+          "query": "label_values(balance_alert_balance, type)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "label_values(balance_alert_subscription_days, name)",
         "hide": 0,
         "includeAll": true,
+        "label": "订阅",
         "multi": true,
         "name": "subscription",
         "options": [],
@@ -1259,17 +2753,48 @@
         "skipUrlSync": false,
         "sort": 1,
         "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(balance_alert_email_mailbox_status, mailbox)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "邮箱",
+        "multi": true,
+        "name": "mailbox",
+        "options": [],
+        "query": {
+          "query": "label_values(balance_alert_email_mailbox_status, mailbox)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "余额监控 Dashboard",
   "uid": "balance-alert",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

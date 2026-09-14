@@ -1,7 +1,7 @@
 // ==================== 全局状态管理 ====================
 const AppState = {
     currentTheme: localStorage.getItem('theme') || 'light',
-    currentView: 'all', // 'all', 'alerts', 'subscriptions'
+    currentView: 'all', // 'all', 'alerts', 'subscriptions', 'email'
     projectViewStyle: localStorage.getItem('projectViewStyle') || 'grid', // 'grid', 'list'
     currentFilter: 'all',
     searchQuery: '',
@@ -32,6 +32,23 @@ const Utils = {
     // 格式化数字（带千分位）
     formatNumber(num) {
         return new Intl.NumberFormat('zh-CN').format(num);
+    },
+
+    // 余额类型 → 展示名
+    typeLabel(type) {
+        return { credits: 'Credits', balance: '余额', quota: '配额' }[type] || (type || '余额');
+    },
+
+    // 按类型格式化余额：配额是百分比，其余带千分位保留两位
+    formatBalance(value, type) {
+        const numValue = parseFloat(value);
+        if (isNaN(numValue)) {
+            return '-';
+        }
+        if (type === 'quota') {
+            return `${numValue.toFixed(1)}<span class="unit">%</span>`;
+        }
+        return numValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
 
     // HTML 文本转义
@@ -239,6 +256,32 @@ const API = {
         }
     },
 
+    // 写操作统一走这里：POST JSON，成功 / 失败各弹一次提示，返回响应数据或 null
+    async mutate(endpoint, body, { success = '', fail = '操作失败' } = {}) {
+        UI.setLoading(true);
+        try {
+            const { response, data } = await this.fetchJson(endpoint, {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+            if (response.ok && data?.status === 'success') {
+                if (success) {
+                    UI.showToast(`✅ ${success}`, 'success');
+                }
+                return data;
+            }
+            const message = data?.message || (data?.errors || []).join('；') || fail;
+            UI.showToast(`❌ ${message}`, 'error');
+            return null;
+        } catch (error) {
+            console.error(`${fail}:`, error);
+            UI.showToast(`❌ ${fail}，请稍后重试`, 'error');
+            return null;
+        } finally {
+            UI.setLoading(false);
+        }
+    },
+
     // 获取余额数据
     async getCredits() {
         return this.request('/api/credits');
@@ -263,6 +306,29 @@ const API = {
         });
     },
 
+    // 邮箱扫描：邮箱列表（密码已脱敏）
+    async getMailboxes() {
+        return this.request('/api/config/emails');
+    },
+
+    // 邮箱扫描：上次扫描结果
+    async getEmailScanState() {
+        return this.request('/api/email/scan');
+    },
+
+    // 邮箱扫描：立即扫描最近 days 天
+    async runEmailScan(days) {
+        return this.request('/api/email/scan', {
+            method: 'POST',
+            body: JSON.stringify({ days }),
+        });
+    },
+
+    // 邮箱扫描：数据库里的历史告警邮件（需 ENABLE_HISTORY_API）
+    async getEmailHistory(days = 30, limit = 100) {
+        return this.request(`/api/history/email-alerts?days=${days}&limit=${limit}`);
+    },
+
     // 获取健康状态
     async getHealth() {
         return this.request('/health');
@@ -275,14 +341,14 @@ const API = {
 
 // ==================== UI 组件 ====================
 const UI = {
-    // 显示 Toast 通知
+    // 显示 Toast 通知；颜色由左侧色条表达，文案开头的 emoji 一律去掉
     showToast(message, type = 'info') {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         const text = document.createElement('div');
         text.style.flex = '1';
-        text.textContent = message;
+        text.textContent = String(message).replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '');
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.textContent = '×';
@@ -333,6 +399,8 @@ const UI = {
         const ownerProject = project.owner_project || '未关联项目';
         const projectName = project.project || project.name || '未知项目';
         const provider = project.provider || 'unknown';
+        const type = project.type || 'balance';
+        const typeLabel = Utils.typeLabel(type);
         const projectNameEscaped = Utils.escapeHTML(projectName);
         const providerEscaped = Utils.escapeHTML(provider);
         const ownerProjectEscaped = Utils.escapeHTML(ownerProject);
@@ -366,36 +434,36 @@ const UI = {
                     </div>
                 </div>
                 <div class="project-balance">
-                    <div class="balance-label">${project.type === 'balance' ? '当前余额' : '当前余额'}</div>
-                    <div class="balance-value">${Utils.formatCurrency(balance)}</div>
+                    <div class="balance-label">${type === 'quota' ? '剩余配额' : `当前${typeLabel}`}</div>
+                    <div class="balance-value">${Utils.formatBalance(balance, type)}</div>
                     <div class="balance-progress">
                         <div class="balance-progress-bar ${status}" style="width: ${Math.min(100, percentage)}%"></div>
                     </div>
                 </div>
                 <div class="project-details">
                     <div class="detail-item">
-                        <span class="detail-label">阈值</span>
-                        <span class="detail-value">${Utils.formatCurrency(threshold)}</span>
+                        <span class="detail-label">告警阈值</span>
+                        <span class="detail-value">${Utils.formatBalance(threshold, type)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">类型</span>
-                        <span class="detail-value">API 调用</span>
+                        <span class="detail-value">${Utils.escapeHTML(typeLabel)}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">充足度</span>
+                        <span class="detail-label">相对阈值</span>
                         <span class="detail-value">${percentage.toFixed(0)}%</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">状态</span>
-                        <span class="detail-value">${projectStatus === 'normal' ? '✅ 正常' : '⚠️ 告警'}</span>
+                        <span class="detail-value status-text ${projectStatus}">${projectStatus === 'normal' ? '正常' : '告警'}</span>
                     </div>
                 </div>
                 ${AppState.features.history ? `<div class="project-actions">
                     <button class="btn-link js-show-trend" data-project="${projectNameAttr}" data-provider="${providerAttr}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 4px;">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                        </svg>
                         查看趋势
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 14px; height: 14px;">
+                            <path d="M5 12h14M13 6l6 6-6 6"></path>
+                        </svg>
                     </button>
                 </div>` : ''}
             </div>
@@ -419,17 +487,11 @@ const UI = {
                 <div class="subscription-info">
                     <h3>${subNameEscaped}</h3>
                     <div class="subscription-meta">
-                        <span class="meta-item project-meta">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                            </svg>
-                            ${ownerProjectEscaped}
-                        </span>
-                        <span class="meta-item">💰 ${Utils.formatCurrency(amount)}</span>
-                        <span class="meta-item">📅 ${cycleText}</span>
-                        ${sub.next_renewal_date ? `<span class="meta-item">📆 下次续费: ${nextRenewalEscaped}</span>` : ''}
-                        ${sub.already_renewed ? `<span class="meta-item">✅ 已续费</span>` : ''}
+                        <span class="meta-item project-meta">${ownerProjectEscaped}</span>
+                        <span class="meta-item"><span class="k">金额</span>${Utils.formatCurrency(amount)}</span>
+                        <span class="meta-item">${cycleText}</span>
+                        ${sub.next_renewal_date ? `<span class="meta-item"><span class="k">下次续费</span>${nextRenewalEscaped}</span>` : ''}
+                        ${sub.already_renewed ? `<span class="meta-item status-badge success">已续费</span>` : ''}
                     </div>
                 </div>
                 <div class="subscription-status">
@@ -460,9 +522,7 @@ const UI = {
                             </svg>
                         </button>
                     </div>
-                    <div class="days-remaining ${daysClass}">
-                        ${sub.days_until_renewal}天
-                    </div>
+                    <div class="days-remaining ${daysClass}">${sub.days_until_renewal}<span class="unit">天</span></div>
                 </div>
             </div>
         `;
@@ -587,6 +647,12 @@ const App = {
         // 加载数据
         await this.loadData();
 
+        // 地址栏带 #alerts / #subscriptions / #email 时直接进对应视图
+        const initialView = window.location.hash.slice(1);
+        if (['alerts', 'subscriptions', 'email'].includes(initialView)) {
+            this.switchView(initialView);
+        }
+
         // 启动自动刷新
         this.startAutoRefresh();
     },
@@ -632,6 +698,10 @@ const App = {
             this.switchView('subscriptions');
         });
 
+        document.getElementById('view-email-btn').addEventListener('click', () => {
+            this.switchView('email');
+        });
+
         // 视图切换 (网格/列表)
         document.getElementById('view-grid-btn').addEventListener('click', () => {
             AppState.projectViewStyle = 'grid';
@@ -675,6 +745,18 @@ const App = {
             const trendBtn = event.target.closest('.js-show-trend');
             if (trendBtn) {
                 showProjectTrend(trendBtn.dataset.project, trendBtn.dataset.provider);
+                return;
+            }
+
+            const editEmailBtn = event.target.closest('.js-edit-email');
+            if (editEmailBtn) {
+                editEmail(editEmailBtn.dataset.name);
+                return;
+            }
+
+            const deleteEmailBtn = event.target.closest('.js-delete-email');
+            if (deleteEmailBtn) {
+                deleteEmail(deleteEmailBtn.dataset.name);
                 return;
             }
 
@@ -725,30 +807,48 @@ const App = {
         }
     },
 
+    // 拉余额与订阅并重绘当前视图；rebuildFilter=true 时同时重建平台筛选项（会重置已选平台）
+    async fetchAndRender(rebuildFilter = false) {
+        const balanceData = await API.getCredits();
+        const subscriptionData = AppState.features.subscriptions
+            ? await API.getSubscriptions()
+            : { subscriptions: [] };
+
+        AppState.balanceData = balanceData;
+        AppState.subscriptionData = subscriptionData;
+        AppState.lastUpdate = new Date();
+
+        UI.updateStats(balanceData);
+        if (rebuildFilter) {
+            UI.updateProviderFilter(balanceData);
+        }
+        if (AppState.currentView === 'subscriptions') {
+            UI.renderSubscriptions(subscriptionData);
+        } else {
+            UI.renderProjects(balanceData);
+        }
+    },
+
+    // 只重拉余额并重绘项目区（改阈值后用）
+    async reloadProjects() {
+        const balanceData = await API.getCredits();
+        AppState.balanceData = balanceData;
+        UI.updateStats(balanceData);
+        UI.renderProjects(balanceData);
+    },
+
+    // 只重拉订阅并重绘订阅区（订阅增删改后用）
+    async reloadSubscriptions() {
+        const subscriptionData = await API.getSubscriptions(true);
+        AppState.subscriptionData = subscriptionData;
+        UI.renderSubscriptions(subscriptionData);
+    },
+
     // 加载数据
     async loadData() {
         try {
             UI.setLoading(true);
-
-            const balanceData = await API.getCredits();
-            const subscriptionData = AppState.features.subscriptions
-                ? await API.getSubscriptions()
-                : { subscriptions: [] };
-
-            AppState.balanceData = balanceData;
-            AppState.subscriptionData = subscriptionData;
-            AppState.lastUpdate = new Date();
-
-            // 更新 UI
-            UI.updateStats(balanceData);
-            UI.updateProviderFilter(balanceData);
-
-            if (AppState.currentView === 'subscriptions') {
-                UI.renderSubscriptions(subscriptionData);
-            } else {
-                UI.renderProjects(balanceData);
-            }
-
+            await this.fetchAndRender(true);
         } catch (error) {
             console.error('加载数据失败:', error);
             UI.showToast('加载数据失败，请稍后重试', 'error');
@@ -769,7 +869,7 @@ const App = {
             // 刷新成功后重新加载所有数据
             await this.loadData();
 
-            UI.showToast('✨ 数据刷新成功！', 'success');
+            UI.showToast('数据已刷新', 'success');
 
         } catch (error) {
             console.error('刷新失败:', error);
@@ -783,59 +883,51 @@ const App = {
     // 切换视图
     switchView(view) {
         AppState.currentView = view;
+        if (window.history?.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname + (view === 'all' ? '' : `#${view}`));
+        }
 
         // 更新按钮状态
         document.querySelectorAll('.action-btn').forEach(btn => {
             btn.classList.remove('active');
         });
 
-        if (view === 'all') {
-            document.getElementById('view-all-btn').classList.add('active');
-            document.querySelector('.content-section').style.display = 'block';
-            document.getElementById('subscriptions-section').style.display = 'none';
-            if (AppState.balanceData) {
-                UI.renderProjects(AppState.balanceData);
+        // 三块内容区互斥显示：项目余额（all / alerts）、订阅、邮箱扫描
+        const sections = {
+            projects: document.getElementById('projects-section'),
+            subscriptions: document.getElementById('subscriptions-section'),
+            email: document.getElementById('email-section'),
+        };
+        const visible = (view === 'subscriptions' || view === 'email') ? view : 'projects';
+        Object.entries(sections).forEach(([name, section]) => {
+            if (section) {
+                section.style.display = name === visible ? 'block' : 'none';
             }
-        } else if (view === 'alerts') {
-            document.getElementById('view-alerts-btn').classList.add('active');
-            document.querySelector('.content-section').style.display = 'block';
-            document.getElementById('subscriptions-section').style.display = 'none';
+        });
+
+        if (view === 'all' || view === 'alerts') {
+            document.getElementById(view === 'all' ? 'view-all-btn' : 'view-alerts-btn').classList.add('active');
             if (AppState.balanceData) {
                 UI.renderProjects(AppState.balanceData);
             }
         } else if (view === 'subscriptions') {
             document.getElementById('view-subscriptions-btn').classList.add('active');
-            document.querySelector('.content-section').style.display = 'none';
-            document.getElementById('subscriptions-section').style.display = 'block';
             if (AppState.subscriptionData) {
                 UI.renderSubscriptions(AppState.subscriptionData);
+            }
+        } else if (view === 'email') {
+            document.getElementById('view-email-btn').classList.add('active');
+            if (typeof EmailManager !== 'undefined') {
+                EmailManager.load();
             }
         }
     },
 
-    // 启动自动刷新
+    // 启动自动刷新：每 5 分钟重拉一次数据（不触发后端刷新，也不重置平台筛选）
     startAutoRefresh() {
-        // 每5分钟自动刷新一次数据（不调用 API refresh，只 reload）
-        AppState.autoRefreshInterval = setInterval(async () => {
-            try {
-                const balanceData = await API.getCredits();
-                const subscriptionData = AppState.features.subscriptions
-                    ? await API.getSubscriptions()
-                    : { subscriptions: [] };
-
-                AppState.balanceData = balanceData;
-                AppState.subscriptionData = subscriptionData;
-
-                UI.updateStats(balanceData);
-                if (AppState.currentView === 'subscriptions') {
-                    UI.renderSubscriptions(subscriptionData);
-                } else {
-                    UI.renderProjects(balanceData);
-                }
-            } catch (error) {
-                console.error('自动刷新失败:', error);
-            }
-        }, 5 * 60 * 1000); // 5分钟
+        AppState.autoRefreshInterval = setInterval(() => {
+            this.fetchAndRender().catch((error) => console.error('自动刷新失败:', error));
+        }, 5 * 60 * 1000);
     },
 };
 

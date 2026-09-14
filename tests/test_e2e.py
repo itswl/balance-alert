@@ -138,6 +138,8 @@ class TestE2EWebAPI:
         data = response.get_json()
         assert 'status' in data
         assert 'has_data' in data
+        assert 'jobs_healthy' in data
+        assert 'failed_jobs' in data
 
     def test_credits_endpoint(self, client):
         """测试余额查询端点"""

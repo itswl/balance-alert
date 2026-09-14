@@ -31,82 +31,43 @@ class AliyunProvider(BaseProvider):
         self.version = '2017-12-14'
     
     def get_credits(self):
-        """
-        获取当前余额
-        
-        Returns:
-            dict: 包含以下字段的字典
-                - success (bool): 是否成功获取
-                - credits (float): 余额数值，失败时为 None
-                - error (str): 错误信息，成功时为 None
-                - raw_data (dict): 原始 API 响应数据
-        """
+        """获取当前余额；阿里云不同版本接口的返回结构不一，解析放在 _extract_amount 里"""
         try:
             response = self._send_request()
-            
-            # 检查响应状态
             if not response:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': "API 返回空响应",
-                    'raw_data': None
-                }
-            
-            # 阿里云可能返回不同的格式，尝试多种解析方式
-            
-            # 方式1: 检查是否有 Code 字段
-            if 'Code' in response:
-                # Code 可能是 'Success' 或者是 HTTP 状态码 200
-                code = response.get('Code')
-                if code != 'Success' and code != 200 and str(code) != '200':
-                    error_msg = response.get('Message', '未知错误')
-                    return {
-                        'success': False,
-                        'credits': None,
-                        'error': f"API 返回错误: {error_msg} (Code: {response.get('Code')})",
-                        'raw_data': response
-                    }
-                # 获取余额
-                data = response.get('Data', {})
-                available_amount = data.get('AvailableAmount')
-            else:
-                # 方式2: 直接从响应中获取 AvailableAmount
-                available_amount = response.get('AvailableAmount')
-                
-                # 方式3: 从 Data 字段获取
-                if available_amount is None:
-                    data = response.get('Data', {})
-                    available_amount = data.get('AvailableAmount')
-                
-                # 方式4: 从 AvailableCashAmount 获取
-                if available_amount is None:
-                    available_amount = response.get('AvailableCashAmount')
-                    if available_amount is None:
-                        available_amount = response.get('Data', {}).get('AvailableCashAmount')
-            
-            if available_amount is None:
-                return {
-                    'success': False,
-                    'credits': None,
-                    'error': f"无法从响应中解析余额字段，响应内容: {response}",
-                    'raw_data': response
-                }
-            
-            # 处理余额格式，移除千位分隔符
-            if isinstance(available_amount, str):
-                available_amount = available_amount.replace(',', '')
-            
-            return {
-                'success': True,
-                'credits': float(available_amount),
-                'error': None,
-                'raw_data': response
-            }
-            
+                return self._result(False, None, "API 返回空响应", None)
+            amount, error = self._extract_amount(response)
+            if error:
+                return self._result(False, None, error, response)
+            return self._result(True, amount, None, response)
         except Exception as e:
             return self._classify_exception(e)
-    
+
+    @staticmethod
+    def _result(success, credits, error, raw_data):
+        return {'success': success, 'credits': credits, 'error': error, 'raw_data': raw_data}
+
+    @staticmethod
+    def _extract_amount(response):
+        """返回 (余额, 错误消息)；兼容带 Code 的标准结构与直接返回余额字段的旧结构"""
+        code = response.get('Code')
+        if code is not None and code not in ('Success', 200) and str(code) != '200':
+            return None, f"API 返回错误: {response.get('Message', '未知错误')} (Code: {code})"
+
+        data = response.get('Data') or {}
+        candidates = (
+            data.get('AvailableAmount'),
+            response.get('AvailableAmount'),
+            response.get('AvailableCashAmount'),
+            data.get('AvailableCashAmount'),
+        )
+        amount = next((value for value in candidates if value is not None), None)
+        if amount is None:
+            return None, f"无法从响应中解析余额字段，响应内容: {response}"
+        if isinstance(amount, str):
+            amount = amount.replace(',', '')  # 去掉千位分隔符
+        return float(amount), None
+
     def _send_request(self):
         """发送阿里云 API 请求"""
         # 构建请求参数

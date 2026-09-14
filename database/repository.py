@@ -129,6 +129,17 @@ def _encrypt_data_field(data: Dict[str, Any], field: str) -> Dict[str, Any]:
     return data
 
 
+def _with_keyword_list(data: Dict[str, Any]) -> Dict[str, Any]:
+    """matched_keywords 入库时是 JSON 字符串，对外还原成列表"""
+    raw = data.get('matched_keywords')
+    if isinstance(raw, str):
+        try:
+            data['matched_keywords'] = json.loads(raw)
+        except ValueError:
+            data['matched_keywords'] = [raw] if raw else []
+    return data
+
+
 def _upsert(session, model_cls, data: Dict[str, Any], secret_field: Optional[str] = None) -> bool:
     """按 name 插入或更新一条配置；secret_field 为 '***' 时保留原值不覆盖。"""
     if secret_field:
@@ -151,60 +162,42 @@ def _delete_by_name(session, model_cls, name: str) -> bool:
     return True
 
 
+# 三段业务清单各自的表，以及需要加密存储的字段
+_CONFIG_SECTIONS = {
+    'projects': (ProjectConfig, 'api_key'),
+    'subscriptions': (SubscriptionConfig, None),
+    'email': (EmailConfig, 'password'),
+}
+
+
 class ConfigRepository:
-    """配置数据访问"""
+    """动态配置的读写：projects / subscriptions / email 三段共用一套按 name 的 upsert / delete"""
+
+    SECTIONS = tuple(_CONFIG_SECTIONS)
 
     @staticmethod
-    @db_op([], "获取邮箱配置失败")
-    def get_all_emails(session) -> List[Dict[str, Any]]:
-        """获取所有邮箱配置"""
-        emails = session.query(EmailConfig).all()
-        _maybe_encrypt_models(session, emails, 'password')
-        return [_decrypt_field(e.to_dict(), 'password') for e in emails]
+    @db_op([], "获取动态配置失败")
+    def get_all(session, section: str) -> List[Dict[str, Any]]:
+        """某一段的全部配置（含未启用的），加密字段解密后返回"""
+        model, secret_field = _CONFIG_SECTIONS[section]
+        rows = session.query(model).all()
+        if secret_field:
+            _maybe_encrypt_models(session, rows, secret_field)
+            return [_decrypt_field(row.to_dict(), secret_field) for row in rows]
+        return [row.to_dict() for row in rows]
 
     @staticmethod
-    @db_op(False, "保存邮箱配置失败", commit=True)
-    def upsert_email(session, email_data: Dict[str, Any]) -> bool:
-        """添加或更新邮箱"""
-        return _upsert(session, EmailConfig, email_data, secret_field='password')
+    @db_op(False, "保存动态配置失败", commit=True)
+    def upsert(session, section: str, data: Dict[str, Any]) -> bool:
+        """按 name 新增或更新一条；加密字段传 '***' 表示保持原值"""
+        model, secret_field = _CONFIG_SECTIONS[section]
+        return _upsert(session, model, data, secret_field=secret_field)
 
     @staticmethod
-    @db_op(False, "删除邮箱失败", commit=True)
-    def delete_email(session, name: str) -> bool:
-        """删除邮箱"""
-        return _delete_by_name(session, EmailConfig, name)
-
-    @staticmethod
-    @db_op([], "获取项目配置失败")
-    def get_all_projects(session) -> List[Dict[str, Any]]:
-        """获取所有项目配置（含未启用的）"""
-        projects = session.query(ProjectConfig).all()
-        _maybe_encrypt_models(session, projects, 'api_key')
-        return [_decrypt_field(p.to_dict(), 'api_key') for p in projects]
-
-    @staticmethod
-    @db_op([], "获取订阅配置失败")
-    def get_all_subscriptions(session) -> List[Dict[str, Any]]:
-        """获取所有订阅配置（含未启用的）"""
-        return [s.to_dict() for s in session.query(SubscriptionConfig).all()]
-
-    @staticmethod
-    @db_op(False, "保存项目配置失败", commit=True)
-    def upsert_project(session, project_data: Dict[str, Any]) -> bool:
-        """添加或更新项目"""
-        return _upsert(session, ProjectConfig, project_data, secret_field='api_key')
-
-    @staticmethod
-    @db_op(False, "保存订阅配置失败", commit=True)
-    def upsert_subscription(session, sub_data: Dict[str, Any]) -> bool:
-        """添加或更新订阅"""
-        return _upsert(session, SubscriptionConfig, sub_data)
-
-    @staticmethod
-    @db_op(False, "删除订阅失败", commit=True)
-    def delete_subscription(session, name: str) -> bool:
-        """删除订阅"""
-        return _delete_by_name(session, SubscriptionConfig, name)
+    @db_op(False, "删除动态配置失败", commit=True)
+    def delete(session, section: str, name: str) -> bool:
+        model, _ = _CONFIG_SECTIONS[section]
+        return _delete_by_name(session, model, name)
 
 
 class EmailRepository:
@@ -260,6 +253,22 @@ class EmailRepository:
             .filter(EmailAlertHistory.alert_sent.is_(True))\
             .filter(EmailAlertHistory.timestamp >= since)\
             .first() is not None
+
+    @staticmethod
+    @db_op([], "查询邮件告警历史失败", exc_info=True)
+    def get_email_alerts(
+        session,
+        mailbox: Optional[str] = None,
+        days: int = 30,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """获取最近扫描到的告警邮件（供 Web 页面展示）"""
+        query = session.query(EmailAlertHistory)\
+            .filter(EmailAlertHistory.timestamp >= utcnow() - timedelta(days=days))
+        if mailbox:
+            query = query.filter(EmailAlertHistory.mailbox == mailbox)
+        records = query.order_by(desc(EmailAlertHistory.timestamp)).limit(limit).all()
+        return [_with_keyword_list(r.to_dict()) for r in records]
 
 
 class BalanceRepository:

@@ -19,21 +19,11 @@ FROM --platform=linux/amd64 swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/p
 # 设置时区
 ENV TZ=Asia/Shanghai
 
-# 安装运行时依赖：curl（用于健康检查）+ supercronic（定时任务）
-ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-amd64 \
-    SUPERCRONIC_MIRROR=https://ghp.ci/https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-amd64 \
-    SUPERCRONIC_SHA1SUM=71b0d58cc53f6bd72cf2f293e09e294b79c666d8 \
-    SUPERCRONIC=supercronic-linux-amd64
-
+# 安装运行时依赖：curl（用于健康检查）。定时任务由 main.py 进程内调度，不再需要 cron。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
-    (curl -fsSLO --retry 3 --connect-timeout 30 -o "$SUPERCRONIC" "$SUPERCRONIC_URL" || \
-     curl -fsSLO --retry 3 --connect-timeout 30 -o "$SUPERCRONIC" "$SUPERCRONIC_MIRROR") && \
-    echo "$SUPERCRONIC_SHA1SUM  $SUPERCRONIC" | sha1sum -c - && \
-    chmod +x "$SUPERCRONIC" && \
-    mv "$SUPERCRONIC" /usr/local/bin/supercronic && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -54,14 +44,14 @@ COPY web ./web
 COPY scripts ./scripts
 COPY templates ./templates
 COPY static ./static
-COPY start.sh crontab docker-entrypoint.sh ./
+COPY docker-entrypoint.sh ./
 
 # 创建非 root 用户和必要的目录/文件
 RUN groupadd -r appuser && \
     useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
     mkdir -p /app/logs /app/data && \
     touch /app/config.json && \
-    chmod +x /app/start.sh /app/docker-entrypoint.sh && \
+    chmod +x /app/docker-entrypoint.sh && \
     chown -R appuser:appuser /app
 
 # 以非 root 用户运行
@@ -74,5 +64,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # 暴露端口（文档用途）
 EXPOSE 8080 9100
 
-# 使用入口脚本初始化环境
 CMD ["/app/docker-entrypoint.sh"]

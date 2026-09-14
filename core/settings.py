@@ -14,8 +14,10 @@
 """
 from typing import Any, Optional
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from core.timeutil import parse_daily_times
 
 
 class AppSettings(BaseSettings):
@@ -58,6 +60,12 @@ class AppSettings(BaseSettings):
     webhook_source: Optional[str] = None
     webhook_type: Optional[str] = None
 
+    # ---- 进程内定时任务（替代 cron；时刻按进程本地时区，容器里由 TZ 决定）----
+    # 多个时刻用逗号分隔，填 off 关闭该任务
+    alert_schedule: str = '09:00,15:00'   # 余额 + 订阅真实告警检查
+    email_scan_schedule: str = '10:00'    # 邮箱扫描（发送真实告警）
+    email_scan_days: int = 1              # 定时邮箱扫描覆盖最近几天
+
     # ---- HTTP / 扫描 ----
     request_timeout: int = 10
     max_emails_to_scan: int = 1000
@@ -83,6 +91,27 @@ class AppSettings(BaseSettings):
     web_enable_cors: bool = False
     cors_origins: str = ''
     web_api_key: Optional[str] = None
+
+    @field_validator('alert_schedule', 'email_scan_schedule')
+    @classmethod
+    def _validate_schedule(cls, v: str) -> str:
+        parse_daily_times(v)  # 格式不对直接抛 ValueError，启动即报错
+        return v
+
+    @field_validator('email_scan_days')
+    @classmethod
+    def _validate_email_scan_days(cls, v: int) -> int:
+        if not 1 <= v <= 30:
+            raise ValueError('EMAIL_SCAN_DAYS 必须在 1-30 之间')
+        return v
+
+    @property
+    def alert_schedule_times(self) -> list:
+        return parse_daily_times(self.alert_schedule)
+
+    @property
+    def email_scan_schedule_times(self) -> list:
+        return parse_daily_times(self.email_scan_schedule)
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import re
-from threading import Lock
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -35,6 +34,10 @@ def load_env_file(env_file: str = '.env') -> None:
         logger.info(f"[Config] 已加载环境变量文件: {env_file}")
 
 
+# 进程启动时把 .env 写进环境变量，之后 settings / 占位符替换都直接读 os.environ
+load_env_file()
+
+
 def get_default_config_path() -> str:
     return get_settings().config_path
 
@@ -53,21 +56,6 @@ def get_refresh_interval() -> int:
     if interval is None or interval <= 0:
         return DEFAULT_REFRESH_INTERVAL_SECONDS
     return interval
-
-
-# 全局配置缓存和锁
-_config_cache: Dict[str, Dict[str, Any]] = {}
-_config_lock = Lock()
-
-
-def clear_config_cache(config_file: Optional[str] = None) -> None:
-    """清除配置缓存"""
-    with _config_lock:
-        if config_file:
-            _config_cache.pop(config_file, None)
-        else:
-            _config_cache.clear()
-        logger.debug("[Config] 配置缓存已清除")
 
 
 def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -243,16 +231,11 @@ def _substitute_env_placeholders(value: Any) -> Any:
 
 
 def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
-    """加载配置文件并替换环境变量占位符
+    """读取配置文件并替换 ${VAR} 占位符；文件很小，每次都直接读，不做缓存
 
     Raises:
         ValueError: 配置文件不是合法 JSON 时
     """
-    # 首先加载 .env 文件（只在首次调用时加载）
-    if not getattr(load_config_with_env_vars, '_env_loaded', False):
-        load_env_file()
-        load_config_with_env_vars._env_loaded = True
-
     config: Dict[str, Any] = {}
 
     if os.path.exists(config_file):
@@ -272,51 +255,29 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
     return config
 
 
-def get_config(config_file: str = 'config.json', use_cache: bool = True) -> Dict[str, Any]:
-    """获取文件配置（含环境变量覆盖），带缓存"""
-    if use_cache:
-        with _config_lock:
-            cached = _config_cache.get(config_file)
-            if cached is not None:
-                return cached
-
-    config = load_config_with_env_vars(config_file)
-    with _config_lock:
-        _config_cache[config_file] = config
-
-    return config
-
-
 def _strip_meta_fields(items):
     return [{k: v for k, v in item.items() if k not in _DB_META_FIELDS} for item in items]
 
 
-def load_config(config_file: Optional[str] = None, use_cache: bool = True) -> Dict[str, Any]:
-    """加载最终配置：文件配置（含 env 覆盖）+ 数据库动态配置。
-
-    返回独立副本，调用方可安全修改。
-    """
+def load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
+    """加载最终配置：文件配置（含 env 覆盖）+ 数据库动态配置。每次返回新字典，调用方可安全修改。"""
     config_file = config_file or get_default_config_path()
-    config = copy.deepcopy(get_config(config_file, use_cache=use_cache))
+    config = load_config_with_env_vars(config_file)
 
     if not get_settings().enable_dynamic_config:
         return normalize_config(config)
 
     try:
         from database.repository import ConfigRepository
-        db_projects = ConfigRepository.get_all_projects()
-        db_subscriptions = ConfigRepository.get_all_subscriptions()
-        db_emails = ConfigRepository.get_all_emails()
+        db_sections = {section: ConfigRepository.get_all(section) for section in ConfigRepository.SECTIONS}
     except Exception as e:
         logger.warning(f"[Config] 读取数据库动态配置失败，回退到文件配置: {e}")
         return normalize_config(config)
 
-    if db_projects:
-        config['projects'] = _strip_meta_fields(db_projects)
-    if db_subscriptions:
-        config['subscriptions'] = _strip_meta_fields(db_subscriptions)
-    if db_emails:
-        config['email'] = _strip_meta_fields(db_emails)
+    # 数据库里有数据的段落覆盖文件里的同名段落
+    for section, rows in db_sections.items():
+        if rows:
+            config[section] = _strip_meta_fields(rows)
 
     return normalize_config(config)
 

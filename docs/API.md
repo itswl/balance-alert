@@ -30,9 +30,16 @@ GET /live     # 存活检查：进程能响应即返回 200
 {
   "status": "healthy",
   "has_data": true,
-  "last_update": "2024-02-24T10:30:00Z"
+  "is_stale": false,
+  "jobs_healthy": true,
+  "failed_jobs": [],
+  "last_update": "2024-02-24T10:30:00Z",
+  "uptime_seconds": 3600,
+  "version": "1.0.0"
 }
 ```
+
+`status` 为 `degraded`（HTTP 503）的三种情况：还没有余额数据、数据超过 3 个刷新周期没更新、任一定时任务上次运行失败（名字列在 `failed_jobs`）。
 
 ### 2. 查询功能开关
 
@@ -91,11 +98,42 @@ Content-Type: application/json
 
 **限制**：30 秒冷却时间（触发时返回 429）
 
+### 5. 定时任务状态
+
+```bash
+GET /api/jobs
+```
+
+**响应**：
+```json
+{
+  "healthy": true,
+  "jobs": [
+    {
+      "name": "alert_check",
+      "description": "余额与订阅告警检查，发送真实通知",
+      "schedule": "每天 09:00 / 15:00",
+      "enabled": true,
+      "next_run": "2026-09-15T01:00:00Z",
+      "last_run": "2026-09-14T07:00:00Z",
+      "last_success": "2026-09-14T07:00:00Z",
+      "last_error": null,
+      "last_duration_seconds": 1.42,
+      "last_detail": { "projects": 8, "failed": 0, "need_alarm": 1, "subscriptions": 2, "need_alert": 0, "dry_run": false },
+      "runs": 12,
+      "failures": 0
+    }
+  ]
+}
+```
+
+三个任务：`dashboard_refresh`（看板刷新）、`alert_check`（真实告警检查）、`email_scan`（定时邮箱扫描）。时间均为 UTC ISO 格式。
+
 ## 订阅 API（可选）
 
 需启用：`ENABLE_SUBSCRIPTIONS=true`（未启用时下列写接口统一返回 503；`GET /api/subscriptions` 始终可用，未启用时返回空状态）
 
-### 5. 获取订阅状态
+### 6. 获取订阅状态
 
 ```bash
 GET /api/subscriptions
@@ -119,7 +157,7 @@ GET /api/subscriptions
 }
 ```
 
-### 6. 添加订阅
+### 7. 添加订阅
 
 ```bash
 POST /api/subscription/add
@@ -138,7 +176,7 @@ Content-Type: application/json
 必填字段：`name`、`cycle_type`、`renewal_day`、`alert_days_before`、`amount`。
 年付（`cycle_type=yearly`）的 `renewal_day` 使用 MMDD 格式，如 `315` 表示 3 月 15 日。
 
-### 7. 删除订阅
+### 8. 删除订阅
 
 ```bash
 POST /api/subscription/delete
@@ -150,13 +188,13 @@ Content-Type: application/json
 }
 ```
 
-### 8. 获取订阅配置列表
+### 9. 获取订阅配置列表
 
 ```bash
 GET /api/config/subscriptions
 ```
 
-### 9. 更新订阅配置
+### 10. 更新订阅配置
 
 ```bash
 POST /api/config/subscription
@@ -171,7 +209,7 @@ Content-Type: application/json
 
 `name` 用于定位订阅，其余字段（`new_name` / `cycle_type` / `renewal_day` / `alert_days_before` / `amount` / `enabled` / `last_renewed_date` / `owner_project`）按需提供。
 
-### 10. 标记/清除已续费
+### 11. 标记/清除已续费
 
 ```bash
 POST /api/subscription/mark_renewed
@@ -196,13 +234,13 @@ Content-Type: application/json
 
 需启用：`ENABLE_DYNAMIC_CONFIG=true` 且 `ENABLE_DATABASE=true`
 
-### 11. 获取项目配置
+### 12. 获取项目配置
 
 ```bash
 GET /api/config/projects
 ```
 
-### 12. 更新项目阈值
+### 13. 更新项目阈值
 
 ```bash
 POST /api/config/threshold
@@ -214,13 +252,15 @@ Content-Type: application/json
 }
 ```
 
-### 13. 获取邮箱配置
+### 14. 获取邮箱配置
 
 ```bash
 GET /api/config/emails
 ```
 
-### 14. 添加/更新邮箱配置
+始终可用（不依赖动态配置），`password` 一律返回 `***`。
+
+### 15. 添加/更新邮箱配置
 
 ```bash
 POST /api/config/email
@@ -229,12 +269,17 @@ Content-Type: application/json
 {
   "name": "mail-1",
   "host": "imap.example.com",
+  "port": 993,
   "username": "user@example.com",
-  "password": "${EMAIL_PASSWORD}"
+  "password": "app-password",
+  "use_ssl": true,
+  "enabled": true
 }
 ```
 
-### 15. 删除邮箱配置
+`name` 是唯一键。新增时 `host` / `username` / `password` 必填；更新时只改传了的字段，`password` 留空或不传表示保持原密码。
+
+### 16. 删除邮箱配置
 
 ```bash
 POST /api/config/email/delete
@@ -245,11 +290,63 @@ Content-Type: application/json
 }
 ```
 
+## 邮箱扫描 API
+
+不需要额外开关；扫描是否真发 Webhook 通知由 `ENABLE_WEB_ALARM` 决定（默认只查不发）。
+
+### 17. 查看上次扫描结果
+
+```bash
+GET /api/email/scan
+```
+
+**响应**（结果保存在进程内存，服务重启后清空）：
+```json
+{
+  "last_update": "2026-09-14T03:00:00Z",
+  "days": 3,
+  "dry_run": true,
+  "mailboxes": [
+    { "name": "工作邮箱", "host": "imap.example.com", "port": 993, "username": "me@example.com",
+      "total_emails": 12, "alert_count": 1, "success": true, "error": null }
+  ],
+  "alerts": [
+    { "mailbox": "工作邮箱", "subject": "【阿里云】余额不足提醒", "sender": "noreply@aliyun.com",
+      "date": "Mon, 01 Sep 2026 10:00:00 +0800", "keywords": ["余额不足"],
+      "service_name": "阿里云", "amount": 12.5, "alert_sent": false }
+  ],
+  "summary": { "total_mailboxes": 1, "failed_mailboxes": 0, "total_emails": 12, "total_alerts": 1, "alerts_sent": 0 }
+}
+```
+
+### 18. 立即扫描
+
+```bash
+POST /api/email/scan
+Content-Type: application/json
+
+{ "days": 3 }
+```
+
+`days` 为 1-30，默认 1。同一时间只允许一次扫描，完成后 30 秒内再次调用返回 429；未配置邮箱返回 400。
+
+**响应**：
+```json
+{
+  "status": "success",
+  "message": "扫描完成：12 封邮件，1 封告警",
+  "summary": { "total_mailboxes": 1, "failed_mailboxes": 0, "total_emails": 12, "total_alerts": 1, "alerts_sent": 0 },
+  "mailboxes": [ { "name": "工作邮箱", "total_emails": 12, "alert_count": 1, "success": true, "error": null } ],
+  "dry_run": true,
+  "execution_time_seconds": 4.21
+}
+```
+
 ## 历史数据 API
 
 需启用：`ENABLE_HISTORY_API=true` 且 `ENABLE_DATABASE=true`
 
-### 16. 查询余额历史
+### 19. 查询余额历史
 
 ```bash
 GET /api/history/balance?project_id=abc123&days=7
@@ -261,7 +358,7 @@ GET /api/history/balance?project_id=abc123&days=7
 - `days`: 查询天数（默认7）
 - `limit`: 返回记录数（默认100）
 
-### 17. 获取趋势分析
+### 20. 获取趋势分析
 
 ```bash
 GET /api/history/trend/<project_id>?days=30
@@ -282,17 +379,25 @@ GET /api/history/trend/<project_id>?days=30
 }
 ```
 
-### 18. 查询告警历史
+### 21. 查询告警历史
 
 ```bash
 GET /api/history/alerts?days=7&limit=50
 ```
 
-### 19. 获取告警统计
+### 22. 获取告警统计
 
 ```bash
 GET /api/history/stats?days=30
 ```
+
+### 23. 查询邮件告警历史
+
+```bash
+GET /api/history/email-alerts?days=30&limit=100&mailbox=工作邮箱
+```
+
+返回扫描时发过通知的告警邮件（`email_alert_history` 表），`matched_keywords` 为列表。`mailbox` 可选。
 
 ## 错误处理
 
@@ -362,8 +467,15 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/features
 # 获取余额
 curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/credits
 
+# 定时任务状态
+curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/jobs
+
 # 刷新余额
 curl -X POST -H "X-API-Key: your-secret-key" http://localhost:8080/api/refresh
+
+# 立即扫描邮箱（最近 3 天）
+curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \
+  -d '{"days": 3}' http://localhost:8080/api/email/scan
 
 # 添加订阅
 curl -X POST -H "X-API-Key: your-secret-key" -H "Content-Type: application/json" \

@@ -23,6 +23,12 @@ class TestStateManager:
         assert subscription['last_update'] is None
         assert subscription['subscriptions'] == []
 
+        email = self.manager.get_email_state()
+        assert email['last_update'] is None
+        assert email['mailboxes'] == []
+        assert email['alerts'] == []
+        assert email['summary'] == {}
+
     def test_update_balance_state(self):
         """测试更新余额状态"""
         projects = [
@@ -74,6 +80,94 @@ class TestStateManager:
         state = self.manager.get_subscription_state()
         assert state['subscriptions'] == []
         assert state['summary']['total'] == 0
+
+    def test_update_email_state(self):
+        """邮箱扫描状态：逐邮箱统计与告警明细分开存，汇总按数据重新算"""
+        self.manager.update_email_state({
+            'days': 7,
+            'dry_run': True,
+            'mailboxes': [
+                {'name': 'A', 'total_emails': 10, 'alert_count': 2, 'error': None},
+                {'name': 'B', 'total_emails': 0, 'alert_count': 0, 'error': 'login failed'},
+            ],
+            'results': [
+                {'mailbox': 'A', 'subject': 's1', 'alert_sent': True},
+                {'mailbox': 'A', 'subject': 's2', 'alert_sent': False},
+            ],
+        })
+
+        state = self.manager.get_email_state()
+        assert state['last_update'] is not None
+        assert state['days'] == 7
+        assert state['dry_run'] is True
+        assert len(state['mailboxes']) == 2
+        assert len(state['alerts']) == 2
+        assert state['summary'] == {
+            'total_mailboxes': 2,
+            'failed_mailboxes': 1,
+            'total_emails': 10,
+            'total_alerts': 2,
+            'alerts_sent': 1,
+        }
+
+    def test_update_email_state_none(self):
+        """None 输入等价于一次空扫描"""
+        self.manager.update_email_state(None)
+        state = self.manager.get_email_state()
+        assert state['last_update'] is not None
+        assert state['alerts'] == []
+        assert state['summary']['total_mailboxes'] == 0
+
+    def test_email_state_returns_independent_copies(self):
+        self.manager.update_email_state({'mailboxes': [{'name': 'A', 'total_emails': 1}], 'results': []})
+        copy1 = self.manager.get_email_state()
+        copy1['mailboxes'].clear()
+        assert len(self.manager.get_email_state()['mailboxes']) == 1
+
+    def test_job_state_lifecycle(self):
+        """登记 → 成功 → 失败 → 恢复，healthy 随之变化"""
+        from datetime import datetime, timezone
+        started = datetime(2026, 9, 14, 7, 0, tzinfo=timezone.utc)
+        nxt = datetime(2026, 9, 15, 1, 0, tzinfo=timezone.utc)
+
+        self.manager.register_job('alert_check', description='告警', schedule='每天 09:00', enabled=True, next_run=nxt)
+        state = self.manager.get_job_state()
+        assert state['healthy'] is True
+        job = state['jobs'][0]
+        assert job['next_run'] == '2026-09-15T01:00:00Z' and job['runs'] == 0 and job['last_run'] is None
+
+        self.manager.record_job_run('alert_check', success=True, started_at=started, duration_seconds=1.23456,
+                                    detail={'projects': 2}, next_run=nxt)
+        job = self.manager.get_job_state()['jobs'][0]
+        assert job['last_run'] == job['last_success'] == '2026-09-14T07:00:00Z'
+        assert job['last_duration_seconds'] == 1.235
+        assert job['last_detail'] == {'projects': 2}
+        assert job['runs'] == 1 and job['failures'] == 0
+
+        self.manager.record_job_run('alert_check', success=False, started_at=started, duration_seconds=0.1, error='boom')
+        state = self.manager.get_job_state()
+        assert state['healthy'] is False
+        job = state['jobs'][0]
+        assert job['last_error'] == 'boom' and job['failures'] == 1 and job['runs'] == 2
+        assert job['last_success'] == '2026-09-14T07:00:00Z'  # 上次成功时间保留
+
+        self.manager.record_job_run('alert_check', success=True, started_at=started, duration_seconds=0.1)
+        assert self.manager.get_job_state()['healthy'] is True
+
+    def test_disabled_job_does_not_affect_health(self):
+        from datetime import datetime, timezone
+        self.manager.register_job('email_scan', enabled=False)
+        self.manager.record_job_run('email_scan', success=False, started_at=datetime.now(timezone.utc),
+                                    duration_seconds=0.1, error='x')
+        state = self.manager.get_job_state()
+        assert state['healthy'] is True
+        assert state['jobs'][0]['next_run'] is None
+
+    def test_job_state_returns_copies(self):
+        self.manager.register_job('a')
+        snapshot = self.manager.get_job_state()
+        snapshot['jobs'].clear()
+        assert len(self.manager.get_job_state()['jobs']) == 1
 
     def test_state_isolation(self):
         """测试更新不会修改外部列表"""

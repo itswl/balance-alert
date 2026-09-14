@@ -59,15 +59,10 @@ class SubscriptionChecker:
     """订阅续费检查器"""
     
     def __init__(self, config_path='config.json'):
-        """初始化"""
         self.config_path = config_path
-        self.config = self._load_config()
+        self.config = load_config(config_path)
         self.results = []
-    
-    def _load_config(self):
-        """加载配置文件"""
-        return load_config(self.config_path)
-    
+
     def check_subscriptions(self, dry_run=False):
         """
         检查所有订阅
@@ -81,15 +76,13 @@ class SubscriptionChecker:
         subscriptions = self.config.get('subscriptions', [])
 
         if not subscriptions:
-            logger.info("📋 没有配置订阅项目")
+            logger.info("没有配置订阅项目")
             return []
         
         # 过滤启用的订阅
         enabled_subs = filter_enabled(subscriptions)
         
-        logger.info(f"📅 开始检查 {len(enabled_subs)} 个订阅...")
-        if dry_run:
-            logger.info("🔍 [测试模式] 不会发送实际告警")
+        logger.info(f"开始检查 {len(enabled_subs)} 个订阅" + ("（测试模式，不发送告警）" if dry_run else ""))
         
         today = datetime.now()
         
@@ -100,81 +93,38 @@ class SubscriptionChecker:
         self._print_summary()
         return self.results
     
-    @staticmethod
-    def _subscription_id(name: str) -> str:
-        return make_subscription_id(name)
-
     def _check_subscription(self, sub, today, dry_run):
-        """检查单个订阅"""
+        """检查单个订阅：算出距续费天数，判断是否已续费、是否该提醒"""
         name = sub.get('name', '未知订阅')
         owner_project = owner_project_of(sub)
         renewal_day = _coerce_int(sub.get('renewal_day'), 1)
         alert_days_before = max(0, _coerce_int(sub.get('alert_days_before'), 3))
         amount = _coerce_float(sub.get('amount'), 0.0)
-        last_renewed_date = sub.get('last_renewed_date')  # 上次续费日期
-        cycle_type = sub.get('cycle_type') or 'monthly'  # 续费周期类型: weekly, monthly, yearly
-        
-        logger.info(f"{'='*60}")
-        logger.info(f"📦 订阅: {name}")
-        if owner_project:
-            logger.info(f"   所属项目: {owner_project}")
+        last_renewed_date = sub.get('last_renewed_date')
+        cycle_type = sub.get('cycle_type') or 'monthly'
 
-        # 根据周期类型显示不同的续费信息
-        cycle_text = self._get_cycle_text(cycle_type, renewal_day)
-        logger.info(f"   续费周期: {cycle_text}")
-        logger.info(f"   金额: {amount}")
-        logger.info(f"{'='*60}")
-        
-        # 计算距离续费日的天数
         days_until_renewal, next_renewal_date = self._calculate_days_until_renewal(
             cycle_type, renewal_day, today, last_renewed_date
         )
-        
-        logger.info(f"📍 距离续费还有: {days_until_renewal} 天 (下次续费: {next_renewal_date.strftime('%Y-%m-%d')})")
-        
-        # 检查是否在本续费周期内已经续费
-        already_renewed = False
-        if last_renewed_date:
-            try:
-                last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
-                # 计算当前续费周期的起始日期
-                cycle_start = self._calculate_cycle_start(cycle_type, renewal_day, today, next_renewal_date)
-                
-                # 如果上次续费日期在当前周期之后，说明已经续费了
-                if last_renewed >= cycle_start:
-                    already_renewed = True
-                    logger.info(f"✅ 本周期已续费 (续费日期: {last_renewed_date})")
-            except ValueError:
-                logger.warning(f"⚠️  续费日期格式错误: {last_renewed_date}")
-        
-        # 判断是否需要告警（如果已续费则不告警）
-        need_alert = (days_until_renewal <= alert_days_before and 
-                     days_until_renewal >= 0 and 
-                     not already_renewed)
-        alert_sent = False
-        
-        if already_renewed:
-            logger.info(f"✅ 本周期已续费，无需提醒")
-        elif need_alert:
-            logger.warning(f"⚠️  需要提醒续费! (提前 {alert_days_before} 天)")
+        logger.info(
+            f"订阅 {name}" + (f"（{owner_project}）" if owner_project else "")
+            + f" | {WebhookAdapter._format_subscription_cycle(cycle_type, renewal_day)} | 金额 {amount}"
+            f" | 距续费 {days_until_renewal} 天 (下次 {next_renewal_date.strftime('%Y-%m-%d')})"
+        )
 
-            if not dry_run:
-                subscription_id = self._subscription_id(name)
-                alert_cooldown = alert_store.cooldown_seconds('subscription')
-                if alert_store.in_cooldown(subscription_id, 'subscription_renewal', alert_cooldown):
-                    logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({alert_cooldown}s)，跳过重复通知")
-                else:
-                    alert_sent = self._send_alert(sub, days_until_renewal)
-                    if alert_sent:
-                        alert_store.record_alert(
-                            subscription_id, name, 'subscription_renewal',
-                            f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
-                            amount, alert_days_before,
-                        )
-            else:
-                logger.info("🔍 [测试模式] 跳过发送告警")
+        already_renewed = self._already_renewed(cycle_type, renewal_day, today, next_renewal_date, last_renewed_date)
+        need_alert = 0 <= days_until_renewal <= alert_days_before and not already_renewed
+        alert_sent = False
+
+        if already_renewed:
+            logger.info(f"[{name}] 本周期已续费，无需提醒")
+        elif not need_alert:
+            logger.info(f"[{name}] 无需提醒")
+        elif dry_run:
+            logger.warning(f"[{name}] 需要提醒续费 (提前 {alert_days_before} 天)，测试模式不发送")
         else:
-            logger.info(f"✅ 无需提醒")
+            logger.warning(f"[{name}] 需要提醒续费 (提前 {alert_days_before} 天)")
+            alert_sent = self._send_unless_cooling(sub, name, amount, alert_days_before, days_until_renewal)
 
         return {
             'name': name,
@@ -189,10 +139,34 @@ class SubscriptionChecker:
             'already_renewed': already_renewed,
             'last_renewed_date': last_renewed_date
         }
-    
-    def _get_cycle_text(self, cycle_type, renewal_day):
-        """获取周期描述文本（与告警消息保持同一实现）"""
-        return WebhookAdapter._format_subscription_cycle(cycle_type, renewal_day)
+
+    def _already_renewed(self, cycle_type, renewal_day, today, next_renewal_date, last_renewed_date) -> bool:
+        """上次续费日期落在当前周期内就算已续费"""
+        if not last_renewed_date:
+            return False
+        try:
+            last_renewed = datetime.strptime(last_renewed_date, '%Y-%m-%d')
+        except ValueError:
+            logger.warning(f"续费日期格式错误: {last_renewed_date}")
+            return False
+        cycle_start = self._calculate_cycle_start(cycle_type, renewal_day, today, next_renewal_date)
+        return last_renewed >= cycle_start
+
+    def _send_unless_cooling(self, sub, name, amount, alert_days_before, days_until_renewal) -> bool:
+        """发送续费提醒并留痕；冷却窗口内跳过。返回是否真的发出。"""
+        subscription_id = make_subscription_id(name)
+        cooldown = alert_store.cooldown_seconds('subscription')
+        if alert_store.in_cooldown(subscription_id, 'subscription_renewal', cooldown):
+            logger.info(f"[{name}] 订阅提醒仍在冷却窗口内 ({cooldown}s)，跳过重复通知")
+            return False
+        sent = self._send_alert(sub, days_until_renewal)
+        if sent:
+            alert_store.record_alert(
+                subscription_id, name, 'subscription_renewal',
+                f"订阅续费提醒: {name} 将在 {days_until_renewal} 天后续费",
+                amount, alert_days_before,
+            )
+        return sent
 
     @staticmethod
     def _safe_replace_year(dt, new_year):
@@ -288,7 +262,7 @@ class SubscriptionChecker:
         """发送续费提醒告警"""
         adapter = WebhookAdapter.from_settings('credit-monitor')
         if adapter is None:
-            logger.error("❌ 未配置 webhook 地址")
+            logger.error("未配置 webhook 地址")
             return False
 
         # 获取订阅信息
@@ -308,25 +282,10 @@ class SubscriptionChecker:
         )
     
     def _print_summary(self):
-        """打印检查汇总"""
-        logger.info(f"{'='*60}")
-        logger.info("📊 订阅检查汇总")
-        logger.info(f"{'='*60}")
-
-        total = len(self.results)
-        need_alert = sum(1 for r in self.results if r.get('need_alert', False))
-        alert_sent = sum(1 for r in self.results if r.get('alert_sent', False))
-
-        logger.info(f"总订阅数: {total}")
-        logger.info(f"需要提醒: {need_alert}")
-        logger.info(f"已发送提醒: {alert_sent}")
-
-        if self.results:
-            logger.info(f"详细结果:")
-            for r in self.results:
-                status = "⚠️需提醒" if r.get('need_alert') else "✅正常"
-                days = r['days_until_renewal']
-                owner_project = f" ({r['owner_project']})" if r.get('owner_project') else ""
-                logger.info(f"  {status} {r['name']}{owner_project}: 还有 {days} 天续费")
-
-        logger.info(f"{'='*60}")
+        need_alert = sum(1 for r in self.results if r.get('need_alert'))
+        alert_sent = sum(1 for r in self.results if r.get('alert_sent'))
+        logger.info(f"订阅检查汇总: 总订阅数={len(self.results)}, 需要提醒={need_alert}, 已发送提醒={alert_sent}")
+        for r in self.results:
+            owner = f" ({r['owner_project']})" if r.get('owner_project') else ""
+            state = '需提醒' if r.get('need_alert') else '正常'
+            logger.info(f"  {state} {r['name']}{owner}: 还有 {r['days_until_renewal']} 天续费")

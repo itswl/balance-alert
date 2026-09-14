@@ -47,7 +47,7 @@ kubectl logs -f deployment/balance-alert -n common-prod
 | `DATABASE_URL` | 数据库连接串（生产环境建议 PostgreSQL） |
 | 各 provider 密钥 | 如 `OPENROUTER_API_KEY`、`VOLC_1_API_KEY`、`ALIYUN_1_API_KEY` 等，按实际监控的项目配置 |
 
-其余非敏感参数（刷新间隔、功能开关等）已在 `common-prod.yaml` 的 `env` 中直接设置，按需修改。
+其余非敏感参数（刷新间隔、功能开关、定时任务时刻 `ALERT_SCHEDULE` / `EMAIL_SCAN_SCHEDULE`、`ENABLE_PROMETHEUS`）已在 `common-prod.yaml` 的 `env` 中直接设置，按需修改。定时任务在 Web 进程内调度，不需要额外的 CronJob。
 
 ## 更新配置
 

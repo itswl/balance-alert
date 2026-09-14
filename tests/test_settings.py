@@ -17,6 +17,7 @@ def _clear_settings_env(monkeypatch):
         'CONFIG_ENCRYPTION_KEY', 'WEB_API_KEY',
         'ENABLE_DATABASE', 'ENABLE_SUBSCRIPTIONS', 'REQUEST_TIMEOUT',
         'WEB_PORT', 'BALANCE_REFRESH_INTERVAL_SECONDS', 'ALERT_COOLDOWN_SECONDS',
+        'ALERT_SCHEDULE', 'EMAIL_SCAN_SCHEDULE', 'EMAIL_SCAN_DAYS',
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -93,3 +94,35 @@ class TestCorsOriginList:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+class TestSchedules:
+    """进程内定时任务时刻：默认沿用原 crontab，可用 off 关闭，格式错误启动即报错"""
+
+    def test_defaults(self):
+        from datetime import time
+        settings = get_settings()
+        assert settings.alert_schedule_times == [time(9, 0), time(15, 0)]
+        assert settings.email_scan_schedule_times == [time(10, 0)]
+        assert settings.email_scan_days == 1
+
+    def test_custom_and_off(self, monkeypatch):
+        from datetime import time
+        monkeypatch.setenv('ALERT_SCHEDULE', '8:30, 15:00')
+        monkeypatch.setenv('EMAIL_SCAN_SCHEDULE', 'off')
+        monkeypatch.setenv('EMAIL_SCAN_DAYS', '7')
+        settings = get_settings()
+        assert settings.alert_schedule_times == [time(8, 30), time(15, 0)]
+        assert settings.email_scan_schedule_times == []
+        assert settings.email_scan_days == 7
+
+    @pytest.mark.parametrize('key,value', [
+        ('ALERT_SCHEDULE', '25:00'),
+        ('EMAIL_SCAN_SCHEDULE', '9am'),
+        ('EMAIL_SCAN_DAYS', '0'),
+        ('EMAIL_SCAN_DAYS', '31'),
+    ])
+    def test_invalid_values_fail_fast(self, monkeypatch, key, value):
+        monkeypatch.setenv(key, value)
+        with pytest.raises(ValidationError):
+            get_settings()

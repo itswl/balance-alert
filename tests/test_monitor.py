@@ -256,10 +256,10 @@ class TestProviderCache:
         p1 = monitor_module._get_or_create_provider('openrouter', 'sk-test')
         assert p1 is instance_old
 
-        # 手动将缓存时间设为过去（超过 TTL）
-        for key in list(monitor_module._provider_cache.keys()):
-            old_time, provider = monitor_module._provider_cache[key]
-            monitor_module._provider_cache[key] = (old_time - monitor_module.PROVIDER_CACHE_TTL - 1, provider)
+        # 手动把缓存写入时间拨到 TTL 之前
+        cache = monitor_module._provider_cache._data
+        for key, (cached_at, provider) in list(cache.items()):
+            cache[key] = (cached_at - monitor_module.PROVIDER_CACHE_TTL - 1, provider)
 
         p2 = monitor_module._get_or_create_provider('openrouter', 'sk-test')
 

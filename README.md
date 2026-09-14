@@ -143,7 +143,9 @@ Webhook、刷新间隔、并发数、各类开关等**只由环境变量配置**
 
 `alert_days_before`（默认 3）表示提前几天开始提醒，**续费当天也会提醒**。
 
-`email` 的 `port`（993）和 `use_ssl`（true）可省略，只要 `host` / `username` / `password`。
+`email` 的 `port`（993）和 `use_ssl`（true）可省略，只要 `host` / `username` / `password`。匹配关键词默认覆盖中英文的欠费 / 续费 / 停机类用语，要调整时在 config.json 顶层加 `email_settings`：`alert_keywords` 整体替换，`extra_alert_keywords` 在默认之上追加。
+
+Web 看板里有「邮箱扫描」页：看已配置的邮箱、选时间范围点「立即扫描」、查看本次命中的欠费 / 续费类邮件。开了 `ENABLE_DYNAMIC_CONFIG` 可以直接在页面上增删改邮箱；开了 `ENABLE_HISTORY_API` 还能看数据库里的历史告警邮件。页面触发的扫描是否真发通知和余额刷新一样，由 `ENABLE_WEB_ALARM` 决定；定时扫描由进程内的 `email_scan` 任务在 `EMAIL_SCAN_SCHEDULE` 时刻执行并发送真实通知。
 
 **配完跑一下自检**，它会告诉你每个密钥取自哪个环境变量、缺了什么、日期被理解成哪天：
 
@@ -189,7 +191,10 @@ python -m services.monitor --show-config
 | `WEBHOOK_TYPE` | `custom` | `feishu` / `dingtalk` / `wecom` / `custom` |
 | `WEBHOOK_SOURCE` | `credit-monitor` | 告警来源标识 |
 | `CONFIG_PATH` | `config.json` | 配置文件路径 |
-| `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | Web 后台刷新间隔 |
+| `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | 看板刷新间隔（`dashboard_refresh` 任务，默认只查不发告警） |
+| `ALERT_SCHEDULE` | `09:00,15:00` | 真实告警检查时刻（`alert_check` 任务），按进程时区，逗号分隔，`off` 关闭 |
+| `EMAIL_SCAN_SCHEDULE` | `10:00` | 定时邮箱扫描时刻（`email_scan` 任务），`off` 关闭 |
+| `EMAIL_SCAN_DAYS` | `1` | 定时邮箱扫描覆盖最近几天（1-30） |
 | `MAX_CONCURRENT_CHECKS` | `20` | 并发检查数，钳制在 1-50 |
 | `ALERT_COOLDOWN_SECONDS` | `86400` | 同一项目告警冷却时间 |
 | `RESPONSE_CACHE_TTL` | `300` | 余额结果缓存秒数，防止手动刷新打爆上游 |
@@ -299,7 +304,7 @@ kubectl -n common-prod rollout status deploy/balance-alert
 | Endpoint | 用途 | 特点 |
 | --- | --- | --- |
 | `/live` | `startupProbe` / `livenessProbe` | 只证明进程能响应，不依赖项目数据 |
-| `/health` | `readinessProbe` | 会检查是否有数据、数据是否过期、cron 是否健康 |
+| `/health` | `readinessProbe` | 会检查是否有数据、数据是否过期、定时任务上次是否成功（`jobs_healthy` / `failed_jobs`） |
 
 如果没有有效项目配置，`/health` 会返回 `503 degraded`，Pod 会不 Ready，但不应该被 startup probe 反复重启。
 
@@ -318,6 +323,37 @@ docker-compose --profile monitoring up -d
 ```
 
 只跑核心版时不需要数据库，也不需要 monitoring profile。
+
+## 定时任务
+
+所有定时工作都在 Web 进程内由 `core/scheduler.py` 调度，容器里不再有 cron。三个任务：
+
+| 任务 | 触发 | 做什么 | 发告警？ |
+| --- | --- | --- | --- |
+| `dashboard_refresh` | 启动即跑，之后每 `BALANCE_REFRESH_INTERVAL_SECONDS` | 刷新看板的余额与订阅状态 | 默认不发，`ENABLE_WEB_ALARM=true` 才发 |
+| `alert_check` | 每天 `ALERT_SCHEDULE`（默认 09:00 / 15:00） | 余额 + 订阅检查 | 发 |
+| `email_scan` | 每天 `EMAIL_SCAN_SCHEDULE`（默认 10:00），最近 `EMAIL_SCAN_DAYS` 天 | 扫描邮箱里的欠费 / 续费邮件 | 发 |
+
+时刻按进程本地时区，容器里由 `TZ` 决定。任何一个任务上次运行失败，`/health` 会返回 503 并在 `failed_jobs` 里列出来；`GET /api/jobs` 能看到每个任务的计划、上次运行、耗时和错误。`python -m services.monitor` / `python -m services.email_scanner` 仍可用于手动执行一次。
+
+## Prometheus 指标
+
+`ENABLE_PROMETHEUS=true` 后在 `METRICS_PORT`（默认 9100）暴露 `/metrics`。所有任务都在同一个进程里跑，所以看板刷新、定时告警、页面「立即扫描」的结果都会进指标；命令行手动执行的结果不会。
+
+| 指标 | 标签 | 含义 |
+| --- | --- | --- |
+| `balance_alert_balance` / `_threshold` / `_ratio` / `_status` | `project` `provider` `type` | 当前余额、阈值、余额/阈值、1 正常 0 告警 |
+| `balance_alert_check_status` | `project` `provider` `type` | 上次检查 1 成功 0 失败；失败时余额保留上次成功值 |
+| `balance_alert_subscription_days` / `_amount` / `_status` | `name` `cycle_type` | 距续费天数、金额、1 正常 0 需续费 -1 本周期已续费 |
+| `balance_alert_email_mailbox_status` | `mailbox` | 上次扫描 1 连接正常 0 失败 |
+| `balance_alert_email_last_scan_emails` / `_alerts` | `mailbox` | 上次扫描的邮件数 / 命中告警数 |
+| `balance_alert_email_scan_total` / `balance_alert_email_alerts_total` | `mailbox` | 累计扫描邮件数 / 累计命中数 |
+| `balance_alert_job_last_run_timestamp` / `_last_success_timestamp` / `_last_status` / `_last_duration_seconds` | `task` | 定时任务上次运行时间、上次成功时间、1 成功 0 失败、耗时（标签叫 `task`，避免和 Prometheus 自带的 `job` 冲突） |
+| `balance_alert_job_runs_total` | `task` `status` | 任务运行次数 |
+| `balance_alert_notifications_total` | `kind` `status` | Webhook 通知次数，kind 为 balance / subscription / email / mailbox_error |
+| `balance_alert_last_check_timestamp` | `check_type` | balance / subscription / email 最近一次更新时间 |
+
+项目、订阅、邮箱被删除或改名后，旧的标签序列会在下一次更新时清掉。Grafana 面板见 `grafana/README.md`。
 
 ## 常用验证命令
 
@@ -363,7 +399,7 @@ Kubernetes 中建议显式引用：
 - 没有有效项目配置，`has_data=false`
 - 数据库动态配置没打开，`ENABLE_DYNAMIC_CONFIG=false`
 - 数据库项目读取失败
-- cron 失败日志非空
+- 某个定时任务上次运行失败，`failed_jobs` 里有名字（详情看 `GET /api/jobs`）
 
 先看：
 
@@ -394,7 +430,7 @@ services/monitor.py    核心检查和告警流程
 services/webhook_adapter.py
 services/subscription_checker.py
 services/email_scanner.py
-core/                  配置、日志、状态管理、密钥加密
+core/                  配置、日志、状态管理、密钥加密、进程内定时任务（scheduler.py）
 web/                   Flask Web 看板和 API
 static/ templates/     前端页面
 database/              可选历史库和动态配置（启动时自动建表）
