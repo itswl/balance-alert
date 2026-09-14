@@ -310,6 +310,21 @@ kubectl -n common-prod rollout status deploy/balance-alert
 
 ## Docker
 
+镜像不锁定 CPU 架构，在 arm64（Apple Silicon、鲲鹏、Graviton）和 amd64 上都能直接构建。基础镜像和 pip 源是 build-arg，默认用官方源：
+
+```bash
+# 本机架构
+docker build -t balance-alert .
+
+# 国内镜像源
+docker build \
+  --build-arg BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/python:3.11-slim \
+  --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple -t balance-alert .
+
+# 一次构建 amd64 + arm64 并推送
+docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
+```
+
 本地 Docker Compose：
 
 ```bash
