@@ -10,6 +10,8 @@ from .volc import VolcProvider
 from .aliyun import AliyunProvider
 from .uniapi import UniAPIProvider
 from .tikhub import TikHubProvider
+from .deepseek import DeepSeekProvider
+from .glm import GLMProvider
 
 # 可用的服务商适配器映射
 PROVIDERS = {
@@ -19,6 +21,8 @@ PROVIDERS = {
     'aliyun': AliyunProvider,
     'uniapi': UniAPIProvider,
     'tikhub': TikHubProvider,
+    'deepseek': DeepSeekProvider,
+    'glm': GLMProvider,
     # 后续添加其他服务商:
     # 'openai': OpenAIProvider,
     # 'anthropic': AnthropicProvider,

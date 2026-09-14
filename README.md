@@ -131,7 +131,7 @@ Webhook、刷新间隔、并发数、各类开关等**只由环境变量配置**
 | `threshold` | 建议 | 不填则永不告警（自检会提示） |
 | `api_key` | 否 | 自动读 `{PROVIDER}_API_KEY` 环境变量；同 provider 多账号读 `{PROVIDER}_{序号}_API_KEY`（序号按在 `projects` 里的出现顺序） |
 | `name` | 否 | 用 provider 名；数据库动态配置中作为唯一键 |
-| `type` | 否 | 按 provider 推导（`openrouter`/`uniapi`/`wxrank` → `credits`，其余 → `balance`） |
+| `type` | 否 | 按 provider 推导（`openrouter`/`uniapi`/`wxrank` → `credits`，`glm` → `quota`，其余 → `balance`） |
 | `owner_project` | 否 | 不分组 |
 | `enabled` | 否 | 视为启用 |
 
@@ -171,8 +171,12 @@ python -m services.monitor --show-config
 | UniAPI | `uniapi` | 普通 API Key |
 | 微信排名 | `wxrank` | 普通 API Key |
 | TikHub | `tikhub` | 普通 API Key |
+| DeepSeek | `deepseek` | 普通 API Key |
+| 智谱 GLM Coding Plan | `glm` | 普通 API Key（`id.secret` 形式） |
 | 火山引擎 | `volc` | `AccessKeyId:SecretAccessKey` |
 | 阿里云 | `aliyun` | `AccessKeyId:AccessKeySecret` |
+
+`glm` 查的不是充值余额（智谱没有公开的余额接口），而是 Coding Plan 套餐的剩余配额：接口按 5 小时 / 周 / 月等窗口给出若干条限额，取剩余比例最低的那个窗口，值是百分比（100 = 未使用，0 = 用光）。所以它的 `threshold` 也按百分比填，例如 `10` 表示剩余不足 10% 时告警。
 
 ## 环境变量
 

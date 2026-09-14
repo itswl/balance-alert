@@ -1,5 +1,5 @@
 """
-Provider 适配器测试 — OpenRouter/UniAPI/WxRank/TikHub mock HTTP 测试
+Provider 适配器测试 — OpenRouter/UniAPI/WxRank/TikHub/DeepSeek/GLM mock HTTP 测试
 """
 import pytest
 import requests
@@ -8,6 +8,8 @@ from providers.openrouter import OpenRouterProvider
 from providers.uniapi import UniAPIProvider
 from providers.wxrank import WxRankProvider
 from providers.tikhub import TikHubProvider
+from providers.deepseek import DeepSeekProvider
+from providers.glm import GLMProvider
 
 
 def _mock_response(status_code=200, json_data=None, text=''):
@@ -259,6 +261,240 @@ class TestTikHubProvider:
         provider = TikHubProvider('test-key')
         result = provider.get_credits()
         assert result['success'] is False
+
+
+# ==================== DeepSeek ====================
+
+class TestDeepSeekProvider:
+
+    def test_provider_name(self):
+        assert DeepSeekProvider.get_provider_name() == 'DeepSeek'
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_success_real_shape(self, mock_req):
+        """成功 — 线上真实结构，金额是字符串"""
+        mock_req.return_value = _mock_response(200, {
+            'is_available': True,
+            'balance_infos': [
+                {'currency': 'CNY', 'total_balance': '430.37',
+                 'granted_balance': '0.00', 'topped_up_balance': '430.37'}
+            ]
+        })
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(430.37)
+        assert mock_req.call_args.kwargs['headers']['Authorization'] == 'Bearer test-key'
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_prefers_cny_account(self, mock_req):
+        """多币种时优先取人民币账户"""
+        mock_req.return_value = _mock_response(200, {
+            'is_available': True,
+            'balance_infos': [
+                {'currency': 'USD', 'total_balance': '12.00'},
+                {'currency': 'CNY', 'total_balance': '88.00'},
+            ]
+        })
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(88.0)
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_falls_back_to_first_account(self, mock_req):
+        """没有人民币账户时退回第一条"""
+        mock_req.return_value = _mock_response(200, {
+            'is_available': True,
+            'balance_infos': [{'currency': 'USD', 'total_balance': '12.50'}]
+        })
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(12.5)
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_unavailable_account_still_reports_balance(self, mock_req):
+        """欠费 is_available=false 也是有效读数，余额照常返回给阈值判断"""
+        mock_req.return_value = _mock_response(200, {
+            'is_available': False,
+            'balance_infos': [{'currency': 'CNY', 'total_balance': '0.00'}]
+        })
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(0.0)
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_missing_balance_infos(self, mock_req):
+        """缺少 balance_infos 字段"""
+        mock_req.return_value = _mock_response(200, {'is_available': True})
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert 'balance_infos' in result['error']
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_empty_balance_infos(self, mock_req):
+        """balance_infos 为空列表"""
+        mock_req.return_value = _mock_response(200, {'is_available': True, 'balance_infos': []})
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_missing_total_balance(self, mock_req):
+        """缺少 total_balance 字段"""
+        mock_req.return_value = _mock_response(200, {
+            'balance_infos': [{'currency': 'CNY', 'granted_balance': '0.00'}]
+        })
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert 'total_balance' in result['error']
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_http_401(self, mock_req):
+        """HTTP 401 密钥无效"""
+        mock_req.return_value = _mock_response(401, text='Unauthorized')
+        provider = DeepSeekProvider('bad-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+
+    @patch.object(DeepSeekProvider, '_make_request')
+    def test_network_timeout(self, mock_req):
+        """网络超时"""
+        mock_req.side_effect = requests.exceptions.Timeout('timeout')
+        provider = DeepSeekProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert '超时' in result['error']
+
+
+# ==================== GLM (智谱 Coding Plan) ====================
+
+class TestGLMProvider:
+
+    def test_provider_name(self):
+        assert GLMProvider.get_provider_name() == 'GLM'
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_success_legacy_limits(self, mock_req):
+        """成功 — 线上真实结构：TIME_LIMIT 有绝对量，TOKENS_LIMIT 只有百分比，取剩余比例最低者"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'msg': '操作成功', 'success': True,
+            'data': {
+                'level': 'pro',
+                'limits': [
+                    {'type': 'TIME_LIMIT', 'unit': 5, 'number': 1, 'usage': 1000,
+                     'currentValue': 13, 'remaining': 987, 'percentage': 1,
+                     'nextResetTime': 1790409645998},
+                    {'type': 'TOKENS_LIMIT', 'unit': 3, 'number': 5, 'percentage': 0},
+                ],
+            },
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(98.7)
+        assert mock_req.call_args.kwargs['headers']['Authorization'] == 'Bearer test-key'
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_success_credit_limits(self, mock_req):
+        """成功 — 新版 CREDIT_LIMIT 结构（5 小时窗口 + 周窗口），取更紧的那个"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'msg': 'Operation successful', 'success': True,
+            'data': {
+                'level': 'lite',
+                'limits': [
+                    {'type': 'CREDIT_LIMIT', 'unit': 3, 'number': 5, 'usage': 2000,
+                     'currentValue': 402, 'remaining': 1597, 'percentage': 20},
+                    {'type': 'CREDIT_LIMIT', 'unit': 6, 'number': 1, 'usage': 10000,
+                     'currentValue': 5207, 'remaining': 4792, 'percentage': 52},
+                ],
+            },
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(47.92)
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_percentage_only_depleted(self, mock_req):
+        """只有百分比且已用满 → 剩余 0"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'success': True,
+            'data': {'limits': [{'type': 'TOKENS_LIMIT', 'percentage': 100}]},
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(0.0)
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_remaining_clamped_to_range(self, mock_req):
+        """异常数据钳制在 0-100"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'success': True,
+            'data': {'limits': [
+                {'type': 'CREDIT_LIMIT', 'usage': 100, 'remaining': 150},
+                {'type': 'TOKENS_LIMIT', 'percentage': 130},
+            ]},
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is True
+        assert result['credits'] == pytest.approx(0.0)
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_api_error(self, mock_req):
+        """业务失败 success=false"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 401, 'msg': '令牌无效', 'success': False, 'data': None
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert '令牌无效' in result['error']
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_missing_limits(self, mock_req):
+        """缺少 data.limits"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'success': True, 'data': {'level': 'pro'}
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert 'limits' in result['error']
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_no_parseable_window(self, mock_req):
+        """limits 里没有任何能算出剩余比例的窗口"""
+        mock_req.return_value = _mock_response(200, {
+            'code': 200, 'success': True,
+            'data': {'limits': [{'type': 'TOKENS_LIMIT', 'unit': 3, 'number': 5}]},
+        })
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_http_500(self, mock_req):
+        """HTTP 500"""
+        mock_req.return_value = _mock_response(500, text='Internal Server Error')
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+
+    @patch.object(GLMProvider, '_make_request')
+    def test_connection_error(self, mock_req):
+        """连接错误"""
+        mock_req.side_effect = requests.exceptions.ConnectionError('refused')
+        provider = GLMProvider('test-key')
+        result = provider.get_credits()
+        assert result['success'] is False
+        assert '连接' in result['error']
 
 
 if __name__ == '__main__':

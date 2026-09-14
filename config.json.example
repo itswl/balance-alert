@@ -1,11 +1,13 @@
 {
-  "_comment": "只放业务清单。密钥/开关/间隔等一律写 .env（见 .env.example）。字段能省的都省了：api_key 会自动从 {PROVIDER}_API_KEY 环境变量读取，type 按 provider 推导，enabled 默认 true。配完执行 python -m services.monitor --show-config 自检。",
+  "_comment": "只放业务清单。密钥/开关/间隔等一律写 .env（见 .env.example）。字段能省的都省了：api_key 会自动从 {PROVIDER}_API_KEY 环境变量读取，type 按 provider 推导，enabled 默认 true。配完执行 python -m services.monitor --show-config 自检。glm 的 threshold 是剩余配额百分比（10 = 剩余不足 10% 告警）。",
 
   "projects": [
     { "provider": "openrouter", "threshold": 10000 },
     { "provider": "uniapi", "threshold": 5000 },
     { "provider": "wxrank", "threshold": 500 },
     { "provider": "tikhub", "threshold": 10 },
+    { "provider": "deepseek", "threshold": 50 },
+    { "provider": "glm", "threshold": 10 },
 
     { "name": "火山-主账号", "provider": "volc", "threshold": 7000, "owner_project": "云服务" },
     { "name": "火山-备用", "provider": "volc", "threshold": 1000, "owner_project": "云服务" },

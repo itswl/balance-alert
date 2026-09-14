@@ -152,6 +152,20 @@ else
     echo "# TIKHUB_API_KEY=tikhub-your-key" >> .env
 fi
 
+read -p "DeepSeek API Key（留空跳过）: " deepseek_key
+if [ -n "$deepseek_key" ]; then
+    echo "DEEPSEEK_API_KEY=$deepseek_key" >> .env
+else
+    echo "# DEEPSEEK_API_KEY=sk-your-key" >> .env
+fi
+
+read -p "智谱 GLM API Key（Coding Plan，留空跳过）: " glm_key
+if [ -n "$glm_key" ]; then
+    echo "GLM_API_KEY=$glm_key" >> .env
+else
+    echo "# GLM_API_KEY=your-id.your-secret" >> .env
+fi
+
 echo ""
 echo "=========================================="
 echo "✅ .env 文件已创建！"
