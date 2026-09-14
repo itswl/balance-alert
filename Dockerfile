@@ -24,14 +24,8 @@ ENV TZ=Asia/Shanghai \
     PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1
 
-# 只需要时区数据（定时任务时刻按 TZ）；健康检查用 Python 自带的 urllib，不再装 curl
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
+# 不装任何系统包：官方 python:*-slim 自带 tzdata，TZ 环境变量直接生效（定时任务时刻按它算）；
+# 健康检查用 Python 自带的 urllib。换成不带 tzdata 的基础镜像时需自行补上。
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 
