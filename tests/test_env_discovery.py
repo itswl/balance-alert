@@ -113,3 +113,42 @@ class TestLoadConfigIntegration:
         from core.config_loader import load_config
 
         assert load_config(str(tmp_path / 'absent.json'))['projects'] == []
+
+
+class TestConfigFileEdgeCases:
+    """配置文件缺失、空、被挂载成目录时都不该让服务起不来"""
+
+    def test_empty_file_is_treated_as_no_config(self, monkeypatch, tmp_path):
+        from core.config_loader import load_config
+
+        config_file = tmp_path / 'config.json'
+        config_file.write_text('', encoding='utf-8')
+        monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
+
+        projects = load_config(str(config_file))['projects']
+        assert names(projects) == ['deepseek']
+
+    def test_whitespace_only_file(self, tmp_path):
+        from core.config_loader import load_config
+
+        config_file = tmp_path / 'config.json'
+        config_file.write_text('  \n\t ', encoding='utf-8')
+        assert load_config(str(config_file))['projects'] == []
+
+    def test_directory_in_place_of_file_is_ignored(self, monkeypatch, tmp_path):
+        """docker-compose 挂载不存在的文件时会建出目录，不能因此崩溃"""
+        from core.config_loader import load_config
+
+        as_dir = tmp_path / 'config.json'
+        as_dir.mkdir()
+        monkeypatch.setenv('GLM_API_KEY', 'a.b')
+        assert names(load_config(str(as_dir))['projects']) == ['glm']
+
+    def test_malformed_json_still_raises(self, tmp_path):
+        """真正写错的 JSON 仍然要报错，不能悄悄当成空配置"""
+        from core.config_loader import load_config
+
+        config_file = tmp_path / 'config.json'
+        config_file.write_text('{"projects": [', encoding='utf-8')
+        with pytest.raises(ValueError, match='配置文件格式错误'):
+            load_config(str(config_file))

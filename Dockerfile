@@ -45,7 +45,6 @@ COPY docker-entrypoint.sh ./
 RUN groupadd -r appuser && \
     useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
     mkdir -p /app/logs /app/data && \
-    touch /app/config.json && \
     chmod +x /app/docker-entrypoint.sh && \
     chown -R appuser:appuser /app
 USER appuser

@@ -304,11 +304,16 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
     config: Dict[str, Any] = {}
 
     if os.path.isfile(config_file):
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = _substitute_env_placeholders(json.load(f))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"配置文件格式错误: {e}")
+        with open(config_file, 'r', encoding='utf-8') as f:
+            raw = f.read().strip()
+        if not raw:
+            # 空文件等同于没有配置：镜像里预置的占位文件、被清空的挂载都会是这种状态
+            logger.info(f"[Config] 配置文件 {config_file} 为空，业务清单来自数据库与环境变量")
+        else:
+            try:
+                config = _substitute_env_placeholders(json.loads(raw))
+            except json.JSONDecodeError as e:
+                raise ValueError(f"配置文件格式错误: {e}")
     else:
         logger.info(f"[Config] 未使用配置文件 {config_file}，业务清单来自数据库与环境变量")
 
