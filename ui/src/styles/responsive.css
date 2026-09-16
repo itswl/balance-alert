@@ -1,0 +1,115 @@
+/* ==================== 响应式 ==================== */
+@media (max-width: 1024px) {
+    .projects-list .project-card {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .projects-list .project-details {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .main-container {
+        padding: 16px 14px 48px;
+    }
+
+    .nav-container {
+        padding: 0 14px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* 换行后竖分隔线会错位，改用横线分隔 */
+    .stat-card {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .stat-card:last-child {
+        border-bottom: none;
+    }
+
+    .quick-actions {
+        display: flex;
+        overflow-x: auto;
+    }
+
+    .action-btn {
+        flex: 1;
+        justify-content: center;
+        white-space: nowrap;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .section-actions,
+    #search-input {
+        width: 100%;
+    }
+
+    .subscription-card,
+    .email-alert-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .subscription-status,
+    .email-alert-side {
+        width: 100%;
+        justify-content: space-between;
+        flex-direction: row;
+    }
+
+    .subscription-actions {
+        opacity: 1;
+    }
+
+    .toast-container {
+        left: 14px;
+        right: 14px;
+    }
+
+    .toast {
+        min-width: 0;
+        max-width: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stat-card {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .stat-card:last-child {
+        border-bottom: none;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    .navbar,
+    .quick-actions,
+    .section-actions,
+    .project-actions {
+        display: none;
+    }
+
+    .project-card {
+        break-inside: avoid;
+    }
+}

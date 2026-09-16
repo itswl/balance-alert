@@ -1,22 +1,23 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
-dist
-build
 .git
-.gitignore
-.vscode
-.idea
-*.md
-logs/
-tests/
-data/
-.DS_Store
+.github
 .env
+.env.*
+*.env.backup*
+data/
+logs/
 *.db
 *.db-journal
+
+# 前端依赖与本地产物，镜像里会重新构建
+ui/node_modules/
+ui/dist-test/
+
+# 文档与部署清单不进镜像
+docs/
+grafana/
+k8s/
+*.md
+LICENSE
+
+# 测试数据
+**/testdata/

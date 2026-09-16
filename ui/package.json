@@ -1,0 +1,18 @@
+{
+  "name": "balance-alert-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Balance Alert 看板前端：TypeScript + esbuild，产物由 Go 的 embed.FS 提供",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node build.mjs --test && node --test dist-test/*.test.mjs",
+    "clean": "rm -rf dist dist-test"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

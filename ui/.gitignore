@@ -1,0 +1,7 @@
+node_modules/
+dist-test/
+
+# 根 .gitignore 里有一条 Python 留下的 dist/，会连带把前端产物也忽略掉。
+# 这里显式放行：Go 用 embed.FS 嵌入 dist/，它必须在仓库里，
+# 否则新克隆一份没装 Node 就 go build 不过。
+!dist/

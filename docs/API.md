@@ -33,7 +33,7 @@
 | `POST /api/config/threshold` | 只改阈值的快捷入口 `{project_name, new_threshold}` | 动态配置 |
 | `GET /api/config/emails` | 邮箱配置，密码脱敏 | — |
 | `POST /api/config/email` | 新增或更新邮箱；`name` 是唯一键，新增需 `host` `username` `password`，更新时密码留空不改 | 动态配置 |
-| `POST /api/config/email/delete` | 删除邮箱 `{name}` | 动态配置 |
+| `POST /api/config/email/delete` | 删除邮箱 `{name}`；环境变量自动发现的邮箱不可删 | 动态配置 |
 | `GET /api/email/scan` | 上次扫描结果（进程内存，重启清空） | — |
 | `POST /api/email/scan` | 立即扫描 `{days}`，1-30；同一时间一个，冷却 30 秒 | — |
 | `GET /api/history/balance` `trend/<project_id>` `alerts` `stats` `email-alerts` | 历史查询；通用参数 `days` `limit`，余额可加 `project_id` `provider`，邮件可加 `mailbox` | 历史 API |

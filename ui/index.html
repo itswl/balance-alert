@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balance Alert</title>
+    <link rel="stylesheet" href="/static/app.css?v=__BUILD_ID__">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2317191d'/><text x='16' y='21.5' text-anchor='middle' font-family='Menlo,monospace' font-size='15' font-weight='700' fill='white'>B</text></svg>">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon" aria-hidden="true">B</span>
+                <span class="brand-text">Balance Alert</span>
+            </div>
+            <div class="nav-actions">
+                <button class="btn-icon" id="theme-toggle" title="切换主题">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+                <button class="btn-icon" id="refresh-btn" title="刷新数据">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+                    </svg>
+                </button>
+                <button class="btn-icon" id="settings-btn" title="设置">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6m5.656-14.142l-4.242 4.242M7.75 14.25l-4.243 4.242M23 12h-6m-6 0H1m14.142 5.656l-4.242-4.242M7.75 9.75l-4.243-4.242"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-container">
+        <!-- 顶部统计卡片 -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">总项目数</div>
+                    <div class="stat-value" id="total-projects">-</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon success">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">正常项目</div>
+                    <div class="stat-value" id="normal-projects">-</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon warning">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label" id="alert-projects-label">告警项目</div>
+                    <div class="stat-value" id="alert-projects">-</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"></path>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label" id="shortest-runway-label">最短跑道</div>
+                    <div class="stat-value" id="shortest-runway">—</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-label">最后更新</div>
+                    <div class="stat-value small" id="last-update">刚刚</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 快速操作区 -->
+        <section class="quick-actions">
+            <button class="action-btn" id="view-all-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+                <span>全部项目</span>
+            </button>
+            <button class="action-btn" id="view-alerts-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                </svg>
+                <span>仅告警</span>
+            </button>
+            <button class="action-btn" id="view-subscriptions-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <span>订阅管理</span>
+            </button>
+            <button class="action-btn" id="view-email-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                <span>邮箱扫描</span>
+            </button>
+        </section>
+
+        <!-- 项目余额列表 -->
+        <section class="content-section" id="projects-section">
+            <div class="section-header">
+                <h2 class="section-title">项目余额</h2>
+                <div class="section-actions">
+                    <div class="view-toggle">
+                        <button class="view-btn active" id="view-grid-btn" title="网格视图">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        </button>
+                        <button class="view-btn" id="view-list-btn" title="列表视图">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                        </button>
+                    </div>
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <input type="text" id="search-input" placeholder="搜索项目..." />
+                    </div>
+                    <select class="filter-select" id="provider-filter">
+                        <option value="all">全部平台</option>
+                    </select>
+                    <button class="btn-primary" id="add-project-btn" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        添加项目
+                    </button>
+                </div>
+            </div>
+
+            <div id="projects-container" class="projects-grid">
+                <!-- 项目卡片将通过 JavaScript 动态生成 -->
+            </div>
+        </section>
+
+        <!-- 订阅提醒列表 -->
+        <section class="content-section" id="subscriptions-section" style="display: none;">
+            <div class="section-header">
+                <h2 class="section-title">订阅提醒</h2>
+                <button class="btn-primary" id="add-subscription-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    添加订阅
+                </button>
+            </div>
+
+            <div id="subscriptions-container" class="subscriptions-list">
+                <!-- 订阅卡片将通过 JavaScript 动态生成 -->
+            </div>
+        </section>
+
+        <!-- 邮箱扫描 -->
+        <section class="content-section" id="email-section" style="display: none;">
+            <div class="section-header">
+                <h2 class="section-title">邮箱扫描</h2>
+                <div class="section-actions">
+                    <select class="filter-select" id="email-scan-days" title="扫描最近几天的邮件">
+                        <option value="1">最近 1 天</option>
+                        <option value="3">最近 3 天</option>
+                        <option value="7">最近 7 天</option>
+                        <option value="14">最近 14 天</option>
+                        <option value="30">最近 30 天</option>
+                    </select>
+                    <button class="btn-primary" id="email-scan-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        立即扫描
+                    </button>
+                    <button class="btn-secondary" id="add-email-btn" style="display: none;">
+                        添加邮箱
+                    </button>
+                </div>
+            </div>
+
+            <div id="email-scan-summary" class="email-scan-summary">
+                <!-- 扫描概览由 JavaScript 动态生成 -->
+            </div>
+
+            <h3 class="subsection-title">邮箱账号</h3>
+            <div id="mailboxes-container" class="subscriptions-list">
+                <!-- 邮箱卡片由 JavaScript 动态生成 -->
+            </div>
+
+            <h3 class="subsection-title">本次扫描发现的告警邮件</h3>
+            <div id="email-alerts-container" class="email-alerts-list">
+                <!-- 告警邮件由 JavaScript 动态生成 -->
+            </div>
+
+            <div id="email-history-block" style="display: none;">
+                <h3 class="subsection-title">历史告警邮件 <span class="subsection-hint">最近 30 天，来自数据库</span></h3>
+                <div id="email-history-container" class="email-alerts-list">
+                    <!-- 历史记录由 JavaScript 动态生成 -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 加载状态 -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>加载中...</p>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- 余额趋势模态框 -->
+    <div id="trend-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 id="trend-modal-title">余额趋势</h2>
+                <button class="modal-close js-close-trend-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="trend-stats-container" class="trend-stats">
+                    <!-- 统计卡片将动态生成 -->
+                </div>
+                <div class="chart-container">
+                    <canvas id="trend-chart"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary js-close-trend-modal">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>系统设置</h2>
+                <button class="modal-close js-close-settings-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>外观设置</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-dark-mode">
+                            <span>深色模式</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>数据更新</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-auto-refresh" checked>
+                            <span>启用自动刷新（每5分钟）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>访问认证</h3>
+                    <div class="form-group">
+                        <label for="setting-api-key">API Key</label>
+                        <input type="password" id="setting-api-key" autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>关于</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.6;">
+                        <strong>Balance Alert</strong><br>
+                        余额监控、订阅提醒与邮箱扫描
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-primary js-close-settings-modal">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key 认证模态框 -->
+    <div id="auth-modal" class="modal auth-modal">
+        <div class="modal-content auth-modal-content">
+            <div class="modal-header">
+                <h2>输入 API Key</h2>
+            </div>
+            <form id="auth-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="auth-api-key">API Key</label>
+                        <input type="password" id="auth-api-key" autocomplete="current-password" required>
+                    </div>
+                    <p id="auth-error" class="form-error" style="display: none;"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">保存并继续</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 项目管理模态框 -->
+    <div id="project-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="project-modal-title">添加项目</h2>
+                <button class="modal-close js-close-project-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="project-form" class="modal-body">
+                <input type="hidden" id="project-edit-mode" value="false">
+
+                <p id="project-env-note" class="form-error" style="display: none;">
+                    这个项目来自环境变量自动发现。在这里保存会把它固化到数据库，之后以数据库中的配置为准。
+                </p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="project-name">项目名称 *</label>
+                        <input type="text" id="project-name" required placeholder="例如：火山-主账号">
+                    </div>
+                    <div class="form-group">
+                        <label for="project-provider">平台 *</label>
+                        <select id="project-provider" required></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="project-api-key">密钥 <span id="project-api-key-hint" class="subsection-hint"></span></label>
+                    <input type="password" id="project-api-key" autocomplete="new-password"
+                           placeholder="火山、阿里云用 AccessKey:Secret 形式">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="project-threshold">告警阈值</label>
+                        <input type="number" id="project-threshold" step="0.01" min="0" placeholder="留空则不告警">
+                        <p id="project-threshold-hint"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="project-type">余额类型</label>
+                        <select id="project-type">
+                            <option value="">按平台自动推导</option>
+                            <option value="balance">余额</option>
+                            <option value="credits">积分 / Credits</option>
+                            <option value="quota">配额百分比</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="project-owner">所属项目</label>
+                    <input type="text" id="project-owner" placeholder="用于分组，可留空">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="project-enabled" checked>
+                        <span>启用此项目</span>
+                    </label>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary js-close-project-modal">取消</button>
+                <button type="button" class="btn-primary js-save-project">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 订阅管理模态框 -->
+    <div id="subscription-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">添加订阅</h2>
+                <button class="modal-close js-close-subscription-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="subscription-form" class="modal-body">
+                <input type="hidden" id="edit-mode" value="false">
+                <input type="hidden" id="original-name" value="">
+
+                <div class="form-group">
+                    <label for="sub-name">订阅名称 *</label>
+                    <input type="text" id="sub-name" required placeholder="例如：Netflix、云服务器">
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-owner-project">所属项目</label>
+                    <select id="sub-owner-project">
+                        <option value="">未关联项目</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sub-amount">每次续费金额</label>
+                        <input type="number" id="sub-amount" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sub-cycle">订阅周期 *</label>
+                        <select id="sub-cycle" required>
+                            <option value="monthly">每月</option>
+                            <option value="yearly">每年</option>
+                            <option value="weekly">每周</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sub-renewal-day">续费日 *</label>
+                        <input type="number" id="sub-renewal-day" min="1" max="31" required placeholder="1-31">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-alert-days">提前提醒天数 *</label>
+                    <input type="number" id="sub-alert-days" min="1" max="90" value="7" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="sub-last-renewed">最后续费日期（可选）</label>
+                    <input type="date" id="sub-last-renewed">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="sub-enabled" checked>
+                        <span>启用此订阅提醒</span>
+                    </label>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary js-close-subscription-modal">取消</button>
+                <button type="button" class="btn-primary js-save-subscription">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 邮箱配置模态框 -->
+    <div id="email-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="email-modal-title">添加邮箱</h2>
+                <button class="modal-close js-close-email-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="email-form" class="modal-body">
+                <input type="hidden" id="email-edit-mode" value="false">
+
+                <div class="form-group">
+                    <label for="email-name">显示名称 *</label>
+                    <input type="text" id="email-name" required placeholder="例如：公司邮箱">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email-host">IMAP 服务器 *</label>
+                        <input type="text" id="email-host" required placeholder="imap.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="email-port">端口</label>
+                        <input type="number" id="email-port" min="1" max="65535" value="993">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="email-username">邮箱账号 *</label>
+                    <input type="text" id="email-username" required placeholder="me@example.com" autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="email-password">密码 / 授权码 <span id="email-password-hint" class="subsection-hint"></span></label>
+                    <input type="password" id="email-password" autocomplete="new-password" placeholder="IMAP 授权码">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="email-use-ssl" checked>
+                        <span>使用 SSL（通常是 993 端口）</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="email-enabled" checked>
+                        <span>启用此邮箱</span>
+                    </label>
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary js-close-email-modal">取消</button>
+                <button type="button" class="btn-primary js-save-email">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 整个看板打成一个包；趋势图不再依赖 CDN 上的 Chart.js，改用自带的 canvas 折线图 -->
+    <script defer src="/static/app.js?v=__BUILD_ID__"></script>
+</body>
+</html>

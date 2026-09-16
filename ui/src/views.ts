@@ -1,0 +1,60 @@
+/** 视图切换、地址栏 hash、主题。 */
+
+import { byId } from './dom.js';
+import { AppState, writeStorage, type Theme, type ViewName } from './state.js';
+import { EmailManager } from './managers/email-manager.js';
+import { renderProjects } from './ui/projects.js';
+import { renderSubscriptions } from './ui/subscriptions.js';
+
+/** 四个视图对应的快速操作按钮 */
+const VIEW_BUTTONS: Record<ViewName, string> = {
+  all: 'view-all-btn',
+  alerts: 'view-alerts-btn',
+  subscriptions: 'view-subscriptions-btn',
+  email: 'view-email-btn',
+};
+
+export function applyTheme(theme: Theme): void {
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+export function initTheme(): void {
+  applyTheme(AppState.currentTheme);
+}
+
+export function toggleTheme(): void {
+  AppState.currentTheme = AppState.currentTheme === 'light' ? 'dark' : 'light';
+  writeStorage('theme', AppState.currentTheme);
+  applyTheme(AppState.currentTheme);
+}
+
+export function switchView(view: ViewName): void {
+  AppState.currentView = view;
+
+  // 用 replaceState 而不是 location.hash：后者会往历史里塞一条，退格键就退不出页面了
+  if (window.history?.replaceState) {
+    window.history.replaceState(null, '', window.location.pathname + (view === 'all' ? '' : `#${view}`));
+  }
+
+  document.querySelectorAll('.action-btn').forEach((btn) => btn.classList.remove('active'));
+  byId(VIEW_BUTTONS[view])?.classList.add('active');
+
+  // 三块内容区互斥显示：项目余额（all / alerts）、订阅、邮箱扫描
+  const visible = view === 'subscriptions' || view === 'email' ? view : 'projects';
+  for (const [name, id] of [
+    ['projects', 'projects-section'],
+    ['subscriptions', 'subscriptions-section'],
+    ['email', 'email-section'],
+  ] as const) {
+    const section = byId(id);
+    if (section) section.style.display = name === visible ? 'block' : 'none';
+  }
+
+  if (view === 'all' || view === 'alerts') {
+    if (AppState.balanceData) renderProjects(AppState.balanceData);
+  } else if (view === 'subscriptions') {
+    if (AppState.subscriptionData) renderSubscriptions(AppState.subscriptionData);
+  } else {
+    void EmailManager.load();
+  }
+}

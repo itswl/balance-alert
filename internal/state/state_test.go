@@ -1,0 +1,178 @@
+package state
+
+import (
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/itswl/balance-alert/internal/model"
+)
+
+func result(name string, success bool, needAlarm bool) model.CheckResult {
+	return model.CheckResult{Project: name, Provider: "deepseek", Success: success, NeedAlarm: needAlarm}
+}
+
+func TestBalanceSummary(t *testing.T) {
+	m := New()
+	m.SetBalance([]model.CheckResult{
+		result("a", true, false), result("b", true, true), result("c", false, false),
+	})
+
+	got := m.Balance()
+	want := model.BalanceSummary{Total: 3, Success: 2, Failed: 1, NeedAlarm: 1}
+	if got.Summary != want {
+		t.Errorf("汇总: 期望 %+v，实际 %+v", want, got.Summary)
+	}
+	if got.LastUpdate == nil {
+		t.Error("更新后应该有 last_update")
+	}
+}
+
+// TestMergeKeepsOrder 单项目刷新不能打乱看板上的卡片顺序，否则用户每次刷新都要重新找。
+func TestMergeKeepsOrder(t *testing.T) {
+	m := New()
+	m.SetBalance([]model.CheckResult{result("a", true, false), result("b", true, false), result("c", true, false)})
+
+	m.MergeBalance([]model.CheckResult{result("b", true, true)})
+
+	projects := m.Balance().Projects
+	if len(projects) != 3 {
+		t.Fatalf("合并后应仍是 3 个项目，实际 %d", len(projects))
+	}
+	for i, name := range []string{"a", "b", "c"} {
+		if projects[i].Project != name {
+			t.Errorf("第 %d 个应是 %s，实际 %s", i, name, projects[i].Project)
+		}
+	}
+	if !projects[1].NeedAlarm {
+		t.Error("b 的新状态没有合并进去")
+	}
+}
+
+// TestMergeAddsUnknownProject 新加的项目刷新后要出现在看板上。
+func TestMergeAddsUnknownProject(t *testing.T) {
+	m := New()
+	m.SetBalance([]model.CheckResult{result("a", true, false)})
+	m.MergeBalance([]model.CheckResult{result("新项目", true, false)})
+
+	if projects := m.Balance().Projects; len(projects) != 2 || projects[1].Project != "新项目" {
+		t.Errorf("新项目没有被加入，得到 %v", projects)
+	}
+}
+
+func TestRemoveBalanceProject(t *testing.T) {
+	m := New()
+	m.SetBalance([]model.CheckResult{result("a", true, false), result("b", true, false)})
+
+	m.RemoveBalanceProject("a")
+	projects := m.Balance().Projects
+	if len(projects) != 1 || projects[0].Project != "b" {
+		t.Errorf("删除后应只剩 b，实际 %v", projects)
+	}
+
+	// 删不存在的项目不该有副作用
+	before := m.Balance().LastUpdate
+	m.RemoveBalanceProject("不存在")
+	if m.Balance().LastUpdate != before {
+		t.Error("删除不存在的项目不该刷新 last_update")
+	}
+}
+
+// TestReturnedStateIsACopy 调用方拿到的是副本，改它不能影响内部状态。
+func TestReturnedStateIsACopy(t *testing.T) {
+	m := New()
+	m.SetBalance([]model.CheckResult{result("a", true, false)})
+
+	snapshot := m.Balance()
+	snapshot.Projects[0].Project = "被改了"
+
+	if m.Balance().Projects[0].Project != "a" {
+		t.Error("外部修改副本影响到了内部状态")
+	}
+}
+
+func TestJobHealth(t *testing.T) {
+	m := New()
+	next := time.Now().Add(time.Hour)
+	m.RegisterJob("alert_check", "余额与订阅告警检查", "每天 09:00", true, next)
+	m.RegisterJob("disabled_job", "关掉的任务", "已关闭", false, time.Time{})
+
+	if !m.Jobs().Healthy {
+		t.Error("还没跑过的任务不该算不健康")
+	}
+
+	m.RecordJobRun("alert_check", false, time.Now(), time.Second, errors.New("上游超时"), nil, next)
+	if m.Jobs().Healthy {
+		t.Error("任务失败后应该不健康")
+	}
+	if failed := m.FailedJobs(); len(failed) != 1 || failed[0] != "alert_check" {
+		t.Errorf("失败任务清单应是 [alert_check]，实际 %v", failed)
+	}
+
+	m.RecordJobRun("alert_check", true, time.Now(), time.Second, nil, map[string]any{"projects": 2}, next)
+	if !m.Jobs().Healthy {
+		t.Error("重新成功后应恢复健康")
+	}
+
+	job := m.Jobs().Jobs[0]
+	if job.Runs != 2 || job.Failures != 1 {
+		t.Errorf("运行次数应为 2 次 1 失败，实际 %d 次 %d 失败", job.Runs, job.Failures)
+	}
+	if job.LastError != nil {
+		t.Error("成功后应清掉上次错误")
+	}
+}
+
+// TestDisabledJobNeverBlocksHealth 关掉的任务永远不影响健康判断。
+func TestDisabledJobNeverBlocksHealth(t *testing.T) {
+	m := New()
+	m.RegisterJob("weekly_report", "周报", "已关闭", false, time.Time{})
+	m.RecordJobRun("weekly_report", false, time.Now(), time.Second, errors.New("炸了"), nil, time.Time{})
+
+	if !m.Jobs().Healthy {
+		t.Error("关掉的任务失败不该让整体不健康")
+	}
+	if len(m.FailedJobs()) != 0 {
+		t.Error("关掉的任务不该出现在失败清单里")
+	}
+}
+
+// TestConcurrentAccess 后台调度写、HTTP 读，真并发。开 -race 跑这个用例才有意义。
+func TestConcurrentAccess(t *testing.T) {
+	m := New()
+	var wg sync.WaitGroup
+
+	for i := range 50 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			m.SetBalance([]model.CheckResult{result("a", true, i%2 == 0)})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = m.Balance()
+			_ = m.Jobs()
+		}()
+	}
+	wg.Wait()
+}
+
+func TestEmailSummary(t *testing.T) {
+	m := New()
+	failure := "连不上"
+	m.SetEmailScan(model.ScanResult{
+		Days: 3, DryRun: true,
+		Mailboxes: []model.MailboxResult{
+			{Name: "工作", TotalEmails: 10, Success: true},
+			{Name: "备用", TotalEmails: 2, Error: &failure},
+		},
+		Alerts: []model.EmailAlert{{Mailbox: "工作", AlertSent: true}, {Mailbox: "工作"}},
+	})
+
+	got := m.EmailScan().Summary
+	want := EmailSummary{TotalMailboxes: 2, FailedMailboxes: 1, TotalEmails: 12, TotalAlerts: 2, AlertsSent: 1}
+	if got != want {
+		t.Errorf("邮箱汇总: 期望 %+v，实际 %+v", want, got)
+	}
+}
