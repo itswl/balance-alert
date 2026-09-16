@@ -17,7 +17,8 @@ def _clear_settings_env(monkeypatch):
         'CONFIG_ENCRYPTION_KEY', 'WEB_API_KEY',
         'ENABLE_DATABASE', 'ENABLE_SUBSCRIPTIONS', 'REQUEST_TIMEOUT',
         'WEB_PORT', 'BALANCE_REFRESH_INTERVAL_SECONDS', 'ALERT_COOLDOWN_SECONDS',
-        'ALERT_SCHEDULE', 'EMAIL_SCAN_SCHEDULE', 'EMAIL_SCAN_DAYS',
+        'ALERT_SCHEDULE', 'EMAIL_SCAN_SCHEDULE', 'EMAIL_SCAN_DAYS', 'WEEKLY_REPORT_SCHEDULE',
+        'BURN_RATE_WINDOW_DAYS', 'RUNWAY_ALERT_DAYS', 'SPEND_SPIKE_RATIO', 'SPEND_SPIKE_MIN_AMOUNT',
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -121,6 +122,44 @@ class TestSchedules:
         ('EMAIL_SCAN_SCHEDULE', '9am'),
         ('EMAIL_SCAN_DAYS', '0'),
         ('EMAIL_SCAN_DAYS', '31'),
+    ])
+    def test_invalid_values_fail_fast(self, monkeypatch, key, value):
+        monkeypatch.setenv(key, value)
+        with pytest.raises(ValidationError):
+            get_settings()
+
+
+class TestRunwaySettings:
+    """消耗分析与周报的配置"""
+
+    def test_defaults(self):
+        from datetime import time
+        settings = get_settings()
+        assert settings.burn_rate_window_days == 7
+        assert settings.runway_alert_days == 7.0
+        assert settings.spend_spike_ratio == 3.0
+        assert settings.weekly_report_plan == ({1}, [time(9, 0)])
+
+    def test_custom_weekly_report_plan(self, monkeypatch):
+        from datetime import time
+        monkeypatch.setenv('WEEKLY_REPORT_SCHEDULE', '周五 18:00')
+        assert get_settings().weekly_report_plan == ({5}, [time(18, 0)])
+
+    def test_weekly_report_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv('WEEKLY_REPORT_SCHEDULE', 'off')
+        assert get_settings().weekly_report_plan == (set(), [])
+
+    def test_alerts_can_be_disabled_with_zero(self, monkeypatch):
+        monkeypatch.setenv('RUNWAY_ALERT_DAYS', '0')
+        monkeypatch.setenv('SPEND_SPIKE_RATIO', '0')
+        settings = get_settings()
+        assert settings.runway_alert_days == 0 and settings.spend_spike_ratio == 0
+
+    @pytest.mark.parametrize('key,value', [
+        ('WEEKLY_REPORT_SCHEDULE', 'Funday 09:00'),
+        ('WEEKLY_REPORT_SCHEDULE', 'Mon 25:00'),
+        ('BURN_RATE_WINDOW_DAYS', '0'),
+        ('BURN_RATE_WINDOW_DAYS', '365'),
     ])
     def test_invalid_values_fail_fast(self, monkeypatch, key, value):
         monkeypatch.setenv(key, value)

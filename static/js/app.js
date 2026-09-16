@@ -39,6 +39,30 @@ const Utils = {
         return { credits: 'Credits', balance: '余额', quota: '配额' }[type] || (type || '余额');
     },
 
+    // 跑道：按当前消耗速率还能用多久。数据不足、没有消耗时都要说得清楚，不能显示成 0
+    formatRunway(runway) {
+        if (!runway || runway.confidence === 'none') {
+            return { text: '数据积累中', level: 'unknown', hint: '攒够几小时的余额历史后给出估算' };
+        }
+        if (!runway.burn_per_day) {
+            return { text: '无消耗', level: 'normal', hint: `最近 ${runway.window_days} 天余额没有下降` };
+        }
+        const days = runway.runway_days;
+        if (days === null || days === undefined) {
+            return { text: '—', level: 'unknown', hint: '' };
+        }
+        const hint = runway.depletion_date
+            ? `按日均 ${this.formatCurrency(runway.burn_per_day)} 估算，约 ${runway.depletion_date} 耗尽`
+            : '';
+        if (days > 365) {
+            return { text: '超过 1 年', level: 'normal', hint };
+        }
+        const text = days < 1 ? '不足 1 天' : `${days < 10 ? days.toFixed(1) : Math.round(days)} 天`;
+        // 前端用固定档位上色，真正触发告警的阈值由后端 RUNWAY_ALERT_DAYS 决定
+        const level = days <= 3 ? 'danger' : (days <= 7 ? 'warning' : 'normal');
+        return { text, level, hint };
+    },
+
     // 按类型格式化余额：配额是百分比，其余带千分位保留两位
     formatBalance(value, type) {
         const numValue = parseFloat(value);
@@ -377,15 +401,37 @@ const UI = {
     // 更新统计卡片
     updateStats(data) {
         const projects = data.projects || [];
-        const total = projects.length;
-        // 根据 need_alarm 字段判断状态
-        const normal = projects.filter(p => !p.need_alarm && p.success).length;
-        const alert = projects.filter(p => p.need_alarm).length;
 
-        document.getElementById('total-projects').textContent = total;
-        document.getElementById('normal-projects').textContent = normal;
-        document.getElementById('alert-projects').textContent = alert;
+        document.getElementById('total-projects').textContent = projects.length;
+        document.getElementById('normal-projects').textContent = projects.filter(p => !p.need_alarm && p.success).length;
+        document.getElementById('alert-projects').textContent = projects.filter(p => p.need_alarm).length;
         document.getElementById('last-update').textContent = Utils.getRelativeTime(data.last_update);
+        this.updateRunwayStat(projects);
+    },
+
+    // 最短跑道：所有账户里最先见底的那个
+    updateRunwayStat(projects) {
+        const value = document.getElementById('shortest-runway');
+        const label = document.getElementById('shortest-runway-label');
+        if (!value) return;
+
+        const ranked = projects
+            .filter(p => p.success && p.runway && p.runway.runway_days !== null && p.runway.runway_days !== undefined)
+            .sort((a, b) => a.runway.runway_days - b.runway.runway_days);
+
+        if (ranked.length === 0) {
+            value.textContent = '—';
+            value.className = 'stat-value';
+            label.textContent = '最短跑道';
+            label.title = '开启数据库后，攒够余额历史即可估算';
+            return;
+        }
+        const first = ranked[0];
+        const runway = Utils.formatRunway(first.runway);
+        value.textContent = runway.text;
+        value.className = `stat-value runway-${runway.level}`;
+        label.textContent = `最短跑道 · ${first.project}`;
+        label.title = runway.hint;
     },
 
     // 渲染项目卡片
@@ -401,6 +447,8 @@ const UI = {
         const provider = project.provider || 'unknown';
         const type = project.type || 'balance';
         const typeLabel = Utils.typeLabel(type);
+        const runway = Utils.formatRunway(project.runway);
+        const burn = project.runway ? project.runway.burn_per_day : null;
         const projectNameEscaped = Utils.escapeHTML(projectName);
         const providerEscaped = Utils.escapeHTML(provider);
         const ownerProjectEscaped = Utils.escapeHTML(ownerProject);
@@ -426,6 +474,7 @@ const UI = {
                         <div class="project-meta-row">
                             <span class="project-provider">${providerEscaped}</span>
                             <span class="owner-project-badge">${ownerProjectEscaped}</span>
+                            <span class="owner-project-badge">${Utils.escapeHTML(typeLabel)}</span>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -446,12 +495,12 @@ const UI = {
                         <span class="detail-value">${Utils.formatBalance(threshold, type)}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">类型</span>
-                        <span class="detail-value">${Utils.escapeHTML(typeLabel)}</span>
+                        <span class="detail-label">日均消耗</span>
+                        <span class="detail-value">${burn === null ? '—' : Utils.formatBalance(burn, type)}</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">相对阈值</span>
-                        <span class="detail-value">${percentage.toFixed(0)}%</span>
+                    <div class="detail-item" title="${Utils.escapeAttr(runway.hint)}">
+                        <span class="detail-label">还可用</span>
+                        <span class="detail-value runway-${runway.level}">${Utils.escapeHTML(runway.text)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">状态</span>

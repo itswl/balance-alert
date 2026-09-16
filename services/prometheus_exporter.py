@@ -9,6 +9,7 @@ Prometheus Exporter - 暴露监控指标
 指标一览（* 为 prometheus_client 自动补的 _total 后缀）：
 - balance_alert_balance / _threshold / _ratio / _status {project, provider, type}
 - balance_alert_check_status {project, provider, type}           1=本次检查成功 0=失败（失败时保留上次余额）
+- balance_alert_burn_rate_per_day / _runway_days {project, provider, type}   日均消耗、按此速率还能用几天
 - balance_alert_subscription_days / _amount / _status {name, cycle_type}
 - balance_alert_email_mailbox_status {mailbox}                   1=上次扫描连接正常 0=失败
 - balance_alert_email_last_scan_emails / _alerts {mailbox}       上次扫描的邮件数 / 命中告警数
@@ -52,6 +53,13 @@ class MetricsCollector:
             'balance_alert_check_status',
             'Result of the last balance check (1=success, 0=failed; balance keeps its last good value)',
             BALANCE_LABELS, **kw
+        )
+        self.burn_rate_gauge = Gauge(
+            'balance_alert_burn_rate_per_day', 'Average daily consumption over the burn-rate window',
+            BALANCE_LABELS, **kw
+        )
+        self.runway_days_gauge = Gauge(
+            'balance_alert_runway_days', 'Days of runway left at the current burn rate', BALANCE_LABELS, **kw
         )
 
         # 订阅续费指标
@@ -141,7 +149,8 @@ class MetricsCollector:
                 keep_balance |= {s for s in self._series.get('balance', set()) if s[:2] == labels[:2]}
 
         self._prune(
-            [self.balance_gauge, self.balance_threshold_gauge, self.balance_ratio_gauge, self.balance_status_gauge],
+            [self.balance_gauge, self.balance_threshold_gauge, self.balance_ratio_gauge, self.balance_status_gauge,
+             self.burn_rate_gauge, self.runway_days_gauge],
             'balance', keep_balance,
         )
         self._prune([self.balance_check_status_gauge], 'check', keep_check)
@@ -155,6 +164,13 @@ class MetricsCollector:
         self._set(self.balance_threshold_gauge, 'balance', labels, threshold)
         self._set(self.balance_ratio_gauge, 'balance', labels, credits / threshold if threshold > 0 else 0)
         self._set(self.balance_status_gauge, 'balance', labels, 0 if result.get('need_alarm', False) else 1)
+
+        # 消耗画像只有攒够历史才有；没有就不写，Grafana 里表现为无数据而不是 0
+        runway = result.get('runway') or {}
+        if runway.get('burn_per_day') is not None:
+            self._set(self.burn_rate_gauge, 'balance', labels, float(runway['burn_per_day']))
+        if runway.get('runway_days') is not None:
+            self._set(self.runway_days_gauge, 'balance', labels, float(runway['runway_days']))
 
     # ---------- 订阅 ----------
 

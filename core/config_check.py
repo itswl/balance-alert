@@ -205,11 +205,20 @@ def check_config(config_path: str) -> int:
         ('Web 告警', settings.enable_web_alarm),
     ]
     lines.append("  可选能力: " + '  '.join(f"{name}{OK if on else '✗'}" for name, on in features))
+    report_weekdays, report_times = settings.weekly_report_plan
     lines.append(
         f"  定时任务: 看板刷新 每 {get_refresh_interval()} 秒  "
         f"告警检查 {describe_daily_times(settings.alert_schedule_times)}  "
-        f"邮箱扫描 {describe_daily_times(settings.email_scan_schedule_times)}（最近 {settings.email_scan_days} 天）"
+        f"邮箱扫描 {describe_daily_times(settings.email_scan_schedule_times)}（最近 {settings.email_scan_days} 天）  "
+        f"周报 {describe_daily_times(report_times, report_weekdays)}"
     )
+    if settings.enable_database:
+        runway_note = f"跑道低于 {settings.runway_alert_days:g} 天告警" if settings.runway_alert_days > 0 else "跑道告警已关闭"
+        spike_note = (f"消耗达日常 {settings.spend_spike_ratio:g} 倍告警"
+                      if settings.spend_spike_ratio > 0 else "突增告警已关闭")
+        lines.append(f"  消耗分析: 窗口 {settings.burn_rate_window_days} 天  {runway_note}  {spike_note}")
+    else:
+        lines.append(f"  {WARN} 消耗分析与跑道估算需要 ENABLE_DATABASE=true 攒历史，当前未启用")
 
     problems = _check_projects(config.get('projects') or [], lines)
     if settings.enable_subscriptions:

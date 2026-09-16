@@ -208,7 +208,7 @@ svg {
    一条横排的统计带，靠分隔线而不是色块区分。 */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -274,6 +274,12 @@ svg {
     font-weight: 500;
     color: var(--text-2);
 }
+
+/* 跑道：越短越红，未知用弱化的灰 */
+.runway-danger { color: var(--danger); }
+.runway-warning { color: var(--warning); }
+.runway-unknown { color: var(--text-3); }
+.detail-item[title] { cursor: help; }
 
 /* ==================== 视图切换（分段式） ==================== */
 .quick-actions {
@@ -1351,12 +1357,14 @@ svg {
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .stat-card:nth-child(2) {
+    /* 换行后竖分隔线会错位，改用横线分隔 */
+    .stat-card {
         border-right: none;
+        border-bottom: 1px solid var(--border);
     }
 
-    .stat-card:nth-child(-n+2) {
-        border-bottom: 1px solid var(--border);
+    .stat-card:last-child {
+        border-bottom: none;
     }
 
     .quick-actions {

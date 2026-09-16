@@ -17,7 +17,7 @@ from typing import Any, Optional
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from core.timeutil import parse_daily_times
+from core.timeutil import parse_daily_times, parse_weekly_schedule
 
 
 class AppSettings(BaseSettings):
@@ -62,9 +62,16 @@ class AppSettings(BaseSettings):
 
     # ---- 进程内定时任务（替代 cron；时刻按进程本地时区，容器里由 TZ 决定）----
     # 多个时刻用逗号分隔，填 off 关闭该任务
-    alert_schedule: str = '09:00,15:00'   # 余额 + 订阅真实告警检查
-    email_scan_schedule: str = '10:00'    # 邮箱扫描（发送真实告警）
-    email_scan_days: int = 1              # 定时邮箱扫描覆盖最近几天
+    alert_schedule: str = '09:00,15:00'         # 余额 + 订阅真实告警检查
+    email_scan_schedule: str = '10:00'          # 邮箱扫描（发送真实告警）
+    email_scan_days: int = 1                    # 定时邮箱扫描覆盖最近几天
+    weekly_report_schedule: str = 'Mon 09:00'   # 周报，格式「星期 时刻」，星期可省略表示每天
+
+    # ---- 消耗与跑道分析（需要数据库历史；阈值设 0 关闭对应告警）----
+    burn_rate_window_days: int = 7        # 算日均消耗用最近几天
+    runway_alert_days: float = 7.0        # 按当前速率还能用几天就告警
+    spend_spike_ratio: float = 3.0        # 今日消耗是日常中位数的几倍算突增
+    spend_spike_min_amount: float = 1.0   # 今日消耗低于这个绝对值不报突增，避免噪音
 
     # ---- HTTP / 扫描 ----
     request_timeout: int = 10
@@ -105,6 +112,19 @@ class AppSettings(BaseSettings):
             raise ValueError('EMAIL_SCAN_DAYS 必须在 1-30 之间')
         return v
 
+    @field_validator('weekly_report_schedule')
+    @classmethod
+    def _validate_weekly_schedule(cls, v: str) -> str:
+        parse_weekly_schedule(v)  # 格式不对直接抛 ValueError，启动即报错
+        return v
+
+    @field_validator('burn_rate_window_days')
+    @classmethod
+    def _validate_burn_window(cls, v: int) -> int:
+        if not 1 <= v <= 90:
+            raise ValueError('BURN_RATE_WINDOW_DAYS 必须在 1-90 之间')
+        return v
+
     @property
     def alert_schedule_times(self) -> list:
         return parse_daily_times(self.alert_schedule)
@@ -112,6 +132,11 @@ class AppSettings(BaseSettings):
     @property
     def email_scan_schedule_times(self) -> list:
         return parse_daily_times(self.email_scan_schedule)
+
+    @property
+    def weekly_report_plan(self) -> tuple:
+        """(星期集合, 时刻列表)，都为空表示关闭"""
+        return parse_weekly_schedule(self.weekly_report_schedule)
 
     @property
     def cors_origin_list(self) -> list[str]:

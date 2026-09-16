@@ -288,6 +288,9 @@ def run_credit_monitor(config_path: str, project_name: Optional[str] = None, dry
     try:
         monitor = CreditMonitor(config_path)
         monitor.run(project_name=project_name, dry_run=dry_run)
+        # 阈值告警看的是当下，跑道与突增看的是趋势，后者依赖历史，放在整轮检查之后
+        from services import runway
+        runway.analyze(monitor.results, dry_run=dry_run)
         return {
             'success': True,
             'results': monitor.results,
