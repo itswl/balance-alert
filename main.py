@@ -9,6 +9,7 @@
 - dashboard_refresh  每 BALANCE_REFRESH_INTERVAL_SECONDS 刷新看板（默认只查不发告警，见 ENABLE_WEB_ALARM）
 - alert_check        每天 ALERT_SCHEDULE 时刻做余额 + 订阅检查并发送真实告警
 - email_scan         每天 EMAIL_SCAN_SCHEDULE 时刻扫描邮箱并发送真实告警
+- weekly_report      每周 WEEKLY_REPORT_SCHEDULE 时刻推送一次周报
 """
 import os
 import signal
@@ -90,6 +91,21 @@ def scan_mailboxes(state_mgr: StateManager, days: int, dry_run: bool) -> Dict[st
     }
 
 
+def send_weekly_report(state_mgr: StateManager) -> Dict[str, Any]:
+    """汇总本周余额、消耗、跑道、订阅、邮箱，推一张周报卡片"""
+    from services import weekly_report
+    summary = weekly_report.build(
+        state_mgr.get_balance_state(), state_mgr.get_subscription_state(), state_mgr.get_email_state()
+    )
+    sent = weekly_report.send(summary)
+    return {
+        'accounts': summary['accounts']['total'],
+        'consumed': summary['total_consumed'],
+        'upcoming_amount': summary['upcoming_amount'],
+        'sent': sent,
+    }
+
+
 def build_jobs(state_mgr: StateManager) -> List[Job]:
     settings = get_settings()
 
@@ -107,6 +123,7 @@ def build_jobs(state_mgr: StateManager) -> List[Job]:
     def email_scan():
         return scan_mailboxes(state_mgr, days=get_settings().email_scan_days, dry_run=False)
 
+    report_weekdays, report_times = settings.weekly_report_plan
     web_alarm_note = '会发送真实告警' if settings.enable_web_alarm else '只查不发告警'
     return [
         Job('dashboard_refresh', dashboard_refresh,
@@ -118,6 +135,9 @@ def build_jobs(state_mgr: StateManager) -> List[Job]:
         Job('email_scan', email_scan,
             description=f'扫描邮箱最近 {settings.email_scan_days} 天的欠费 / 续费邮件，发送真实通知',
             daily_times=settings.email_scan_schedule_times),
+        Job('weekly_report', lambda: send_weekly_report(state_mgr),
+            description='推送一周的消耗、跑道与待续费汇总',
+            daily_times=report_times, weekdays=report_weekdays),
     ]
 
 

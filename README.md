@@ -1,6 +1,6 @@
 # Balance Alert
 
-监控多个平台的余额或配额，低于阈值就发 Webhook；顺带管订阅续费提醒，扫描邮箱里的欠费、续费邮件。一个 Python 进程里跑 Flask 看板 + API、进程内定时任务和 Prometheus 指标。
+监控多个平台的余额或配额，算出还能用几天，快见底或消耗突然放大时发 Webhook；顺带管订阅续费提醒，扫描邮箱里的欠费、续费邮件，每周推一份消耗汇总。一个 Python 进程里跑 Flask 看板 + API、进程内定时任务和 Prometheus 指标。
 
 默认只开余额检查、Webhook 告警和 Web 看板；数据库、动态配置、订阅、Prometheus 用 `ENABLE_*` 开关按需打开。
 
@@ -70,6 +70,10 @@ python main.py                              # http://localhost:8080
 | `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | 看板刷新间隔 |
 | `ALERT_SCHEDULE` | `09:00,15:00` | 真实告警检查时刻，逗号分隔，`off` 关闭 |
 | `EMAIL_SCAN_SCHEDULE` / `EMAIL_SCAN_DAYS` | `10:00` / `1` | 定时邮箱扫描时刻、覆盖最近几天（1-30） |
+| `WEEKLY_REPORT_SCHEDULE` | `Mon 09:00` | 周报时刻，格式「星期 时刻」，星期可写 `Mon` / `周一` / `1`，`off` 关闭 |
+| `BURN_RATE_WINDOW_DAYS` | `7` | 算日均消耗看最近几天 |
+| `RUNWAY_ALERT_DAYS` | `7` | 按当前速率还剩几天就告警，`0` 关闭 |
+| `SPEND_SPIKE_RATIO` / `SPEND_SPIKE_MIN_AMOUNT` | `3` / `1` | 今日消耗达日常中位数的几倍算突增、低于多少绝对值不报，比例设 `0` 关闭 |
 | `ENABLE_WEB_ALARM` | `false` | 看板刷新和页面操作是否也发真实告警 |
 | `ALERT_COOLDOWN_SECONDS` / `SUBSCRIPTION_ALERT_COOLDOWN_SECONDS` | `86400` | 同一告警的冷却时长，需数据库 |
 | `MAX_CONCURRENT_CHECKS` / `RESPONSE_CACHE_TTL` | `20` / `300` | 并发检查数（1-50）、余额结果缓存秒数 |
@@ -94,8 +98,20 @@ python main.py                              # http://localhost:8080
 | `dashboard_refresh` | 启动即跑，之后每 `BALANCE_REFRESH_INTERVAL_SECONDS` 刷新看板 | 仅 `ENABLE_WEB_ALARM=true` 时 |
 | `alert_check` | 每天 `ALERT_SCHEDULE`，检查余额与订阅 | 是 |
 | `email_scan` | 每天 `EMAIL_SCAN_SCHEDULE`，扫最近 `EMAIL_SCAN_DAYS` 天的邮件 | 是 |
+| `weekly_report` | 每周 `WEEKLY_REPORT_SCHEDULE`，汇总一周消耗、跑道与待续费 | 是 |
 
 任一任务上次失败，`/health` 返回 503 并在 `failed_jobs` 列出，`GET /api/jobs` 看详情。手动跑一次：`python -m services.monitor --dry-run`、`python -m services.email_scanner --days 1`。
+
+## 消耗与跑道
+
+余额历史是一串快照，相邻两点余额下降就是消耗，上升就是充值。据此算出**日均消耗**和**跑道**（按当前速率还能用几天），比静态阈值更早也更准：同样是 430 元，日烧 5 元和日烧 200 元完全是两回事。
+
+在此之上有两类告警，都需要 `ENABLE_DATABASE=true` 攒历史，数据不足时自动沉默，退回纯阈值告警：
+
+- **跑道见底**：预计剩余天数低于 `RUNWAY_ALERT_DAYS` 时提醒，附上预计耗尽日期。已经在报余额不足的账户不重复打扰。
+- **消耗突增**：今日消耗达到近 `BURN_RATE_WINDOW_DAYS` 天中位数的 `SPEND_SPIKE_RATIO` 倍时提醒。key 泄露、任务跑飞通常先表现为这个。
+
+估算至少需要 4 个数据点、跨度 6 小时；跨度不足一天的结果标为低置信度，不用于告警。看板上每张卡片显示「还可用 N 天」，概览显示全部账户里最先见底的那个。每周的 `weekly_report` 会把本周消耗、跑道排名、未来 30 天的订阅支出汇成一张卡片推出去。
 
 ## 看板与 API
 
@@ -140,9 +156,9 @@ kubectl -n common-prod rollout status deploy/balance-alert
 
 ```text
 main.py                 入口：Flask + 进程内调度器 + 指标
-core/                   settings（环境变量）、config_loader（三层配置）、scheduler、state_manager、secret_crypto
+core/                   settings（环境变量）、config_loader（三层配置）、scheduler、timeutil、state_manager、secret_crypto
 providers/              各平台余额适配器；base.py 的 ProviderSpec 用几行声明就能接一个新平台
-services/               monitor（余额检查）、subscription_checker、email_scanner、webhook_adapter、prometheus_exporter
+services/               monitor（余额检查）、runway（消耗与跑道）、weekly_report、subscription_checker、email_scanner、webhook_adapter、prometheus_exporter
 web/                    Flask 应用与蓝图（core / subscription / email / project / history）、请求校验
 static/ templates/      看板前端，原生 JS
 database/               SQLAlchemy 模型与仓库，启动自动建表

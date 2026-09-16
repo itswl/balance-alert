@@ -8,13 +8,14 @@
 | --- | --- | --- |
 | `balance_alert_balance` / `_threshold` / `_ratio` / `_status` | `project` `provider` `type` | 当前余额、阈值、余额 ÷ 阈值、1 正常 0 告警 |
 | `balance_alert_check_status` | `project` `provider` `type` | 上次检查 1 成功 0 失败；失败时余额保留上次成功值 |
+| `balance_alert_burn_rate_per_day` / `_runway_days` | `project` `provider` `type` | 日均消耗、按此速率还能用几天；需数据库历史，没攒够就没有这两个序列 |
 | `balance_alert_subscription_days` / `_amount` / `_status` | `name` `cycle_type` | 距续费天数、金额、1 正常 0 需续费 -1 本周期已续费 |
 | `balance_alert_email_mailbox_status` | `mailbox` | 上次扫描 1 连接正常 0 失败 |
 | `balance_alert_email_last_scan_emails` / `_alerts` | `mailbox` | 上次扫描的邮件数、命中告警数 |
 | `balance_alert_email_scan_total` / `balance_alert_email_alerts_total` | `mailbox` | 累计扫描邮件数、累计命中数 |
 | `balance_alert_job_last_run_timestamp` / `_last_success_timestamp` / `_last_status` / `_last_duration_seconds` | `task` | 定时任务上次运行、上次成功、1 成功 0 失败、耗时 |
 | `balance_alert_job_runs_total` | `task` `status` | 任务运行次数 |
-| `balance_alert_notifications_total` | `kind` `status` | Webhook 通知次数；kind 为 `balance` `subscription` `email` `mailbox_error` |
+| `balance_alert_notifications_total` | `kind` `status` | Webhook 通知次数；kind 为 `balance` `subscription` `email` `mailbox_error` `runway` `spend_spike` `weekly_report` |
 | `balance_alert_last_check_timestamp` | `check_type` | `balance` / `subscription` / `email` 最近一次更新时间 |
 
 项目、订阅、邮箱删除或改名后，旧序列在下一次更新时清掉。任务标签叫 `task` 而不是 `job`：Prometheus 抓取时会把与自带 `job` 冲突的标签改名成 `exported_job`。
@@ -45,6 +46,9 @@ Compose 装载的面板重启后以文件为准，UI 里的改动请从 Settings
 balance_alert_balance and on(project, provider, type) balance_alert_status == 0   # 低于阈值的项目及余额
 bottomk(5, balance_alert_ratio)                                                  # 余额比例最低的 5 个
 balance_alert_check_status == 0                                                  # 上次检查失败的项目
+bottomk(5, balance_alert_runway_days)                                            # 最先见底的 5 个账户
+balance_alert_runway_days < 7                                                    # 跑道不足一周
+balance_alert_burn_rate_per_day > 1.5 * avg_over_time(balance_alert_burn_rate_per_day[7d])  # 消耗在抬头
 balance_alert_email_mailbox_status == 0                                          # 连接失败的邮箱
 increase(balance_alert_email_alerts_total[7d])                                   # 最近 7 天每个邮箱命中数
 time() - balance_alert_job_last_success_timestamp > 26 * 3600                    # 超过 26 小时没成功的任务
@@ -66,6 +70,10 @@ groups:
       - alert: BalanceAlertJobStale
         expr: time() - balance_alert_job_last_success_timestamp{task="alert_check"} > 26 * 3600
         annotations: { summary: "alert_check 超过 26 小时没有成功运行" }
+      - alert: BalanceAlertRunwayShort
+        expr: balance_alert_runway_days < 3
+        for: 1h
+        annotations: { summary: "{{ $labels.project }} 按当前消耗速率不到 3 天就会见底" }
       - alert: BalanceAlertMailboxDown
         expr: balance_alert_email_mailbox_status == 0
         for: 1h

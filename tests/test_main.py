@@ -26,14 +26,16 @@ def metrics():
 class TestBuildJobs:
 
     def test_default_schedules(self, state, monkeypatch):
-        monkeypatch.delenv('ALERT_SCHEDULE', raising=False)
-        monkeypatch.delenv('EMAIL_SCAN_SCHEDULE', raising=False)
+        for key in ('ALERT_SCHEDULE', 'EMAIL_SCAN_SCHEDULE', 'WEEKLY_REPORT_SCHEDULE'):
+            monkeypatch.delenv(key, raising=False)
         jobs = {job.name: job for job in main.build_jobs(state)}
-        assert set(jobs) == {'dashboard_refresh', 'alert_check', 'email_scan'}
+        assert set(jobs) == {'dashboard_refresh', 'alert_check', 'email_scan', 'weekly_report'}
         assert jobs['dashboard_refresh'].run_at_start is True
         assert jobs['dashboard_refresh'].interval_seconds == 3600
         assert jobs['alert_check'].daily_times == [dtime(9, 0), dtime(15, 0)]
         assert jobs['email_scan'].daily_times == [dtime(10, 0)]
+        assert jobs['weekly_report'].daily_times == [dtime(9, 0)]
+        assert jobs['weekly_report'].weekdays == {1}   # 每周一
 
     def test_schedules_follow_env_and_can_be_disabled(self, state, monkeypatch):
         monkeypatch.setenv('ALERT_SCHEDULE', 'off')
@@ -43,6 +45,11 @@ class TestBuildJobs:
         assert jobs['alert_check'].enabled is False
         assert jobs['email_scan'].daily_times == [dtime(8, 0), dtime(20, 0)]
         assert jobs['dashboard_refresh'].interval_seconds == 600
+
+    def test_weekly_report_can_be_disabled(self, state, monkeypatch):
+        monkeypatch.setenv('WEEKLY_REPORT_SCHEDULE', 'off')
+        jobs = {job.name: job for job in main.build_jobs(state)}
+        assert jobs['weekly_report'].enabled is False
 
 
 class TestJobBodies:
@@ -96,6 +103,20 @@ class TestJobBodies:
         scanner.scan_emails.assert_called_once_with(days=1, dry_run=False)
         assert detail == {'mailboxes': 2, 'failed_mailboxes': 1, 'emails': 3, 'alerts': 1, 'alerts_sent': 1, 'dry_run': False}
         assert state.get_email_state()['summary']['failed_mailboxes'] == 1
+
+
+class TestWeeklyReportJob:
+
+    def test_builds_from_state_and_sends(self, state, metrics):
+        state.update_balance_state([
+            {'project': 'A', 'provider': 'openrouter', 'success': True, 'credits': 70, 'threshold': 50,
+             'need_alarm': False},
+        ])
+        with patch('services.weekly_report.runway_service.compute_all', return_value={}), \
+             patch('services.weekly_report.send', return_value=True) as send:
+            detail = main.send_weekly_report(state)
+        send.assert_called_once()
+        assert detail['accounts'] == 1 and detail['sent'] is True
 
 
 class TestResultHandler:
