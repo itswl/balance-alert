@@ -118,7 +118,7 @@ const EmailManager = {
                 '暂无邮箱',
                 AppState.features.dynamic_config
                     ? '点击右上角「添加邮箱」配置要扫描的 IMAP 邮箱'
-                    : '在 config.json 的 email 段配置邮箱；开启 ENABLE_DYNAMIC_CONFIG 后可在这里直接添加'
+                    : '用 EMAIL_HOST / EMAIL_USERNAME / EMAIL_PASSWORD 配置邮箱；开启 ENABLE_DYNAMIC_CONFIG 后可在这里直接添加'
             );
             return;
         }

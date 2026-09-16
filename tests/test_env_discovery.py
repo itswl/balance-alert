@@ -1,9 +1,9 @@
 """
-环境变量自动发现项目：不写 config.json 也能监控
+环境变量自动发现：项目与邮箱都可以只靠环境变量配置
 """
 import pytest
 
-from core.config_loader import MAX_ENV_ACCOUNTS, discover_env_projects
+from core.config_loader import MAX_ENV_ACCOUNTS, discover_env_mailboxes, discover_env_projects
 
 
 def names(projects):
@@ -65,7 +65,7 @@ class TestDiscoverEnvProjects:
         assert discover_env_projects([])[0]['owner_project'] == 'AI 平台'
 
     def test_declared_provider_is_not_duplicated(self, monkeypatch):
-        """config.json 或数据库里已经声明的 provider，不再自动添加"""
+        """数据库里已经声明的 provider，不再自动添加"""
         monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
         monkeypatch.setenv('GLM_API_KEY', 'a.b')
         assert names(discover_env_projects([{'provider': 'DeepSeek'}])) == ['glm']
@@ -82,73 +82,49 @@ class TestDiscoverEnvProjects:
         assert len(discover_env_projects([])) == 1
 
 
-class TestLoadConfigIntegration:
-    """load_config 把自动发现的项目并进清单，且不影响已有来源"""
+class TestDiscoverEnvMailboxes:
+    """邮箱同样可以只靠环境变量"""
 
-    def test_env_projects_appended_to_file_projects(self, monkeypatch, tmp_path):
-        import json
-        from core.config_loader import load_config
+    def test_nothing_without_vars(self):
+        assert discover_env_mailboxes([]) == []
 
-        config_file = tmp_path / 'config.json'
-        config_file.write_text(json.dumps(
-            {'projects': [{'name': 'Test', 'provider': 'openrouter', 'api_key': 'k', 'threshold': 100}]}
-        ), encoding='utf-8')
-        monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
+    def test_needs_all_three_required_vars(self, monkeypatch):
+        monkeypatch.setenv('EMAIL_HOST', 'imap.x.com')
+        monkeypatch.setenv('EMAIL_USERNAME', 'u@x.com')
+        assert discover_env_mailboxes([]) == []      # 少了密码就不算
 
-        projects = load_config(str(config_file))['projects']
-        assert [(p['name'], p.get('from_env', False)) for p in projects] == [('Test', False), ('deepseek', True)]
+    def test_single_mailbox_defaults(self, monkeypatch):
+        monkeypatch.setenv('EMAIL_HOST', 'imap.x.com')
+        monkeypatch.setenv('EMAIL_USERNAME', 'u@x.com')
+        monkeypatch.setenv('EMAIL_PASSWORD', 'pw')
+        assert discover_env_mailboxes([]) == [{
+            'name': 'u@x.com', 'host': 'imap.x.com', 'port': 993,
+            'username': 'u@x.com', 'password': 'pw', 'use_ssl': True, 'from_env': True,
+        }]
 
-    def test_works_without_any_config_file(self, monkeypatch, tmp_path):
-        from core.config_loader import load_config
+    def test_port_name_and_ssl_overrides(self, monkeypatch):
+        for key, value in {'EMAIL_HOST': 'imap.x.com', 'EMAIL_USERNAME': 'u@x.com', 'EMAIL_PASSWORD': 'pw',
+                           'EMAIL_PORT': '143', 'EMAIL_USE_SSL': 'false', 'EMAIL_NAME': '工作邮箱'}.items():
+            monkeypatch.setenv(key, value)
+        mailbox = discover_env_mailboxes([])[0]
+        assert (mailbox['name'], mailbox['port'], mailbox['use_ssl']) == ('工作邮箱', 143, False)
 
-        monkeypatch.setenv('GLM_API_KEY', 'a.b')
-        monkeypatch.setenv('GLM_THRESHOLD', '10')
-        projects = load_config(str(tmp_path / 'absent.json'))['projects']
-        assert len(projects) == 1
-        assert projects[0]['name'] == 'glm'
-        assert projects[0]['type'] == 'quota'     # 仍然走 provider 类型推导
-        assert projects[0]['threshold'] == 10.0
+    def test_multiple_mailboxes(self, monkeypatch):
+        for key, value in {'EMAIL_1_HOST': 'a.com', 'EMAIL_1_USERNAME': 'a@a.com', 'EMAIL_1_PASSWORD': 'p1',
+                           'EMAIL_2_HOST': 'b.com', 'EMAIL_2_USERNAME': 'b@b.com', 'EMAIL_2_PASSWORD': 'p2',
+                           'EMAIL_2_NAME': '备用'}.items():
+            monkeypatch.setenv(key, value)
+        assert [m['name'] for m in discover_env_mailboxes([])] == ['a@a.com', '备用']
 
-    def test_no_keys_means_no_projects(self, tmp_path):
-        from core.config_loader import load_config
+    def test_plain_and_numbered_are_one_mailbox(self, monkeypatch):
+        for key, value in {'EMAIL_HOST': 'a.com', 'EMAIL_USERNAME': 'a@a.com', 'EMAIL_PASSWORD': 'p',
+                           'EMAIL_1_HOST': 'a.com', 'EMAIL_1_USERNAME': 'a@a.com', 'EMAIL_1_PASSWORD': 'p'}.items():
+            monkeypatch.setenv(key, value)
+        assert len(discover_env_mailboxes([])) == 1
 
-        assert load_config(str(tmp_path / 'absent.json'))['projects'] == []
-
-
-class TestConfigFileEdgeCases:
-    """配置文件缺失、空、被挂载成目录时都不该让服务起不来"""
-
-    def test_empty_file_is_treated_as_no_config(self, monkeypatch, tmp_path):
-        from core.config_loader import load_config
-
-        config_file = tmp_path / 'config.json'
-        config_file.write_text('', encoding='utf-8')
-        monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
-
-        projects = load_config(str(config_file))['projects']
-        assert names(projects) == ['deepseek']
-
-    def test_whitespace_only_file(self, tmp_path):
-        from core.config_loader import load_config
-
-        config_file = tmp_path / 'config.json'
-        config_file.write_text('  \n\t ', encoding='utf-8')
-        assert load_config(str(config_file))['projects'] == []
-
-    def test_directory_in_place_of_file_is_ignored(self, monkeypatch, tmp_path):
-        """docker-compose 挂载不存在的文件时会建出目录，不能因此崩溃"""
-        from core.config_loader import load_config
-
-        as_dir = tmp_path / 'config.json'
-        as_dir.mkdir()
-        monkeypatch.setenv('GLM_API_KEY', 'a.b')
-        assert names(load_config(str(as_dir))['projects']) == ['glm']
-
-    def test_malformed_json_still_raises(self, tmp_path):
-        """真正写错的 JSON 仍然要报错，不能悄悄当成空配置"""
-        from core.config_loader import load_config
-
-        config_file = tmp_path / 'config.json'
-        config_file.write_text('{"projects": [', encoding='utf-8')
-        with pytest.raises(ValueError, match='配置文件格式错误'):
-            load_config(str(config_file))
+    def test_declared_mailbox_is_not_duplicated(self, monkeypatch):
+        """数据库里已经有同名或同账号的邮箱就不再添加"""
+        for key, value in {'EMAIL_HOST': 'a.com', 'EMAIL_USERNAME': 'a@a.com', 'EMAIL_PASSWORD': 'p'}.items():
+            monkeypatch.setenv(key, value)
+        assert discover_env_mailboxes([{'name': 'a@a.com'}]) == []
+        assert discover_env_mailboxes([{'name': '别名', 'username': 'a@a.com'}]) == []

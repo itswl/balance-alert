@@ -9,12 +9,7 @@
 import os
 from typing import Any, Dict, List, Tuple
 
-from core.config_loader import (
-    discover_env_projects,
-    load_config,
-    load_config_with_env_vars,
-    provider_key_env_names,
-)
+from core.config_loader import load_config, provider_key_env_names
 from core.config_loader import get_refresh_interval
 from core.timeutil import describe_daily_times
 from core.settings import get_settings
@@ -67,8 +62,9 @@ def _check_projects(projects: List[Dict[str, Any]], lines: List[str]) -> int:
 
         origin = "（环境变量自动发现）" if project.get('from_env') else ""
         detail = f"  {OK} {name} [{provider}/{project.get('type')}] 阈值 {threshold} — Key 来自 {source}{origin}"
-        if threshold in (None, 0):
-            detail = f"  {WARN}{detail[3:]}（阈值为 {threshold}，不会触发告警）"
+        if not threshold:
+            hint = f"{provider.upper()}_THRESHOLD" if project.get('from_env') else "页面上填写阈值"
+            detail = f"  {WARN}{detail[3:]}（阈值 0，不会触发告警，设 {hint}）"
             problems += 1
         lines.append(detail)
 
@@ -159,51 +155,38 @@ def _check_alert_channel(lines: List[str]) -> int:
     return problems
 
 
-def _section_sources(config_path: str) -> Dict[str, str]:
-    """判断三类业务清单最终来自文件还是数据库（与 load_config 的覆盖语义一致）。"""
+def _sources(config: Dict[str, Any]) -> Dict[str, str]:
+    """三段清单各自来自哪：数据库、环境变量，或两者都有"""
     settings = get_settings()
-    db_counts: Dict[str, int] = {}
-    if settings.enable_dynamic_config:
-        try:
-            from database.repository import ConfigRepository
-            db_counts = {section: len(ConfigRepository.get_all(section)) for section in ConfigRepository.SECTIONS}
-        except Exception as e:
-            db_counts = {}
-            print(f"  {WARN} 读取数据库动态配置失败: {e}")
-
-    file_config = load_config_with_env_vars(config_path)
-    env_projects = len(discover_env_projects(file_config.get('projects') or []))
     sources = {}
     for section in ('projects', 'subscriptions', 'email'):
+        items = config.get(section) or []
+        if not items:
+            sources[section] = '(空)'
+            continue
+        from_env = sum(1 for item in items if item.get('from_env'))
         parts = []
-        if db_counts.get(section):
-            parts.append('数据库')
-        if file_config.get(section):
-            parts.append(config_path)
-        if section == 'projects' and env_projects:
+        if len(items) - from_env:
+            parts.append('数据库' if settings.enable_dynamic_config else '未知来源')
+        if from_env:
             parts.append('环境变量')
-        sources[section] = ' + '.join(parts) if parts else '(空)'
+        sources[section] = ' + '.join(parts)
     return sources
 
 
-def check_config(config_path: str) -> int:
+def check_config() -> int:
     """打印配置自检报告，返回发现的问题数量。"""
     settings = get_settings()
-    config = load_config(config_path)
-    sources = _section_sources(config_path)
+    config = load_config()
+    sources = _sources(config)
 
     lines = [
         "配置自检",
-        f"  配置文件: {config_path}{'' if os.path.exists(config_path) else ' (不存在)'}",
         f"  数据库: {settings.database_url.split('://')[0] if settings.enable_database else '未启用'}",
     ]
 
-    distinct = set(sources.values())
-    if len(distinct) == 1:
-        lines.append(f"  业务清单来源: 全部来自 {distinct.pop()}")
-    else:
-        labels = {'projects': '项目', 'subscriptions': '订阅', 'email': '邮箱'}
-        lines.append("  业务清单来源: " + '  '.join(f"{labels[k]}={v}" for k, v in sources.items()))
+    labels = {'projects': '项目', 'subscriptions': '订阅', 'email': '邮箱'}
+    lines.append("  业务清单来源: " + '  '.join(f"{labels[k]}={v}" for k, v in sources.items()))
 
     features = [
         ('数据库', settings.enable_database),
@@ -228,6 +211,9 @@ def check_config(config_path: str) -> int:
         lines.append(f"  消耗分析: 窗口 {settings.burn_rate_window_days} 天  {runway_note}  {spike_note}")
     else:
         lines.append(f"  {WARN} 消耗分析与跑道估算需要 ENABLE_DATABASE=true 攒历史，当前未启用")
+
+    if settings.enable_subscriptions and not settings.enable_dynamic_config:
+        lines.append(f"  {WARN} 订阅只能存在数据库里，请同时开启 ENABLE_DATABASE 与 ENABLE_DYNAMIC_CONFIG")
 
     problems = _check_projects(config.get('projects') or [], lines)
     if settings.enable_subscriptions:

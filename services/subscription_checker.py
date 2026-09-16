@@ -58,9 +58,8 @@ def _coerce_float(value, default: float = 0.0) -> float:
 class SubscriptionChecker:
     """订阅续费检查器"""
     
-    def __init__(self, config_path='config.json'):
-        self.config_path = config_path
-        self.config = load_config(config_path)
+    def __init__(self):
+        self.config = load_config()
         self.results = []
 
     def check_subscriptions(self, dry_run=False):
@@ -76,7 +75,7 @@ class SubscriptionChecker:
         subscriptions = self.config.get('subscriptions', [])
 
         if not subscriptions:
-            logger.info("没有配置订阅项目")
+            logger.info("没有订阅项目，可在页面上添加（需要数据库动态配置）")
             return []
         
         # 过滤启用的订阅

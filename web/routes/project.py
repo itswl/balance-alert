@@ -3,11 +3,10 @@
 项目配置 API 路由
 
 读接口始终可用（密钥脱敏）；增删改需要 ENABLE_DYNAMIC_CONFIG，否则统一返回 503。
-配好动态配置后，项目清单可以完全在页面上维护，不再需要 config.json。
+配好动态配置后，项目清单可以完全在页面上维护。
 """
 from flask import Blueprint, request
 
-from core.config_loader import get_default_config_path
 from core.logger import get_logger
 from core.settings import get_settings
 from services.monitor import run_credit_monitor
@@ -54,7 +53,7 @@ def _find(name: str):
 def _refresh_one(name: str) -> None:
     """只重查这一个项目并合并进看板状态，避免把所有上游都打一遍"""
     try:
-        result = run_credit_monitor(get_default_config_path(), name, dry_run=not get_settings().enable_web_alarm)
+        result = run_credit_monitor(name, dry_run=not get_settings().enable_web_alarm)
         if result.get('success'):
             state_manager = runtime().state_manager
             state_manager.merge_balance_state(result.get('results') or [])

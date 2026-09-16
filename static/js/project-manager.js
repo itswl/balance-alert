@@ -1,5 +1,5 @@
 // ==================== 项目管理：新增 / 编辑 / 删除 ====================
-// 开了 ENABLE_DYNAMIC_CONFIG 后，项目清单可以完全在页面上维护，不需要 config.json
+// 开了 ENABLE_DYNAMIC_CONFIG 后，项目清单可以完全在页面上维护
 
 const ProjectManager = {
     providers: [],

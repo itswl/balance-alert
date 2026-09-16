@@ -212,7 +212,7 @@ class TestRefreshOne:
              patch.object(project_routes, 'metrics_collector') as metrics:
             project_routes._refresh_one('火山-主账号')
 
-        assert monitor.call_args.args[1] == '火山-主账号'      # 只查这一个
+        assert monitor.call_args.args[0] == '火山-主账号'      # 只查这一个
         projects = {p['project'] for p in state.get_balance_state()['projects']}
         assert projects == {'别的', '火山-主账号'}             # 合并而不是覆盖
         metrics.update_balance_metrics.assert_called_once()

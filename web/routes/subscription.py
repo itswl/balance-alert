@@ -7,7 +7,6 @@ from datetime import date, datetime
 
 from flask import Blueprint, request
 
-from core.config_loader import get_default_config_path
 from core.logger import get_logger
 from core.settings import get_settings
 from services.prometheus_exporter import metrics_collector
@@ -46,7 +45,7 @@ def _require_enabled():
 def _refresh_state() -> None:
     """配置变化后重新检查订阅，更新看板状态与指标；是否真发告警与看板刷新同一开关"""
     try:
-        checker = SubscriptionChecker(get_default_config_path())
+        checker = SubscriptionChecker()
         results = checker.check_subscriptions(dry_run=not get_settings().enable_web_alarm) or []
         runtime().state_manager.update_subscription_state(results)
         metrics_collector.update_subscription_metrics(results)
