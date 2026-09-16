@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Balance Alert</title>
-    <link rel="stylesheet" href="/static/app.css?v=dd0b9e049c85">
+    <link rel="stylesheet" href="/static/app.css?v=0d5c4d2958ab">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2317191d'/><text x='16' y='21.5' text-anchor='middle' font-family='Menlo,monospace' font-size='15' font-weight='700' fill='white'>B</text></svg>">
 </head>
 <body>
@@ -73,7 +73,7 @@
                     </svg>
                 </div>
                 <div class="stat-content">
-                    <div class="stat-label">告警项目</div>
+                    <div class="stat-label" id="alert-projects-label">告警项目</div>
                     <div class="stat-value" id="alert-projects">-</div>
                 </div>
             </div>
@@ -562,6 +562,6 @@
     </div>
 
     <!-- 整个看板打成一个包；趋势图不再依赖 CDN 上的 Chart.js，改用自带的 canvas 折线图 -->
-    <script defer src="/static/app.js?v=dd0b9e049c85"></script>
+    <script defer src="/static/app.js?v=0d5c4d2958ab"></script>
 </body>
 </html>

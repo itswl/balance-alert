@@ -239,6 +239,9 @@ type EmailAlert struct {
 	ServiceName *string  `json:"service_name"`
 	Amount      *float64 `json:"amount"`
 	AlertSent   bool     `json:"alert_sent"`
+	// Duplicate 表示这封邮件近期已经通知过，本次跳过。
+	// 看板据此显示「已通知过」徽章，好让人知道它不是漏发了。
+	Duplicate bool `json:"duplicate,omitempty"`
 }
 
 // ScanResult 一次邮箱扫描的完整结果。

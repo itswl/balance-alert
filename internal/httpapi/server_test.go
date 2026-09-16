@@ -352,3 +352,22 @@ func TestUnknownProviderRejected(t *testing.T) {
 		t.Errorf("期望 400，实际 %d：%s", got.Code, got.Body.String())
 	}
 }
+
+// TestTrendPathIsDecoded 前端传的是 encodeURIComponent("provider:name")，
+// 项目名里可能有中文甚至斜杠。Flask 会自动解码，Go 的 PathValue 也会——
+// 这条钉住它，防止以后有人改成手工切 r.URL.Path 而切错。
+func TestTrendPathIsDecoded(t *testing.T) {
+	_, handler := newServer(t, func(s *config.Settings) { s.EnableHistoryAPI = true })
+
+	// 没有数据库时查不到数据，回 404 即说明路由匹配上了、参数解出来了
+	for _, path := range []string{
+		"/api/history/trend/583276a5396571565636ca419969f306",
+		"/api/history/trend/deepseek%3Adeepseek",
+		"/api/history/trend/volc%3A%E7%81%AB%E5%B1%B1-%E4%B8%BB%E8%B4%A6%E5%8F%B7",
+	} {
+		got := request(t, handler, "GET", path, "", true)
+		if got.Code != http.StatusNotFound {
+			t.Errorf("%s 期望 404（路由命中但无数据），实际 %d：%s", path, got.Code, got.Body.String())
+		}
+	}
+}

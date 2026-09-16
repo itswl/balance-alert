@@ -22,6 +22,11 @@ import { ICON_ARROW_RIGHT, ICON_DELETE, ICON_EDIT } from './icons.js';
  * 冒烟测试可以直接喂数据比对输出。
  */
 export function renderProjectCard(project: CheckResult, features: Features): string {
+  // 查不到余额的项目单独一种形态。旧版把 credits 的 null 当 0 渲染，阈值也是 null，
+  // 于是"密钥过期"在页面上长得跟"余额充足"一模一样——监控工具最不该出的错。
+  if (!project.success) {
+    return renderFailedCard(project, features);
+  }
   const balance = project.credits || 0;
   const threshold = project.threshold || 0;
   const status = getBalanceStatus(balance, threshold);
@@ -100,6 +105,55 @@ export function renderProjectCard(project: CheckResult, features: Features): str
                     </div>
                 </div>
                 ${trendAction}
+            </div>
+        `;
+}
+
+/** 查不到余额的项目：不显示余额与进度条，直接把错误原文摆出来 */
+function renderFailedCard(project: CheckResult, features: Features): string {
+  const projectName = project.project || '未知项目';
+  const provider = project.provider || 'unknown';
+  const ownerProject = project.owner_project || '未关联项目';
+  const reason = project.error || '未知原因';
+
+  const projectNameAttr = escapeAttr(projectName);
+  const providerAttr = escapeAttr(provider);
+
+  const optionalActions = features.dynamic_config
+    ? `
+                        <button class="action-icon-btn js-edit-project" data-project="${projectNameAttr}" title="编辑项目">
+                            ${ICON_EDIT}
+                        </button>
+                        <button class="action-icon-btn danger js-delete-project" data-project="${projectNameAttr}" title="删除项目">
+                            ${ICON_DELETE}
+                        </button>`
+    : '';
+
+  return `
+            <div class="project-card failed" data-provider="${providerAttr}" data-status="failed">
+                <div class="project-header">
+                    <div class="project-info">
+                        <h3>${escapeHTML(projectName)}</h3>
+                        <div class="project-meta-row">
+                            <span class="project-provider">${escapeHTML(provider)}</span>
+                            <span class="owner-project-badge">${escapeHTML(ownerProject)}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${optionalActions}
+                        <div class="project-status failed"></div>
+                    </div>
+                </div>
+                <div class="project-balance">
+                    <div class="balance-label">当前余额</div>
+                    <div class="balance-value unavailable">查不到</div>
+                </div>
+                <div class="project-details">
+                    <div class="detail-item full-width">
+                        <span class="detail-label">失败原因</span>
+                        <span class="detail-value failure-reason" title="${escapeAttr(reason)}">${escapeHTML(reason)}</span>
+                    </div>
+                </div>
             </div>
         `;
 }

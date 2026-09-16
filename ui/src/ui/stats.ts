@@ -19,7 +19,26 @@ export function updateStats(data: CreditsResponse): void {
   setText('normal-projects', String(projects.filter((p) => !p.need_alarm && p.success).length));
   setText('alert-projects', String(projects.filter((p) => p.need_alarm).length));
   setText('last-update', getRelativeTime(data.last_update));
+  updateFailedHint(projects);
   updateRunwayStat(projects);
+}
+
+/**
+ * 查询失败的项目既不算正常也不算告警，总数对不上时得有个说法。
+ * 挂在告警卡片的标签上，不用为此多占一格。
+ */
+export function updateFailedHint(projects: CheckResult[]): void {
+  const label = byId('alert-projects-label');
+  if (!label) return;
+
+  const failed = projects.filter((p) => !p.success);
+  if (failed.length === 0) {
+    label.textContent = '告警项目';
+    label.title = '';
+    return;
+  }
+  label.textContent = `告警项目 · ${failed.length} 个查不到`;
+  label.title = `查不到余额：${failed.map((p) => p.project).join('、')}`;
 }
 
 export function updateRunwayStat(projects: CheckResult[]): void {

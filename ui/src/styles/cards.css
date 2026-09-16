@@ -482,3 +482,28 @@
 .error-text {
     color: var(--danger);
 }
+
+/* 查不到余额的项目：整张卡片降调，状态点用危险色，一眼能从正常卡片里挑出来 */
+.project-card.failed {
+    border-color: var(--danger-border, var(--border));
+}
+
+.project-card.failed .balance-value.unavailable {
+    color: var(--text-muted);
+    font-style: normal;
+}
+
+.project-status.failed {
+    background: var(--danger);
+}
+
+.detail-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.detail-value.failure-reason {
+    color: var(--danger);
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+}

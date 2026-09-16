@@ -248,6 +248,8 @@ func (s *Scanner) inspect(ctx context.Context, raw []byte, mailbox string, state
 	case state.dryRun:
 		s.log().Info("测试模式，跳过发送告警", "mailbox", mailbox, "subject", msg.Subject)
 	case s.duplicated(ctx, alert, state.days):
+		// 标出来而不是静默跳过：看板上要能区分「已经通知过」和「没匹配上」
+		alert.Duplicate = true
 		s.log().Info("邮件告警已发送过，跳过重复通知", "mailbox", mailbox, "subject", msg.Subject)
 	default:
 		alert.AlertSent = s.send(ctx, alert)

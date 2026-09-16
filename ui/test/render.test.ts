@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import type { CheckResult, CreditsResponse, Features, Runway, SubscriptionResult } from '../src/api/types.js';
 import { filterProjects, renderProjectCard, renderProjects } from '../src/ui/projects.js';
 import { renderSubscriptionCard } from '../src/ui/subscriptions.js';
-import { shortestRunway, updateStats } from '../src/ui/stats.js';
+import { shortestRunway, updateFailedHint, updateStats } from '../src/ui/stats.js';
 import { resetStubDom, stubElement } from './stub-dom.js';
 
 const ALL_OFF: Features = { subscriptions: false, dynamic_config: false, history: false };
@@ -106,6 +106,47 @@ describe('renderProjectCard', () => {
   });
 });
 
+describe('查不到余额的项目', () => {
+  const failed = project({
+    success: false,
+    credits: null,
+    threshold: null,
+    error: 'HTTP 401: Unauthorized',
+  });
+
+  it('不把 null 余额渲染成 0.00', () => {
+    const html = renderProjectCard(failed, ALL_OFF);
+    assert.ok(html.includes('查不到'), '应该明说查不到');
+    assert.ok(!html.includes('0.00'), '不能编造一个 0.00 的余额');
+  });
+
+  it('不把失败标成正常', () => {
+    const html = renderProjectCard(failed, ALL_OFF);
+    assert.ok(html.includes('data-status="failed"'), '状态应是 failed');
+    assert.ok(!html.includes('>正常<'), '失败的项目不能显示成正常');
+    assert.ok(!html.includes('balance-progress-bar'), '不该画一条满格的进度条');
+  });
+
+  it('把失败原因摆出来', () => {
+    const html = renderProjectCard(failed, ALL_OFF);
+    assert.ok(html.includes('HTTP 401: Unauthorized'), '错误原文要能看到');
+  });
+
+  it('错误消息同样转义，不能从这里注入', () => {
+    const html = renderProjectCard(
+      project({ success: false, credits: null, error: '<img src=x onerror=alert(1)>' }),
+      ALL_OFF,
+    );
+    assert.ok(!html.includes('<img src=x'), '错误消息必须转义');
+  });
+
+  it('开了动态配置仍然能编辑删除，否则改不掉坏掉的密钥', () => {
+    const html = renderProjectCard(failed, ALL_ON);
+    assert.ok(html.includes('js-edit-project'), '要能编辑');
+    assert.ok(html.includes('js-delete-project'), '要能删除');
+  });
+});
+
 describe('filterProjects', () => {
   const projects = [
     project({ project: 'deepseek', provider: 'deepseek', need_alarm: false }),
@@ -123,6 +164,27 @@ describe('filterProjects', () => {
     assert.equal(filterProjects(projects, { search: '', provider: 'openrouter', alertsOnly: false }).length, 1);
     assert.equal(filterProjects(projects, { search: '', provider: 'all', alertsOnly: true }).length, 1);
     assert.equal(filterProjects(projects, { search: '', provider: 'openrouter', alertsOnly: true }).length, 0);
+  });
+});
+
+describe('概览里的检查失败提示', () => {
+  it('有失败时在告警卡片标签上说明，总数才对得上', () => {
+    resetStubDom();
+    const label = stubElement('alert-projects-label');
+    updateFailedHint([
+      project(),
+      project({ project: 'glm', success: false, credits: null, error: 'HTTP 401' }),
+      project({ project: 'volc', success: false, credits: null, error: '超时' }),
+    ]);
+    assert.ok(label.textContent.includes('2 个查不到'), `实际是 ${label.textContent}`);
+    assert.ok(label.title.includes('glm'), '悬停要能看到是哪几个');
+  });
+
+  it('全都正常时不留多余文字', () => {
+    resetStubDom();
+    const label = stubElement('alert-projects-label');
+    updateFailedHint([project()]);
+    assert.equal(label.textContent, '告警项目');
   });
 });
 
