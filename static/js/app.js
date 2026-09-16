@@ -458,10 +458,16 @@ const UI = {
         const optionalActions = [];
         if (AppState.features.dynamic_config) {
             optionalActions.push(`
-                        <button class="action-icon-btn js-edit-threshold" data-project="${projectNameAttr}" data-threshold="${Utils.escapeAttr(threshold)}" title="编辑阈值">
+                        <button class="action-icon-btn js-edit-project" data-project="${projectNameAttr}" title="编辑项目">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>
+                        <button class="action-icon-btn danger js-delete-project" data-project="${projectNameAttr}" title="删除项目">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                             </svg>
                         </button>`);
         }
@@ -785,9 +791,15 @@ const App = {
         });
 
         document.addEventListener('click', (event) => {
-            const editThresholdBtn = event.target.closest('.js-edit-threshold');
-            if (editThresholdBtn) {
-                editProjectThreshold(editThresholdBtn.dataset.project, parseFloat(editThresholdBtn.dataset.threshold || '0'));
+            const editProjectBtn = event.target.closest('.js-edit-project');
+            if (editProjectBtn) {
+                editProject(editProjectBtn.dataset.project);
+                return;
+            }
+
+            const deleteProjectBtn = event.target.closest('.js-delete-project');
+            if (deleteProjectBtn) {
+                deleteProject(deleteProjectBtn.dataset.project);
                 return;
             }
 
@@ -853,6 +865,12 @@ const App = {
         const addSubscriptionBtn = document.getElementById('add-subscription-btn');
         if (addSubscriptionBtn && !AppState.features.subscriptions) {
             addSubscriptionBtn.style.display = 'none';
+        }
+
+        // 项目的增删改依赖数据库动态配置
+        const addProjectBtn = document.getElementById('add-project-btn');
+        if (addProjectBtn) {
+            addProjectBtn.style.display = AppState.features.dynamic_config ? 'inline-flex' : 'none';
         }
     },
 

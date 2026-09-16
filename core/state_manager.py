@@ -81,6 +81,13 @@ class StateManager:
                     proj_map[proj_key] = r
             self._set_balance(list(proj_map.values()))
 
+    def remove_balance_project(self, name: str) -> None:
+        """项目被删除后从看板状态里摘掉，不必等下一轮检查"""
+        with self._lock:
+            kept = [p for p in self._balance['projects'] if p.get('project') != name]
+            if len(kept) != len(self._balance['projects']):
+                self._set_balance(kept)
+
     def update_subscription_state(self, subscriptions: Optional[List[Dict[str, Any]]]) -> None:
         """更新订阅状态（线程安全）"""
         with self._lock:

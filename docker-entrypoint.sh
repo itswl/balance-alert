@@ -5,16 +5,10 @@ set -e
 
 mkdir -p /app/logs /app/data
 
-# config.json 只放业务清单；不存在或为空时给一份空清单，密钥、开关等一律走环境变量
-if [ ! -s /app/config.json ]; then
-    cat > /app/config.json << 'JSON'
-{
-  "email": [],
-  "subscriptions": [],
-  "projects": []
-}
-JSON
-    echo "已创建默认 config.json"
+# config.json 是可选的：项目可以由 {PROVIDER}_API_KEY 自动发现，也可以在页面上维护。
+# docker-compose 把它作为文件挂载，宿主机上没有时 Docker 会建成目录，这里清掉以免误判。
+if [ -d /app/config.json ]; then
+    rmdir /app/config.json 2>/dev/null || true
 fi
 
 echo "Balance Alert 启动，Web: http://localhost:${WEB_PORT:-8080}"

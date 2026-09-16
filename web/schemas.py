@@ -117,3 +117,35 @@ class EmailConfigRequest(BaseModel):
     @classmethod
     def strip_text(cls, v: Any) -> Any:
         return v.strip() if isinstance(v, str) else v
+
+
+class ProjectConfigRequest(BaseModel):
+    """添加或更新项目配置。name 是唯一键；更新时只改传了的字段，api_key 留空表示不变。"""
+    name: str = Field(..., min_length=1, max_length=200, description="项目名称（唯一键）")
+    provider: Optional[str] = Field(default=None, min_length=1, max_length=50, description="平台标识")
+    api_key: Optional[str] = Field(default=None, max_length=500, description="密钥，留空表示不修改")
+    threshold: Optional[float] = Field(default=None, ge=0, description="告警阈值")
+    type: Optional[Literal['credits', 'balance', 'quota']] = Field(default=None, description="余额类型")
+    owner_project: Optional[str] = Field(default=None, max_length=200, description="所属项目分组")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
+
+    @field_validator('name', 'provider', 'owner_project', mode='before')
+    @classmethod
+    def strip_text(cls, v: Any) -> Any:
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator('provider')
+    @classmethod
+    def known_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from providers import PROVIDERS
+        provider = v.lower()
+        if provider not in PROVIDERS:
+            raise ValueError(f"未知的平台: {v}，可选 {', '.join(sorted(PROVIDERS))}")
+        return provider
+
+
+class DeleteByNameRequest(BaseModel):
+    """按名称删除一条配置"""
+    name: str = Field(..., min_length=1, max_length=200, description="名称")

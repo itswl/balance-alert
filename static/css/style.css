@@ -771,6 +771,17 @@ svg {
     opacity: 1;
 }
 
+/* 项目卡片的操作按钮同样悬停才出现，避免默认状态太吵 */
+.project-card .action-icon-btn {
+    opacity: 0;
+    transition: opacity var(--ease);
+}
+
+.project-card:hover .action-icon-btn,
+.project-card:focus-within .action-icon-btn {
+    opacity: 1;
+}
+
 .action-icon-btn {
     width: 28px;
     height: 28px;

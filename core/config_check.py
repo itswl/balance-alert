@@ -9,7 +9,12 @@
 import os
 from typing import Any, Dict, List, Tuple
 
-from core.config_loader import load_config, load_config_with_env_vars, provider_key_env_names
+from core.config_loader import (
+    discover_env_projects,
+    load_config,
+    load_config_with_env_vars,
+    provider_key_env_names,
+)
 from core.config_loader import get_refresh_interval
 from core.timeutil import describe_daily_times
 from core.settings import get_settings
@@ -60,7 +65,8 @@ def _check_projects(projects: List[Dict[str, Any]], lines: List[str]) -> int:
             problems += 1
             continue
 
-        detail = f"  {OK} {name} [{provider}/{project.get('type')}] 阈值 {threshold} — Key 来自 {source}"
+        origin = "（环境变量自动发现）" if project.get('from_env') else ""
+        detail = f"  {OK} {name} [{provider}/{project.get('type')}] 阈值 {threshold} — Key 来自 {source}{origin}"
         if threshold in (None, 0):
             detail = f"  {WARN}{detail[3:]}（阈值为 {threshold}，不会触发告警）"
             problems += 1
@@ -166,14 +172,17 @@ def _section_sources(config_path: str) -> Dict[str, str]:
             print(f"  {WARN} 读取数据库动态配置失败: {e}")
 
     file_config = load_config_with_env_vars(config_path)
+    env_projects = len(discover_env_projects(file_config.get('projects') or []))
     sources = {}
     for section in ('projects', 'subscriptions', 'email'):
+        parts = []
         if db_counts.get(section):
-            sources[section] = '数据库'
-        elif file_config.get(section):
-            sources[section] = config_path
-        else:
-            sources[section] = '(空)'
+            parts.append('数据库')
+        if file_config.get(section):
+            parts.append(config_path)
+        if section == 'projects' and env_projects:
+            parts.append('环境变量')
+        sources[section] = ' + '.join(parts) if parts else '(空)'
     return sources
 
 
