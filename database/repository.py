@@ -322,6 +322,28 @@ class BalanceRepository:
         return [r.to_dict() for r in records]
 
     @staticmethod
+    @db_op([], "查询余额序列失败", exc_info=True)
+    def get_balance_series(session, days: int = 7) -> List[Dict[str, Any]]:
+        """窗口内全部账户的余额快照，按时间升序；用于算消耗速率与跑道"""
+        rows = session.query(
+            BalanceHistory.project_id,
+            BalanceHistory.project_name,
+            BalanceHistory.provider,
+            BalanceHistory.balance_type,
+            BalanceHistory.balance,
+            BalanceHistory.timestamp,
+        ).filter(BalanceHistory.timestamp >= utcnow() - timedelta(days=days))\
+            .order_by(BalanceHistory.timestamp).all()
+        return [{
+            'project_id': r.project_id,
+            'project_name': r.project_name,
+            'provider': r.provider,
+            'balance_type': r.balance_type,
+            'balance': r.balance,
+            'timestamp': r.timestamp,
+        } for r in rows]
+
+    @staticmethod
     @db_op(DB_DISABLED_ERROR, "获取余额趋势失败", exc_info=True)
     def get_balance_trend(session, project_id: str, days: int = 30) -> Dict[str, Any]:
         """获取余额趋势分析"""

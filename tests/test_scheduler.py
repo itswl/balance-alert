@@ -8,7 +8,14 @@ from datetime import datetime, time as dtime, timedelta, timezone
 import pytest
 
 from core.scheduler import Job, JobResult, JobScheduler
-from core.timeutil import describe_daily_times, next_daily_occurrence, parse_daily_times, to_utc_iso
+from core.timeutil import (
+    describe_daily_times,
+    next_daily_occurrence,
+    parse_daily_times,
+    parse_weekdays,
+    parse_weekly_schedule,
+    to_utc_iso,
+)
 
 CST = timezone(timedelta(hours=8))
 
@@ -30,6 +37,39 @@ class TestParseDailyTimes:
     def test_describe(self):
         assert describe_daily_times([]) == '已关闭'
         assert describe_daily_times([dtime(15, 0), dtime(9, 0)]) == '每天 09:00 / 15:00'
+        assert describe_daily_times([dtime(9, 0)], {1}) == '每周一 09:00'
+        assert describe_daily_times([dtime(9, 0)], {4, 1}) == '每周一、四 09:00'
+
+
+class TestWeeklySchedule:
+    """「星期 时刻」格式：周报用"""
+
+    @pytest.mark.parametrize('text, expected', [
+        ('Mon', {1}), ('mon,THU', {1, 4}), ('周一、周日', {1, 7}), ('1,7', {1, 7}), ('', set()), (None, set()),
+    ])
+    def test_parse_weekdays(self, text, expected):
+        assert parse_weekdays(text) == expected
+
+    @pytest.mark.parametrize('text', ['Funday', '0', '8'])
+    def test_invalid_weekday_raises(self, text):
+        with pytest.raises(ValueError):
+            parse_weekdays(text)
+
+    @pytest.mark.parametrize('text, weekdays, times', [
+        ('Mon 09:00', {1}, [dtime(9, 0)]),
+        ('Mon,Thu 09:00,18:00', {1, 4}, [dtime(9, 0), dtime(18, 0)]),
+        ('09:00', set(), [dtime(9, 0)]),           # 省略星期表示每天
+        ('周一 09:30', {1}, [dtime(9, 30)]),
+        ('off', set(), []),
+        (None, set(), []),
+    ])
+    def test_parse_weekly_schedule(self, text, weekdays, times):
+        assert parse_weekly_schedule(text) == (weekdays, times)
+
+    @pytest.mark.parametrize('text', ['Mon 25:00', 'Funday 09:00', 'Mon 9am'])
+    def test_invalid_weekly_schedule_raises(self, text):
+        with pytest.raises(ValueError):
+            parse_weekly_schedule(text)
 
 
 class TestNextDailyOccurrence:
@@ -51,6 +91,21 @@ class TestNextDailyOccurrence:
         now = datetime(2026, 9, 14, 9, 0, tzinfo=CST)
         assert next_daily_occurrence(now, self.times) == datetime(2026, 9, 14, 15, 0, tzinfo=CST)
 
+    def test_weekday_filter_skips_other_days(self):
+        """只在周一触发：周二问下次，应该是下周一"""
+        tuesday = datetime(2026, 9, 15, 10, 0, tzinfo=CST)
+        assert tuesday.isoweekday() == 2
+        assert next_daily_occurrence(tuesday, [dtime(9, 0)], {1}) == datetime(2026, 9, 21, 9, 0, tzinfo=CST)
+
+    def test_weekday_same_day_before_time(self):
+        monday_early = datetime(2026, 9, 14, 8, 0, tzinfo=CST)
+        assert monday_early.isoweekday() == 1
+        assert next_daily_occurrence(monday_early, [dtime(9, 0)], {1}) == datetime(2026, 9, 14, 9, 0, tzinfo=CST)
+
+    def test_weekday_same_day_after_time_rolls_a_week(self):
+        monday_late = datetime(2026, 9, 14, 10, 0, tzinfo=CST)
+        assert next_daily_occurrence(monday_late, [dtime(9, 0)], {1}) == datetime(2026, 9, 21, 9, 0, tzinfo=CST)
+
     def test_to_utc_iso(self):
         assert to_utc_iso(datetime(2026, 9, 14, 9, 0, tzinfo=CST)) == '2026-09-14T01:00:00Z'
         assert to_utc_iso(None) is None
@@ -63,6 +118,7 @@ class TestJob:
         assert Job('a', lambda: None).schedule_text() == '已关闭'
         assert Job('b', lambda: None, interval_seconds=60).schedule_text() == '每 60 秒'
         assert Job('c', lambda: None, daily_times=[dtime(9, 0)]).schedule_text() == '每天 09:00'
+        assert Job('w', lambda: None, daily_times=[dtime(9, 0)], weekdays={1}).schedule_text() == '每周一 09:00'
         assert Job('d', lambda: None, interval_seconds=0).enabled is False
 
     def test_initial_next_run(self):
@@ -70,6 +126,8 @@ class TestJob:
         assert Job('a', lambda: None, interval_seconds=60, run_at_start=True).initial_next_run(now) == now
         assert Job('b', lambda: None, interval_seconds=60).initial_next_run(now) == now + timedelta(seconds=60)
         assert Job('c', lambda: None, daily_times=[dtime(9, 0)]).initial_next_run(now) == datetime(2026, 9, 14, 9, 0, tzinfo=CST)
+        weekly = Job('w', lambda: None, daily_times=[dtime(9, 0)], weekdays={5})  # 周五
+        assert weekly.initial_next_run(now) == datetime(2026, 9, 18, 9, 0, tzinfo=CST)
         assert Job('d', lambda: None).initial_next_run(now) is None
 
 

@@ -51,13 +51,20 @@ curl -X POST -H "X-API-Key: $WEB_API_KEY" -H "Content-Type: application/json" \
 
 `GET /api/credits`
 
+`runway` 只在开了 `ENABLE_DATABASE` 且攒够历史时出现：`confidence` 为 `none` 时其余估算字段为空，`low` 表示跨度不足一天、不用于告警。
+
 ```json
 {
   "last_update": "2026-09-14T03:35:17Z",
   "projects": [
     { "project": "deepseek", "provider": "deepseek", "type": "balance", "owner_project": null,
       "success": true, "credits": 430.37, "threshold": 50, "need_alarm": false, "alarm_sent": false,
-      "error": null, "cached": false }
+      "error": null, "cached": false,
+      "runway": { "window_days": 7, "data_points": 168, "span_hours": 167.0, "confidence": "high",
+                  "consumed": 437.5, "topped_up": 0.0, "burn_per_day": 62.5,
+                  "runway_days": 6.89, "depletion_date": "2026-09-21",
+                  "today_consumed": 58.2, "baseline_consumed": 61.0, "spike_ratio": 0.95,
+                  "daily": [{ "date": "2026-09-08", "consumed": 61.0 }] } }
   ],
   "summary": { "total": 2, "success": 2, "failed": 0, "need_alarm": 0 }
 }

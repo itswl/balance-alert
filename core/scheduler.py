@@ -14,7 +14,7 @@ import threading
 import time as time_module
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, Set
 
 from core.logger import get_logger
 from core.timeutil import describe_daily_times, local_now, next_daily_occurrence
@@ -30,6 +30,7 @@ class Job:
     description: str = ''
     interval_seconds: Optional[int] = None
     daily_times: List[time] = field(default_factory=list)
+    weekdays: Set[int] = field(default_factory=set)  # 空=每天；1=周一 … 7=周日
     run_at_start: bool = False
     next_run: Optional[datetime] = None
 
@@ -40,21 +41,19 @@ class Job:
     def schedule_text(self) -> str:
         if self.interval_seconds and self.interval_seconds > 0:
             return f'每 {self.interval_seconds} 秒'
-        return describe_daily_times(self.daily_times)
+        return describe_daily_times(self.daily_times, self.weekdays)
 
     def initial_next_run(self, now: datetime) -> Optional[datetime]:
         if self.interval_seconds and self.interval_seconds > 0:
             return now if self.run_at_start else now + timedelta(seconds=self.interval_seconds)
-        if self.daily_times:
-            return next_daily_occurrence(now, self.daily_times)
-        return None
+        return self.following_run(now)
 
     def following_run(self, now: datetime) -> Optional[datetime]:
         """一次运行结束后的下一次时刻"""
         if self.interval_seconds and self.interval_seconds > 0:
             return now + timedelta(seconds=self.interval_seconds)
         if self.daily_times:
-            return next_daily_occurrence(now, self.daily_times)
+            return next_daily_occurrence(now, self.daily_times, self.weekdays)
         return None
 
 
