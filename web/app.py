@@ -83,9 +83,8 @@ def _register_blueprints(app: Flask):
     # 订阅、邮箱蓝图始终注册，未启用的能力由蓝图内部统一返回 503
     app.register_blueprint(subscription_bp)
     app.register_blueprint(email_bp)
+    app.register_blueprint(project_bp)
 
-    if settings.enable_dynamic_config:
-        app.register_blueprint(project_bp)
     if settings.enable_history_api:
         app.register_blueprint(history_bp)
 

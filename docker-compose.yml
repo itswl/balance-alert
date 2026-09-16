@@ -8,7 +8,8 @@ services:
       - "8080:8080"  # Web 服务端口
       - "9100:9100"  # Prometheus Metrics 端口
     volumes:
-      # 挂载配置文件（可以在宿主机修改配置）
+      # 可选：用 config.json 声明业务清单时挂上；不用时删掉这行即可
+      # （项目也能由 {PROVIDER}_API_KEY 自动发现，或在页面上维护）
       - ./config.json:/app/config.json
       # 挂载日志目录
       - ./logs:/app/logs

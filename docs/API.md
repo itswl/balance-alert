@@ -26,8 +26,11 @@
 | `POST /api/config/subscription` | 更新订阅，`name` 定位，`new_name` 改名，其余字段按需传 | 订阅 |
 | `POST\|DELETE /api/subscription/delete` | 删除订阅 `{name}` | 订阅 |
 | `POST /api/subscription/mark_renewed` `clear_renewed` | 标记 / 取消已续费，可带 `renewed_date` | 订阅 |
-| `GET /api/config/projects` | 项目配置，密钥脱敏 | 动态配置 |
-| `POST /api/config/threshold` | 改阈值 `{project_name, new_threshold}` | 动态配置 |
+| `GET /api/providers` | 支持的平台清单，含默认余额类型 | — |
+| `GET /api/config/projects` | 项目配置，密钥脱敏 | — |
+| `POST /api/config/project` | 新增或更新项目；`name` 是唯一键，新增需 `provider` `api_key`，更新时密钥留空不改 | 动态配置 |
+| `POST /api/config/project/delete` | 删除项目 `{name}`；环境变量自动发现的项目不可删 | 动态配置 |
+| `POST /api/config/threshold` | 只改阈值的快捷入口 `{project_name, new_threshold}` | 动态配置 |
 | `GET /api/config/emails` | 邮箱配置，密码脱敏 | — |
 | `POST /api/config/email` | 新增或更新邮箱；`name` 是唯一键，新增需 `host` `username` `password`，更新时密码留空不改 | 动态配置 |
 | `POST /api/config/email/delete` | 删除邮箱 `{name}` | 动态配置 |

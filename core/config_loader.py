@@ -69,7 +69,7 @@ def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
 # 目标：config.json 只写必要字段，其余按约定推导，文件/数据库/API 三条来路统一在此处理。
 
 # provider 的默认余额类型（仅影响展示与告警文案）
-_PROVIDER_DEFAULT_TYPE = {
+PROVIDER_DEFAULT_TYPE = {
     'openrouter': 'credits',
     'uniapi': 'credits',
     'wxrank': 'credits',
@@ -100,6 +100,71 @@ def provider_key_env_names(provider: str, ordinal: int = 1) -> list:
     if ordinal <= 1:
         return [f'{upper}_API_KEY', f'{upper}_1_API_KEY']
     return [f'{upper}_{ordinal}_API_KEY']
+
+
+# 自动发现时一个 provider 最多认几个账号（{PROVIDER}_1_API_KEY … _N_API_KEY）
+MAX_ENV_ACCOUNTS = 10
+
+
+def _env_float(*names: str) -> Optional[float]:
+    """按顺序取第一个能解析成数字的环境变量"""
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            try:
+                return float(value)
+            except ValueError:
+                logger.warning(f"[Config] {name}={value!r} 不是数字，已忽略")
+    return None
+
+
+def _env_accounts(provider: str) -> list:
+    """某个 provider 在环境变量里配了几个账号，返回 [(序号, 密钥)]。
+
+    序号 1 同时接受 ``{PROVIDER}_API_KEY`` 与 ``{PROVIDER}_1_API_KEY``，避免重复建项目。
+    """
+    upper = provider.upper()
+    accounts = []
+    for ordinal in range(1, MAX_ENV_ACCOUNTS + 1):
+        names = provider_key_env_names(provider, ordinal)
+        value = next((os.environ[n] for n in names if os.environ.get(n)), None)
+        if value:
+            accounts.append((ordinal, value))
+    return accounts
+
+
+def discover_env_projects(declared: list) -> list:
+    """没在清单里声明过的 provider，只要设了 ``{PROVIDER}_API_KEY`` 就自动纳入监控。
+
+    阈值取 ``{PROVIDER}_THRESHOLD``（多账号时也接受 ``{PROVIDER}_{序号}_THRESHOLD``），
+    不填就不会告警，自检会提示。这样最常见的「一个平台一个账号」场景不需要任何配置文件。
+    """
+    from providers import PROVIDERS
+
+    declared_providers = {
+        str(p.get('provider') or '').strip().lower() for p in declared if isinstance(p, dict)
+    }
+    discovered = []
+    for provider in sorted(PROVIDERS):
+        if provider in declared_providers:
+            continue
+        accounts = _env_accounts(provider)
+        upper = provider.upper()
+        for ordinal, api_key in accounts:
+            suffix = f'-{ordinal}' if len(accounts) > 1 else ''
+            numbered = f'{upper}_{ordinal}'
+            discovered.append({
+                'name': f'{provider}{suffix}',
+                'provider': provider,
+                'api_key': api_key,
+                'threshold': _env_float(f'{numbered}_THRESHOLD', f'{upper}_THRESHOLD'),
+                'owner_project': os.environ.get(f'{numbered}_OWNER_PROJECT') or os.environ.get(f'{upper}_OWNER_PROJECT'),
+                'from_env': True,
+            })
+    if discovered:
+        logger.info(f"[Config] 从环境变量自动发现 {len(discovered)} 个项目: "
+                    + ', '.join(p['name'] for p in discovered))
+    return discovered
 
 
 def resolve_api_key(project: Dict[str, Any], provider: str, ordinal: int) -> tuple:
@@ -161,7 +226,7 @@ def normalize_projects(projects: list) -> list:
         if not project.get('name'):
             project['name'] = provider or 'unknown'
         if not project.get('type'):
-            project['type'] = _PROVIDER_DEFAULT_TYPE.get(provider, 'balance')
+            project['type'] = PROVIDER_DEFAULT_TYPE.get(provider, 'balance')
 
         ordinals[provider] = ordinals.get(provider, 0) + 1
         project['api_key'] = resolve_api_key(project, provider, ordinals[provider])[0]
@@ -238,20 +303,31 @@ def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any
     """
     config: Dict[str, Any] = {}
 
-    if os.path.exists(config_file):
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = _substitute_env_placeholders(json.load(f))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"配置文件格式错误: {e}")
+    if os.path.isfile(config_file):
+        with open(config_file, 'r', encoding='utf-8') as f:
+            raw = f.read().strip()
+        if not raw:
+            # 空文件等同于没有配置：镜像里预置的占位文件、被清空的挂载都会是这种状态
+            logger.info(f"[Config] 配置文件 {config_file} 为空，业务清单来自数据库与环境变量")
+        else:
+            try:
+                config = _substitute_env_placeholders(json.loads(raw))
+            except json.JSONDecodeError as e:
+                raise ValueError(f"配置文件格式错误: {e}")
     else:
-        logger.warning(f"[Config] 配置文件不存在: {config_file}，仅使用数据库与默认值")
+        logger.info(f"[Config] 未使用配置文件 {config_file}，业务清单来自数据库与环境变量")
 
     config = _ensure_base_shape(config)
 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
 
+    return config
+
+
+def _add_env_projects(config: Dict[str, Any]) -> Dict[str, Any]:
+    """把环境变量里发现的项目补进清单，已声明过的 provider 不重复添加"""
+    config['projects'] = (config.get('projects') or []) + discover_env_projects(config.get('projects') or [])
     return config
 
 
@@ -265,7 +341,7 @@ def load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
     config = load_config_with_env_vars(config_file)
 
     if not get_settings().enable_dynamic_config:
-        return normalize_config(config)
+        return normalize_config(_add_env_projects(config))
 
     try:
         from database.repository import ConfigRepository
@@ -279,7 +355,7 @@ def load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
         if rows:
             config[section] = _strip_meta_fields(rows)
 
-    return normalize_config(config)
+    return normalize_config(_add_env_projects(config))
 
 
 def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:

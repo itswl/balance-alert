@@ -8,23 +8,39 @@
 
 ```bash
 pip install -r requirements.txt
-cp config.json.example config.json
 cp .env.example .env                        # 填 WEB_API_KEY、WEBHOOK_URL 和各平台的 *_API_KEY
 python -m services.monitor --show-config    # 自检：每个密钥从哪来、缺什么、时刻怎么理解
 python main.py                              # http://localhost:8080
 ```
 
+**不需要配置文件**：环境变量里有 `DEEPSEEK_API_KEY` 就会自动监控 DeepSeek，阈值取 `DEEPSEEK_THRESHOLD`。
+要一次声明很多账户，或者想把清单纳入版本管理，再 `cp config.json.example config.json`。
+
 `.env` 的值后面不要写行内注释，注释单独一行。
 
 ## 配置
 
-三层各管一摊，一个值只有一个家：
+三层各管一摊，一个值只有一个家。业务清单三种来路都行，按需要挑一种，也可以混用：
 
-| 来源 | 放什么 |
+| 来源 | 放什么 | 适合 |
+| --- | --- | --- |
+| 环境变量（`.env` / K8s Secret） | 密钥、Webhook、数据库连接、功能开关、定时任务时刻；**设了 `{PROVIDER}_API_KEY` 就自动成为一个受监控项目** | 一个平台一个账号的常见场景，零配置 |
+| `config.json` | 业务清单 `projects` / `subscriptions` / `email`，支持 `${VAR}` 占位符 | 一次声明很多账户、想纳入版本管理 |
+| 数据库动态配置 | 同三段清单，可在页面上增删改 | 生产环境，需 `ENABLE_DATABASE` + `ENABLE_DYNAMIC_CONFIG` |
+
+优先级：数据库里某一段有数据就覆盖文件里的同名段落；环境变量自动发现的项目追加在最后，**已经声明过的 provider 不会被重复添加**。
+
+### 环境变量自动发现
+
+| 变量 | 作用 |
 | --- | --- |
-| 环境变量（`.env` / K8s Secret） | 密钥、Webhook、数据库连接、功能开关、定时任务时刻 |
-| `config.json` | 业务清单 `projects` / `subscriptions` / `email`，支持 `${VAR}` 占位符 |
-| 数据库动态配置 | 同三段清单；开 `ENABLE_DATABASE` + `ENABLE_DYNAMIC_CONFIG` 后，有数据的段落覆盖文件里的同名段落，可在页面维护 |
+| `{PROVIDER}_API_KEY` | 有值就监控这个平台，项目名即 provider 名 |
+| `{PROVIDER}_THRESHOLD` | 告警阈值，不填则只看不告警（自检会提示） |
+| `{PROVIDER}_OWNER_PROJECT` | 分组标签，可选 |
+
+同一平台多个账号用 `{PROVIDER}_1_API_KEY`、`{PROVIDER}_2_API_KEY`，项目名自动变成 `volc-1`、`volc-2`，阈值对应 `VOLC_1_THRESHOLD`。
+
+自动发现的项目在页面上是只读的，点编辑保存一次就会固化进数据库，之后以数据库为准；要移除它得先去掉对应的环境变量。
 
 ### projects
 
@@ -115,7 +131,7 @@ python main.py                              # http://localhost:8080
 
 ## 看板与 API
 
-看板四个视图：全部项目、仅告警、订阅管理、邮箱扫描；地址栏加 `#alerts` `#subscriptions` `#email` 可直达。首次打开填 `WEB_API_KEY`。开了动态配置能在页面改阈值、增删改订阅和邮箱；开了历史 API 有趋势图和历史告警邮件。接口清单见 [docs/API.md](docs/API.md)。
+看板四个视图：全部项目、仅告警、订阅管理、邮箱扫描；地址栏加 `#alerts` `#subscriptions` `#email` 可直达。首次打开填 `WEB_API_KEY`。开了动态配置能在页面上增删改项目、订阅和邮箱，`config.json` 就完全不用碰了；开了历史 API 有趋势图和历史告警邮件。接口清单见 [docs/API.md](docs/API.md)。
 
 ## 部署
 

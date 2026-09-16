@@ -159,6 +159,13 @@
                     <select class="filter-select" id="provider-filter">
                         <option value="all">全部平台</option>
                     </select>
+                    <button class="btn-primary" id="add-project-btn" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        添加项目
+                    </button>
                 </div>
             </div>
 
@@ -346,32 +353,74 @@
         </div>
     </div>
 
-    <!-- 编辑项目阈值模态框 -->
-    <div id="threshold-modal" class="modal">
+    <!-- 项目管理模态框 -->
+    <div id="project-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="threshold-modal-title">编辑告警阈值</h2>
-                <button class="modal-close js-close-threshold-modal">
+                <h2 id="project-modal-title">添加项目</h2>
+                <button class="modal-close js-close-project-modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
-            <form id="threshold-form" class="modal-body">
-                <input type="hidden" id="threshold-project-name" value="">
+            <form id="project-form" class="modal-body">
+                <input type="hidden" id="project-edit-mode" value="false">
+
+                <p id="project-env-note" class="form-error" style="display: none;">
+                    这个项目来自环境变量自动发现。在这里保存会把它固化到数据库，之后以数据库中的配置为准。
+                </p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="project-name">项目名称 *</label>
+                        <input type="text" id="project-name" required placeholder="例如：火山-主账号">
+                    </div>
+                    <div class="form-group">
+                        <label for="project-provider">平台 *</label>
+                        <select id="project-provider" required></select>
+                    </div>
+                </div>
 
                 <div class="form-group">
-                    <label for="threshold-value">告警阈值 *</label>
-                    <input type="number" id="threshold-value" step="0.01" min="0" required placeholder="0.00">
-                    <p style="margin-top: 8px; font-size: 0.875rem; color: var(--text-secondary);">
-                        当余额低于此值时将触发告警通知
-                    </p>
+                    <label for="project-api-key">密钥 <span id="project-api-key-hint" class="subsection-hint"></span></label>
+                    <input type="password" id="project-api-key" autocomplete="new-password"
+                           placeholder="火山、阿里云用 AccessKey:Secret 形式">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="project-threshold">告警阈值</label>
+                        <input type="number" id="project-threshold" step="0.01" min="0" placeholder="留空则不告警">
+                        <p id="project-threshold-hint"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="project-type">余额类型</label>
+                        <select id="project-type">
+                            <option value="">按平台自动推导</option>
+                            <option value="balance">余额</option>
+                            <option value="credits">积分 / Credits</option>
+                            <option value="quota">配额百分比</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="project-owner">所属项目</label>
+                    <input type="text" id="project-owner" placeholder="用于分组，可留空">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="project-enabled" checked>
+                        <span>启用此项目</span>
+                    </label>
                 </div>
             </form>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary js-close-threshold-modal">取消</button>
-                <button type="button" class="btn-primary js-save-threshold">保存</button>
+                <button type="button" class="btn-secondary js-close-project-modal">取消</button>
+                <button type="button" class="btn-primary js-save-project">保存</button>
             </div>
         </div>
     </div>
@@ -517,7 +566,7 @@
     <script src="/static/js/app.js"></script>
     <script src="/static/js/subscription-manager.js"></script>
     <script src="/static/js/email-manager.js"></script>
-    <script src="/static/js/threshold-manager.js"></script>
+    <script src="/static/js/project-manager.js"></script>
     <script src="/static/js/settings-manager.js"></script>
     <script src="/static/js/trend-manager.js"></script>
 </body>
