@@ -198,3 +198,85 @@ func TestSQLiteDSNQueryIsParsable(t *testing.T) {
 		t.Errorf("_time_format = %q, 期望 sqlite", got)
 	}
 }
+
+// TestPasswordWithURLSpecialCharacters 密码里的 # 和 ? 不能把连接串截断。
+//
+// 这是生产上真踩过的坑：OCI 生成的 MySQL 密码里带一个 #，net/url 把它当片段起点，
+// 连接串在那里断掉，报成「invalid port」，服务连不上数据库。Python 侧的 SQLAlchemy
+// 用自己的正则解析，从来不受影响，所以升级到 Go 之前没人发现。
+func TestPasswordWithURLSpecialCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		wantDSN  string
+		wantPass string // 仅用于错误信息
+	}{
+		{
+			name:    "mysql 密码里有井号",
+			url:     "mysql+pymysql://admin:pa#ss!^word@10.0.10.35:3306/balance_alert?charset=utf8mb4",
+			wantDSN: "admin:pa#ss!^word@tcp(10.0.10.35:3306)/balance_alert?charset=utf8mb4&loc=UTC&parseTime=true",
+		},
+		{
+			name:    "mysql 密码里有问号",
+			url:     "mysql://admin:pa?ss@127.0.0.1:3306/db",
+			wantDSN: "admin:pa?ss@tcp(127.0.0.1:3306)/db?loc=UTC&parseTime=true",
+		},
+		{
+			name:    "mysql 密码里有斜杠",
+			url:     "mysql://admin:pa/ss@127.0.0.1:3306/db",
+			wantDSN: "admin:pa/ss@tcp(127.0.0.1:3306)/db?loc=UTC&parseTime=true",
+		},
+		{
+			name:    "mysql 密码里有单独的百分号，不能当成坏转义报错",
+			url:     "mysql://admin:100%pure@127.0.0.1:3306/db",
+			wantDSN: "admin:100%pure@tcp(127.0.0.1:3306)/db?loc=UTC&parseTime=true",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseURL(tt.url)
+			if err != nil {
+				t.Fatalf("解析失败: %v", err)
+			}
+			if got.DSN != tt.wantDSN {
+				t.Errorf("DSN 不对\n  期望: %s\n  实际: %s", tt.wantDSN, got.DSN)
+			}
+		})
+	}
+}
+
+// TestPostgresPasswordIsReEncoded postgres 的 DSN 要重新转义后再交给 pgx，
+// 因为 pgx 内部同样用 net/url，原样透传一样会被 # 截断。
+func TestPostgresPasswordIsReEncoded(t *testing.T) {
+	got, err := ParseURL("postgresql://admin:pa#ss@db.internal:5432/balance_alert?sslmode=require")
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+
+	// 重新解析一遍，确认 pgx 拿到的是能正确还原出原密码的串
+	parsed, err := url.Parse(got.DSN)
+	if err != nil {
+		t.Fatalf("生成的 DSN 自己都解析不了: %v（%s）", err, got.DSN)
+	}
+	password, _ := parsed.User.Password()
+	if password != "pa#ss" {
+		t.Errorf("密码还原错了，期望 pa#ss，实际 %q（DSN: %s）", password, got.DSN)
+	}
+	if parsed.Host != "db.internal:5432" {
+		t.Errorf("主机不对: %q", parsed.Host)
+	}
+	if parsed.RawQuery != "sslmode=require" {
+		t.Errorf("查询参数丢了: %q", parsed.RawQuery)
+	}
+}
+
+// TestIPv6Host IPv6 地址要能识别出来，方括号不能进主机名。
+func TestIPv6Host(t *testing.T) {
+	got, err := ParseURL("mysql://u:p@[2001:db8::1]:3306/db")
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if !strings.Contains(got.DSN, "tcp([2001:db8::1]:3306)") {
+		t.Errorf("IPv6 主机拼错了: %s", got.DSN)
+	}
+}
