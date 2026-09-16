@@ -1,0 +1,11 @@
+/* 样式入口。内容原样来自 static/css/style.css，只按分节注释拆成了几个文件；
+   顺序不能动 —— tokens 先定义变量，responsive 最后覆盖断点。 */
+
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './cards.css';
+@import './email.css';
+@import './controls.css';
+@import './modals.css';
+@import './responsive.css';

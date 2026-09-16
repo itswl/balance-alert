@@ -1,17 +1,19 @@
 # Balance Alert
 
-监控多个平台的余额或配额，算出还能用几天，快见底或消耗突然放大时发 Webhook；顺带管订阅续费提醒，扫描邮箱里的欠费、续费邮件，每周推一份消耗汇总。一个 Python 进程里跑 Flask 看板 + API、进程内定时任务和 Prometheus 指标。
+监控多个平台的余额或配额，算出还能用几天，快见底或消耗突然放大时发 Webhook；顺带管订阅续费提醒，扫描邮箱里的欠费、续费邮件，每周推一份消耗汇总。一个 Go 二进制里跑看板、API、进程内定时任务和 Prometheus 指标。
 
 默认只开余额检查、Webhook 告警和 Web 看板；数据库、动态配置、订阅、Prometheus 用 `ENABLE_*` 开关按需打开。
 
 ## 快速开始
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env                        # 填 WEB_API_KEY、WEBHOOK_URL 和各平台的 *_API_KEY
-python -m services.monitor --show-config    # 自检：每个密钥从哪来、缺什么、时刻怎么理解
-python main.py                              # http://localhost:8080
+cp .env.example .env            # 填 WEB_API_KEY、WEBHOOK_URL 和各平台的 *_API_KEY
+go build -o balance-alert ./cmd/balance-alert
+./balance-alert -show-config    # 自检：每个密钥从哪来、缺什么、时刻怎么理解
+./balance-alert                 # http://localhost:8080
 ```
+
+或者直接跑容器：`docker compose up -d`。
 
 **没有配置文件**：环境变量里有 `DEEPSEEK_API_KEY` 就会自动监控 DeepSeek，阈值取 `DEEPSEEK_THRESHOLD`。
 要一次管很多账户、想在页面上增删改，打开数据库动态配置。
@@ -62,6 +64,9 @@ python main.py                              # http://localhost:8080
 | 火山引擎 | `volc` | `AccessKeyId:SecretAccessKey` |
 | 阿里云 | `aliyun` | `AccessKeyId:AccessKeySecret` |
 
+接一个新平台：大多数平台是「GET 一次、从 JSON 里取个数」，在 `internal/provider/` 下新建一个文件，
+用 `provider.RegisterSpec` 声明几行就够了，参考 `deepseek.go`。需要签名的（火山、阿里云）自己实现 `Provider` 接口。
+
 ### 订阅与邮箱字段
 
 订阅 `cycle_type` 为 `weekly` / `monthly` / `yearly`：周付 `renewal_day` 写 1-7，月付写 1-31，年付直接写 `"03-15"`。`alert_days_before` 默认 3，续费当天也提醒，`amount` 与 `owner_project` 可选。
@@ -94,14 +99,27 @@ python main.py                              # http://localhost:8080
 | `CONFIG_ENCRYPTION_KEY` | 无 | 设置后数据库里的 `api_key` 和邮箱密码加密存储（`enc:v1:` 前缀），接受 Fernet key 或任意口令；`AUTO_ENCRYPT_ON_READ`（默认 true）把读到的旧明文回写成密文 |
 | `ENABLE_PROMETHEUS` / `METRICS_PORT` | `false` / `9100` | 指标端口 |
 | `WEB_PORT` / `WEB_ENABLE_CORS` / `CORS_ORIGINS` | `8080` / `false` / 无 | Web 服务 |
+| `SHUTDOWN_DELAY_SECONDS` | `0` | 收到 SIGTERM 后先继续服务几秒再关，等负载均衡摘干净；K8s 里建议 15 |
 | `LOG_LEVEL` / `LOG_FORMAT` / `LOG_FILE` | `INFO` / `text` / 无 | 日志；格式可选 `json` |
-| `STRICT_DATABASE_ERRORS` | `false` | 数据库异常向上抛，排障时用 |
+| `STRICT_DATABASE_ERRORS` | `false` | 数据库初始化失败时直接退出，而不是降级继续跑 |
 
-值写错（如 `ENABLE_DATABASE=enabled`）启动即报错；留空视为未设置。从旧版升级、手上还有 `config.json` 的，开好数据库后跑一次 `python scripts/migrate_config_to_db.py` 导进去，之后这个文件就可以删了。
+值写错（如 `ENABLE_DATABASE=enabled`）启动即报错，所有问题一次性列出；留空视为未设置。
+
+## 命令行
+
+```bash
+./balance-alert                        # 起 Web 服务与定时任务
+./balance-alert -show-config           # 配置自检，有问题时退出码非零
+./balance-alert -check -dry-run        # 跑一次余额检查，不发告警
+./balance-alert -check -project 火山-主账号
+./balance-alert -check-subscriptions
+./balance-alert -check-email -email-days 3
+./balance-alert -healthcheck           # 探测本机 /live，容器健康检查用
+```
 
 ## 定时任务
 
-都在 Web 进程内调度（`core/scheduler.py`），容器里没有 cron，时刻按容器 `TZ`：
+都在 Web 进程内调度，容器里没有 cron，时刻按容器 `TZ`：
 
 | 任务 | 触发 | 发告警 |
 | --- | --- | --- |
@@ -110,7 +128,7 @@ python main.py                              # http://localhost:8080
 | `email_scan` | 每天 `EMAIL_SCAN_SCHEDULE`，扫最近 `EMAIL_SCAN_DAYS` 天的邮件 | 是 |
 | `weekly_report` | 每周 `WEEKLY_REPORT_SCHEDULE`，汇总一周消耗、跑道与待续费 | 是 |
 
-任一任务上次失败，`/health` 返回 503 并在 `failed_jobs` 列出，`GET /api/jobs` 看详情。手动跑一次：`python -m services.monitor --dry-run`、`python -m services.email_scanner --days 1`。
+任一任务上次失败，`/health` 返回 503 并在 `failed_jobs` 列出，`GET /api/jobs` 看详情。
 
 ## 消耗与跑道
 
@@ -127,17 +145,20 @@ python main.py                              # http://localhost:8080
 
 看板四个视图：全部项目、仅告警、订阅管理、邮箱扫描；地址栏加 `#alerts` `#subscriptions` `#email` 可直达。首次打开填 `WEB_API_KEY`。开了动态配置能在页面上增删改项目、订阅和邮箱；开了历史 API 有趋势图和历史告警邮件。接口清单见 [docs/API.md](docs/API.md)。
 
+前端是 TypeScript，用 esbuild 打包，产物嵌进二进制，运行时不需要额外的静态文件目录。
+
 ## 部署
 
-**Docker**：镜像不锁架构，arm64 与 amd64 都能构建；基础镜像和 pip 源是 build-arg。
+**Docker**：运行镜像基于 `scratch`，里面只有一个静态二进制和 CA 证书，不到 30 MB；不锁架构，arm64 与 amd64 都能构建。
 
 ```bash
+docker compose up -d                                                          # 核心版
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d   # 带 Prometheus + Grafana
+
 docker build -t balance-alert .
-docker build --build-arg BASE_IMAGE=<国内镜像>/python:3.11-slim \
-             --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple -t balance-alert .
+docker build --build-arg GOPROXY=https://goproxy.cn,direct \
+             --build-arg NPM_REGISTRY=https://registry.npmmirror.com -t balance-alert .
 docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
-docker-compose up -d                         # 核心版
-docker-compose --profile monitoring up -d    # 带 Prometheus + Grafana
 ```
 
 **Kubernetes**：`k8s/common-prod.yaml` 含 Deployment、Service、Ingress，apply 前替换 `YOUR_REGISTRY` 与 `YOUR_DOMAIN`。
@@ -148,7 +169,7 @@ kubectl apply -f k8s/common-prod.yaml
 kubectl -n common-prod rollout status deploy/balance-alert
 ```
 
-探针约定：`/live` 给 startup 与 liveness，只证明进程活着；`/health` 给 readiness，没数据、数据过期或任务失败时 503。改了 Secret 要 `kubectl rollout restart`。
+探针约定：`/live` 给 startup 与 liveness，只证明进程活着；`/health` 给 readiness，没数据、数据过期或任务失败时 503。镜像里没有 shell，优雅下线靠 `SHUTDOWN_DELAY_SECONDS` 而不是 `preStop`。改了 Secret 要 `kubectl rollout restart`。
 
 ## 监控
 
@@ -160,19 +181,52 @@ kubectl -n common-prod rollout status deploy/balance-alert
 - **`/health` 503**：看返回体。`has_data=false` 是没有有效项目，`is_stale=true` 是刷新卡住，`failed_jobs` 非空去 `GET /api/jobs` 看错误原文。
 - **startup probe 打到 `/health` 反复重启**：启动探针应指向 `/live`。
 - **数据库里的密钥没加密**：确认进程有 `CONFIG_ENCRYPTION_KEY`；旧明文会在下一次读取时回写为密文。
-- **不确定配置到底生效了什么**：`python -m services.monitor --show-config`。
+- **看板打开是一句「前端产物未构建」**：先 `npm --prefix ui run build` 再编译二进制。
+- **不确定配置到底生效了什么**：`./balance-alert -show-config`。
+
+## 开发
+
+```bash
+go test ./...                    # Go 全部测试
+go test -race ./...              # 并发相关的包用 -race 跑
+gofmt -l .                       # 应该没有输出
+npm --prefix ui run typecheck    # 前端类型检查
+npm --prefix ui test             # 前端测试（桩 DOM，不依赖浏览器）
+npm --prefix ui run build        # 重新打包前端，产物提交进仓库
+```
+
+数据库查询用 [sqlc](https://sqlc.dev) 从 SQL 生成，改了 `internal/store/queries/*.sql` 后跑 `sqlc generate`。
 
 ## 项目结构
 
 ```text
-main.py                 入口：Flask + 进程内调度器 + 指标
-core/                   settings（环境变量）、config_loader（环境变量发现 + 数据库清单）、scheduler、timeutil、state_manager、secret_crypto
-providers/              各平台余额适配器；base.py 的 ProviderSpec 用几行声明就能接一个新平台
-services/               monitor（余额检查）、runway（消耗与跑道）、weekly_report、subscription_checker、email_scanner、webhook_adapter、prometheus_exporter
-web/                    Flask 应用与蓝图（core / subscription / email / project / history）、请求校验
-static/ templates/      看板前端，原生 JS
-database/               SQLAlchemy 模型与仓库，启动自动建表
-grafana/ prometheus.yml 监控面板与抓取配置
-k8s/                    生产部署清单
-tests/                  pytest
+cmd/balance-alert/      入口：命令行开关、日志、信号处理
+internal/
+  model/         领域类型，同时是 API 响应结构
+  config/        环境变量 + 自动发现 + 数据库清单合并
+  provider/      各平台余额适配器；简单的用 RegisterSpec 声明几行就能接
+  store/         持久化，sqlc 生成 sqlite / postgres / mysql 三套查询
+  monitor/       余额检查：并发、缓存、阈值告警
+  runway/        消耗速率与跑道，突增判断
+  subscription/  续费日期推算与提醒
+  mailscan/      IMAP 扫描与关键词命中
+  notify/        Webhook 适配：feishu / dingtalk / wecom / custom
+  report/        周报
+  metrics/       Prometheus 指标
+  scheduler/     进程内定时任务
+  state/         看板状态（线程安全）
+  httpapi/       路由、鉴权、请求校验
+  selfcheck/     -show-config 的实现
+  app/           把上面这些装配起来
+ui/              TypeScript 前端，esbuild 打包后由 embed.FS 提供
+grafana/ prometheus.yml   监控面板与抓取配置
+k8s/             生产部署清单
 ```
+
+## 从 Python 版升级
+
+这个项目原本是 Python 写的，现在是 Go。升级不需要迁移数据：
+
+- 表结构、`project_id` 的算法、密文格式（`enc:v1:` + Fernet）全部没变，直接连原来的数据库即可
+- 所有环境变量保持同名同义，`.env` 可以原样用
+- `/api/*` 与 Prometheus 指标一个字都没改，现有的看板、抓取配置和告警规则继续工作

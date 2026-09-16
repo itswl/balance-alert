@@ -1,0 +1,354 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/itswl/balance-alert/internal/config"
+	"github.com/itswl/balance-alert/internal/mailscan"
+	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/balance-alert/internal/monitor"
+	"github.com/itswl/balance-alert/internal/state"
+	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/balance-alert/internal/subscription"
+)
+
+const testAPIKey = "test-key"
+
+// newServer 拉起一个完整的 Server，默认不开任何可选能力。
+func newServer(t *testing.T, tweak func(*config.Settings)) (*Server, http.Handler) {
+	t.Helper()
+
+	settings := &config.Settings{
+		WebAPIKey: testAPIKey, AppVersion: "1.0.0",
+		RequestTimeout: 5, ResponseCacheTTL: 0,
+	}
+	if tweak != nil {
+		tweak(settings)
+	}
+	st := store.Null()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	resolver := config.NewResolver(settings, st, log)
+
+	s := &Server{
+		Settings: settings, Resolver: resolver, Store: st, State: state.New(),
+		Monitor: &monitor.Monitor{Settings: settings, Resolver: resolver, Store: st, Log: log},
+		Subs:    &subscription.Checker{Store: st, Log: log},
+		Scanner: &mailscan.Scanner{Store: st, Log: log},
+		Log:     log,
+	}
+	return s, s.Handler()
+}
+
+func request(t *testing.T, handler http.Handler, method, path, body string, withKey bool) *httptest.ResponseRecorder {
+	t.Helper()
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if withKey {
+		req.Header.Set("X-API-Key", testAPIKey)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	return recorder
+}
+
+func decode(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("响应不是合法 JSON: %v\n%s", err, recorder.Body.String())
+	}
+	return payload
+}
+
+// TestAuth 所有 /api/* 都要鉴权，探针不用。
+func TestAuth(t *testing.T) {
+	_, handler := newServer(t, nil)
+
+	t.Run("没有密钥回 401", func(t *testing.T) {
+		got := request(t, handler, "GET", "/api/features", "", false)
+		if got.Code != http.StatusUnauthorized {
+			t.Errorf("期望 401，实际 %d", got.Code)
+		}
+		if decode(t, got)["status"] != "error" {
+			t.Error("错误响应要带 status=error")
+		}
+	})
+
+	t.Run("密钥不对回 401", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/features", nil)
+		req.Header.Set("X-API-Key", "错的")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Errorf("期望 401，实际 %d", recorder.Code)
+		}
+	})
+
+	t.Run("Bearer 也认", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/features", nil)
+		req.Header.Set("Authorization", "Bearer "+testAPIKey)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Bearer 形式应该通过，实际 %d", recorder.Code)
+		}
+	})
+
+	t.Run("探针不需要密钥", func(t *testing.T) {
+		for _, path := range []string{"/live", "/health"} {
+			if got := request(t, handler, "GET", path, "", false); got.Code == http.StatusUnauthorized {
+				t.Errorf("%s 不该要求密钥", path)
+			}
+		}
+	})
+
+	t.Run("没配密钥时一律 503", func(t *testing.T) {
+		_, bare := newServer(t, func(s *config.Settings) { s.WebAPIKey = "" })
+		got := request(t, bare, "GET", "/api/features", "", true)
+		if got.Code != http.StatusServiceUnavailable {
+			t.Errorf("期望 503，实际 %d", got.Code)
+		}
+	})
+}
+
+func TestLiveAndHealth(t *testing.T) {
+	s, handler := newServer(t, nil)
+
+	got := request(t, handler, "GET", "/live", "", false)
+	if got.Code != http.StatusOK {
+		t.Fatalf("/live 应始终 200，实际 %d", got.Code)
+	}
+	if decode(t, got)["status"] != "alive" {
+		t.Error("/live 应返回 alive")
+	}
+
+	// 还没有数据时不算就绪，K8s 才不会把流量打进来
+	got = request(t, handler, "GET", "/health", "", false)
+	if got.Code != http.StatusServiceUnavailable {
+		t.Errorf("没数据时 /health 应为 503，实际 %d", got.Code)
+	}
+	body := decode(t, got)
+	if body["has_data"] != false || body["status"] != "degraded" {
+		t.Errorf("/health 字段不对: %v", body)
+	}
+
+	s.State.SetBalance([]model.CheckResult{{Project: "a", Provider: "p", Success: true}})
+	got = request(t, handler, "GET", "/health", "", false)
+	if got.Code != http.StatusOK {
+		t.Errorf("有数据后应为 200，实际 %d：%s", got.Code, got.Body.String())
+	}
+}
+
+func TestFeaturesReflectsToggles(t *testing.T) {
+	_, handler := newServer(t, func(s *config.Settings) {
+		s.EnableSubscriptions = true
+		s.EnableHistoryAPI = true
+	})
+	body := decode(t, request(t, handler, "GET", "/api/features", "", true))
+	features, _ := body["features"].(map[string]any)
+	if features["subscriptions"] != true || features["history"] != true || features["dynamic_config"] != false {
+		t.Errorf("能力开关没有如实反映: %v", features)
+	}
+}
+
+// TestCreditsBeforeFirstCheck 首次检查完成前要明确回 503，而不是给一个空列表让前端以为没项目。
+func TestCreditsBeforeFirstCheck(t *testing.T) {
+	s, handler := newServer(t, nil)
+
+	if got := request(t, handler, "GET", "/api/credits", "", true); got.Code != http.StatusServiceUnavailable {
+		t.Errorf("期望 503，实际 %d", got.Code)
+	}
+
+	s.State.SetBalance([]model.CheckResult{{
+		Project: "deepseek", Provider: "deepseek", Type: "balance", Success: true,
+		Credits: model.Ptr(430.37), Threshold: model.Ptr(50.0),
+	}})
+	got := request(t, handler, "GET", "/api/credits", "", true)
+	if got.Code != http.StatusOK {
+		t.Fatalf("期望 200，实际 %d", got.Code)
+	}
+
+	body := decode(t, got)
+	projects, _ := body["projects"].([]any)
+	if len(projects) != 1 {
+		t.Fatalf("应有 1 个项目，实际 %d 个", len(projects))
+	}
+	first, _ := projects[0].(map[string]any)
+	for _, key := range []string{"project", "provider", "type", "success", "credits", "threshold", "need_alarm", "alarm_sent", "error", "cached"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("响应缺少字段 %q，前端依赖它", key)
+		}
+	}
+	summary, _ := body["summary"].(map[string]any)
+	if summary["total"] != float64(1) || summary["success"] != float64(1) {
+		t.Errorf("汇总不对: %v", summary)
+	}
+}
+
+// TestETag 读接口带 ETag，前端轮询命中就只回 304。
+func TestETag(t *testing.T) {
+	s, handler := newServer(t, nil)
+	s.State.SetBalance([]model.CheckResult{{Project: "a", Provider: "p", Success: true}})
+
+	first := request(t, handler, "GET", "/api/credits", "", true)
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("响应没有带 ETag")
+	}
+
+	req := httptest.NewRequest("GET", "/api/credits", nil)
+	req.Header.Set("X-API-Key", testAPIKey)
+	req.Header.Set("If-None-Match", etag)
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, req)
+
+	if second.Code != http.StatusNotModified {
+		t.Errorf("ETag 命中应回 304，实际 %d", second.Code)
+	}
+	if second.Body.Len() != 0 {
+		t.Error("304 不该带响应体")
+	}
+}
+
+// TestWritesNeedDynamicConfig 没开动态配置时，读得到但改不了。
+func TestWritesNeedDynamicConfig(t *testing.T) {
+	_, handler := newServer(t, nil)
+
+	if got := request(t, handler, "GET", "/api/config/projects", "", true); got.Code != http.StatusOK {
+		t.Errorf("读接口任何时候都该可用，实际 %d", got.Code)
+	}
+
+	writes := []struct{ method, path, body string }{
+		{"POST", "/api/config/project", `{"name":"x","provider":"deepseek","api_key":"k"}`},
+		{"POST", "/api/config/project/delete", `{"name":"x"}`},
+		{"POST", "/api/config/threshold", `{"project_name":"x","new_threshold":1}`},
+		{"POST", "/api/config/email", `{"name":"x","host":"h","username":"u","password":"p"}`},
+		{"POST", "/api/config/email/delete", `{"name":"x"}`},
+	}
+	for _, w := range writes {
+		got := request(t, handler, w.method, w.path, w.body, true)
+		if got.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s 期望 503，实际 %d", w.method, w.path, got.Code)
+		}
+	}
+}
+
+// TestSubscriptionsNeedFeatureFlag 订阅没开时整组接口 503。
+func TestSubscriptionsNeedFeatureFlag(t *testing.T) {
+	_, handler := newServer(t, nil)
+	for _, path := range []string{"/api/config/subscriptions"} {
+		if got := request(t, handler, "GET", path, "", true); got.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s 期望 503，实际 %d", path, got.Code)
+		}
+	}
+	got := request(t, handler, "POST", "/api/subscription/add", `{"name":"x"}`, true)
+	if got.Code != http.StatusServiceUnavailable {
+		t.Errorf("新增订阅期望 503，实际 %d", got.Code)
+	}
+}
+
+// TestHistoryRoutesAbsentWhenDisabled 历史 API 没开时整组不注册，访问即 404。
+func TestHistoryRoutesAbsentWhenDisabled(t *testing.T) {
+	_, off := newServer(t, nil)
+	if got := request(t, off, "GET", "/api/history/balance", "", true); got.Code != http.StatusNotFound {
+		t.Errorf("未启用时期望 404，实际 %d", got.Code)
+	}
+
+	_, on := newServer(t, func(s *config.Settings) { s.EnableHistoryAPI = true })
+	if got := request(t, on, "GET", "/api/history/balance", "", true); got.Code != http.StatusOK {
+		t.Errorf("启用后期望 200，实际 %d：%s", got.Code, got.Body.String())
+	}
+}
+
+// TestHistoryParamValidation 越界参数回 400 而不是 500。
+func TestHistoryParamValidation(t *testing.T) {
+	_, handler := newServer(t, func(s *config.Settings) { s.EnableHistoryAPI = true })
+
+	tests := []string{
+		"/api/history/balance?days=0",
+		"/api/history/balance?days=400",
+		"/api/history/balance?limit=0",
+		"/api/history/balance?days=abc",
+		"/api/history/alerts?limit=99999",
+	}
+	for _, path := range tests {
+		got := request(t, handler, "GET", path, "", true)
+		if got.Code != http.StatusBadRequest {
+			t.Errorf("%s 期望 400，实际 %d", path, got.Code)
+		}
+	}
+}
+
+func TestProviders(t *testing.T) {
+	_, handler := newServer(t, nil)
+	body := decode(t, request(t, handler, "GET", "/api/providers", "", true))
+
+	providers, _ := body["providers"].([]any)
+	if len(providers) < 8 {
+		t.Fatalf("应至少有 8 个平台，实际 %d 个", len(providers))
+	}
+	first, _ := providers[0].(map[string]any)
+	for _, key := range []string{"value", "label", "default_type"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("平台信息缺少字段 %q，页面下拉框依赖它", key)
+		}
+	}
+}
+
+// TestScanDaysValidation 扫描天数必须在 1-30。
+func TestScanDaysValidation(t *testing.T) {
+	_, handler := newServer(t, nil)
+	for _, body := range []string{`{"days":0}`, `{"days":31}`, `{"days":-1}`} {
+		got := request(t, handler, "POST", "/api/email/scan", body, true)
+		if got.Code != http.StatusBadRequest {
+			t.Errorf("days=%s 期望 400，实际 %d", body, got.Code)
+		}
+	}
+}
+
+// TestRefreshCooldown 手动刷新完成后有冷却，防止连点把上游打爆。
+func TestRefreshCooldown(t *testing.T) {
+	_, handler := newServer(t, nil)
+
+	if got := request(t, handler, "POST", "/api/refresh", "", true); got.Code != http.StatusOK {
+		t.Fatalf("首次刷新应成功，实际 %d：%s", got.Code, got.Body.String())
+	}
+	second := request(t, handler, "POST", "/api/refresh", "", true)
+	if second.Code != http.StatusTooManyRequests {
+		t.Errorf("冷却期内应回 429，实际 %d", second.Code)
+	}
+	if !strings.Contains(decode(t, second)["message"].(string), "刷新") {
+		t.Error("429 的消息应说明是刷新过于频繁")
+	}
+}
+
+// TestBadJSONIsRejected 请求体不是 JSON 时回 400 而不是 500。
+func TestBadJSONIsRejected(t *testing.T) {
+	_, handler := newServer(t, func(s *config.Settings) { s.EnableDynamicConfig = true })
+	got := request(t, handler, "POST", "/api/config/project", `{不是 JSON`, true)
+	if got.Code != http.StatusBadRequest {
+		t.Errorf("期望 400，实际 %d", got.Code)
+	}
+}
+
+// TestUnknownProviderRejected 未知平台在保存时就要拦住，不能等到检查余额才报错。
+func TestUnknownProviderRejected(t *testing.T) {
+	_, handler := newServer(t, func(s *config.Settings) { s.EnableDynamicConfig = true })
+	got := request(t, handler, "POST", "/api/config/project",
+		`{"name":"x","provider":"不存在","api_key":"k"}`, true)
+	if got.Code != http.StatusBadRequest {
+		t.Errorf("期望 400，实际 %d：%s", got.Code, got.Body.String())
+	}
+}

@@ -1,71 +1,23 @@
 services:
-  credit-monitor:
+  balance-alert:
     build: .
-    image: credit-monitor:latest
-    container_name: credit-monitor
+    image: balance-alert:latest
+    container_name: balance-alert
     restart: unless-stopped
     ports:
-      - "8080:8080"  # Web 服务端口
-      - "9100:9100"  # Prometheus Metrics 端口
+      - "8080:8080"  # Web 看板与 API
+      - "9100:9100"  # Prometheus 指标
     volumes:
-      # 挂载日志目录
-      - ./logs:/app/logs
-      # 挂载数据目录（数据库持久化）
-      - ./data:/app/data
+      - ./data:/app/data   # 数据库持久化
+      - ./logs:/app/logs   # 设了 LOG_FILE 才会用到
     env_file:
-      - .env  # 从 .env 文件加载环境变量（如果文件存在）
+      - .env
     environment:
       - TZ=Asia/Shanghai
-    # Web 服务器 + 进程内定时任务（告警检查、邮箱扫描），不再需要 cron
+    # 一个进程里跑 Web、定时任务和指标，容器里没有 cron
     networks:
       - monitor-network
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: balance-alert-prometheus
-    profiles: ["monitoring"]
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-    restart: unless-stopped
-    networks:
-      - monitor-network
-    depends_on:
-      - credit-monitor
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: balance-alert-grafana
-    profiles: ["monitoring"]
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before enabling monitoring}
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/balance-alert-dashboard.json
-      - TZ=Asia/Shanghai
-    restart: unless-stopped
-    networks:
-      - monitor-network
-    depends_on:
-      - prometheus
 
 networks:
   monitor-network:
     driver: bridge
-
-volumes:
-  prometheus-data:
-  grafana-data:

@@ -1,0 +1,130 @@
+/**
+ * 够用就行的桩 DOM。
+ *
+ * 不引 jsdom：看板只用到 getElementById / createElement / innerHTML 这几样，
+ * 为了跑几个渲染函数装一个几 MB 的依赖不划算。这个桩只保证被测代码不炸，
+ * 断言全部落在它产出的 HTML 字符串上。
+ */
+
+export interface StubElement {
+  tagName: string;
+  id: string;
+  className: string;
+  textContent: string;
+  innerHTML: string;
+  title: string;
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  readOnly: boolean;
+  style: Record<string, string>;
+  dataset: Record<string, string>;
+  classList: {
+    add(...names: string[]): void;
+    remove(...names: string[]): void;
+    toggle(name: string, force?: boolean): void;
+    contains(name: string): boolean;
+  };
+  children: StubElement[];
+  appendChild(child: StubElement): StubElement;
+  append(...children: StubElement[]): void;
+  remove(): void;
+  addEventListener(): void;
+  removeEventListener(): void;
+  closest(): null;
+  querySelectorAll(): StubElement[];
+}
+
+export function createStubElement(tagName = 'div'): StubElement {
+  const classes = new Set<string>();
+  const el: StubElement = {
+    tagName: tagName.toUpperCase(),
+    id: '',
+    className: '',
+    textContent: '',
+    innerHTML: '',
+    title: '',
+    value: '',
+    checked: false,
+    disabled: false,
+    readOnly: false,
+    style: {},
+    dataset: {},
+    classList: {
+      add: (...names) => names.forEach((n) => classes.add(n)),
+      remove: (...names) => names.forEach((n) => classes.delete(n)),
+      toggle: (name, force) => {
+        const on = force ?? !classes.has(name);
+        if (on) classes.add(name);
+        else classes.delete(name);
+      },
+      contains: (name) => classes.has(name),
+    },
+    children: [],
+    appendChild(child) {
+      el.children.push(child);
+      return child;
+    },
+    append(...children) {
+      el.children.push(...children);
+    },
+    remove() {
+      /* 桩里不需要真从父节点摘掉 */
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    closest: () => null,
+    querySelectorAll: () => [],
+  };
+  return el;
+}
+
+const registry = new Map<string, StubElement>();
+
+/** 预先登记页面上会被查到的 id；没登记的 id 一律返回 null，正好覆盖「元素缺失」这条分支 */
+export function stubElement(id: string): StubElement {
+  const existing = registry.get(id);
+  if (existing) return existing;
+  const el = createStubElement();
+  el.id = id;
+  registry.set(id, el);
+  return el;
+}
+
+export function resetStubDom(): void {
+  registry.clear();
+}
+
+const storage = new Map<string, string>();
+
+export function installStubDom(): void {
+  const documentStub = {
+    documentElement: createStubElement('html'),
+    getElementById: (id: string): StubElement | null => registry.get(id) ?? null,
+    createElement: (tag: string): StubElement => createStubElement(tag),
+    querySelector: (): StubElement | null => null,
+    querySelectorAll: (): StubElement[] => [],
+    addEventListener: (): void => {},
+    readyState: 'complete',
+  };
+
+  const globals = globalThis as unknown as Record<string, unknown>;
+  globals['document'] = documentStub;
+  globals['localStorage'] = {
+    getItem: (key: string): string | null => storage.get(key) ?? null,
+    setItem: (key: string, value: string): void => {
+      storage.set(key, value);
+    },
+    removeItem: (key: string): void => {
+      storage.delete(key);
+    },
+  };
+  globals['window'] = {
+    location: { origin: 'http://localhost:8080', pathname: '/', hash: '' },
+    history: {},
+    addEventListener: (): void => {},
+    devicePixelRatio: 1,
+  };
+}
+
+installStubDom();
