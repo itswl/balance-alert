@@ -1,244 +1,92 @@
 """
-配置加载模块测试
+配置加载：只有数据库动态配置与环境变量两个来源
 """
+from unittest.mock import patch
+
 import pytest
-import json
-import os
-import tempfile
-from unittest.mock import patch, MagicMock
-from core.config_loader import (
-    load_config_with_env_vars,
-    mask_sensitive_data,
-    load_env_file,
-)
+
+from core import config_loader
+from core.config_loader import load_config, load_env_file
 
 
-class TestLoadConfigWithEnvVars:
-    """环境变量替换加载配置测试"""
+def _db(projects=None, subscriptions=None, email=None):
+    """打桩数据库三段清单"""
+    return patch.object(config_loader, '_db_sections', return_value={
+        'projects': projects or [], 'subscriptions': subscriptions or [], 'email': email or [],
+    })
 
-    def _create_config_file(self, config_data):
-        """创建临时配置文件"""
-        f = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
-        json.dump(config_data, f, ensure_ascii=False)
-        f.close()
-        return f.name
 
-    def _create_config_file_raw(self, content):
-        """创建原始内容的临时配置文件（用于 ${VAR} 占位符测试）"""
-        f = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
-        f.write(content)
-        f.close()
-        return f.name
+class TestLoadConfig:
 
-    @patch('core.config_loader.load_env_file')
-    def test_env_var_substitution(self, mock_load_env):
-        """测试环境变量占位符替换"""
-        raw_config = json.dumps({
-            'projects': [
-                {
-                    'name': 'TestProject',
-                    'provider': 'openrouter',
-                    'api_key': '${TEST_API_KEY}',
-                    'threshold': 10.0,
-                    'type': 'credits',
-                    'enabled': True
-                }
-            ],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600}
-        })
-        config_path = self._create_config_file_raw(raw_config)
-        try:
-            with patch.dict(os.environ, {'TEST_API_KEY': 'sk-replaced-key'}, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['projects'][0]['api_key'] == 'sk-replaced-key'
-        finally:
-            os.unlink(config_path)
+    def test_empty_when_nothing_configured(self):
+        with _db():
+            assert load_config() == {'projects': [], 'subscriptions': [], 'email': []}
 
-    @patch('core.config_loader.load_env_file')
-    def test_env_var_not_set_keeps_placeholder(self, mock_load_env):
-        """测试环境变量不存在时保持占位符"""
-        raw_config = json.dumps({
-            'projects': [],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600},
-            'custom_field': '${NONEXISTENT_VAR_12345}'
-        })
-        config_path = self._create_config_file_raw(raw_config)
-        try:
-            env = os.environ.copy()
-            env.pop('NONEXISTENT_VAR_12345', None)
-            with patch.dict(os.environ, env, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['custom_field'] == '${NONEXISTENT_VAR_12345}'
-        finally:
-            os.unlink(config_path)
+    def test_returns_fresh_dict_each_time(self):
+        with _db(projects=[{'name': 'A', 'provider': 'volc', 'api_key': 'a:b'}]):
+            first, second = load_config(), load_config()
+        first['projects'].clear()
+        assert len(second['projects']) == 1
 
-    @patch('core.config_loader.load_env_file')
-    def test_webhook_placeholder_substitution(self, mock_load_env):
-        """webhook 使用 ${VAR} 时会被环境变量替换"""
-        config_data = {
-            'projects': [],
-            'subscriptions': [],
-            'email': [],
-            'settings': {'balance_refresh_interval_seconds': 3600},
-            'webhook': {'url': '${WEBHOOK_URL}', 'type': 'feishu'}
+    def test_db_rows_lose_meta_fields(self):
+        row = {'id': 7, 'created_at': 'x', 'updated_at': 'y',
+               'name': 'A', 'provider': 'volc', 'api_key': 'a:b', 'threshold': 1}
+        with _db(projects=[row]):
+            project = load_config()['projects'][0]
+        assert not {'id', 'created_at', 'updated_at'} & set(project)
+        assert project['name'] == 'A'
+
+    def test_env_projects_appended_after_db(self, monkeypatch):
+        monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
+        with _db(projects=[{'name': '库里的', 'provider': 'volc', 'api_key': 'a:b'}]):
+            projects = load_config()['projects']
+        assert [(p['name'], p.get('from_env', False)) for p in projects] == [('库里的', False), ('deepseek', True)]
+
+    def test_db_provider_suppresses_env_discovery(self, monkeypatch):
+        monkeypatch.setenv('VOLC_API_KEY', 'a:b')
+        with _db(projects=[{'name': '火山-主账号', 'provider': 'volc', 'api_key': 'x:y'}]):
+            projects = load_config()['projects']
+        assert [p['name'] for p in projects] == ['火山-主账号']
+
+    def test_fields_are_normalized(self, monkeypatch):
+        monkeypatch.setenv('GLM_API_KEY', 'a.b')
+        with _db(subscriptions=[{'name': '域名', 'cycle_type': 'YEARLY', 'renewal_day': '03-15'}],
+                 email=[{'host': 'imap.x.com', 'username': 'u@x.com', 'password': 'p'}]):
+            config = load_config()
+        assert config['projects'][0]['type'] == 'quota'          # 按 provider 推导
+        assert config['subscriptions'][0]['renewal_day'] == 315   # MM-DD 转 MMDD
+        assert config['email'][0] == {
+            'host': 'imap.x.com', 'username': 'u@x.com', 'password': 'p',
+            'port': 993, 'use_ssl': True, 'name': 'u@x.com',
         }
-        config_path = self._create_config_file(config_data)
-        try:
-            with patch.dict(os.environ, {'WEBHOOK_URL': 'https://env.com/hook'}, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['webhook']['url'] == 'https://env.com/hook'
-        finally:
-            os.unlink(config_path)
 
-    @patch('core.config_loader.load_env_file')
-    def test_email_password_placeholder_substitution(self, mock_load_env):
-        """邮箱 password 使用 ${VAR} 时会被环境变量替换"""
-        config_data = {
-            'projects': [],
-            'subscriptions': [],
-            'email': [
-                {'name': 'work', 'host': 'imap.example.com', 'port': 993,
-                 'username': 'user', 'password': '${EMAIL_PASSWORD}'}
-            ],
-            'settings': {'balance_refresh_interval_seconds': 3600}
-        }
-        config_path = self._create_config_file(config_data)
-        try:
-            with patch.dict(os.environ, {'EMAIL_PASSWORD': 'env_pass'}, clear=True):
-                config = load_config_with_env_vars(config_path)
-                assert config['email'][0]['password'] == 'env_pass'
-        finally:
-            os.unlink(config_path)
+    def test_db_failure_falls_back_to_env(self, monkeypatch):
+        monkeypatch.setenv('ENABLE_DYNAMIC_CONFIG', 'true')
+        monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-x')
+        with patch('database.repository.ConfigRepository.get_all', side_effect=RuntimeError('库挂了')):
+            projects = load_config()['projects']
+        assert [p['name'] for p in projects] == ['deepseek']
 
-    def test_refresh_interval_from_env(self):
-        """刷新间隔只认环境变量，未设置或非正数用默认值"""
-        from core.config_loader import get_refresh_interval
-
-        with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '1800'}, clear=True):
-            assert get_refresh_interval() == 1800
-        with patch.dict(os.environ, {}, clear=True):
-            assert get_refresh_interval() == 3600
-        with patch.dict(os.environ, {'BALANCE_REFRESH_INTERVAL_SECONDS': '0'}, clear=True):
-            assert get_refresh_interval() == 3600
-
-    def test_file_not_found(self):
-        """测试配置文件不存在"""
-        config = load_config_with_env_vars('/nonexistent/config.json')
-        assert config['projects'] == []
-        assert config['subscriptions'] == []
-        assert config['email'] == []
-
-
-class TestMaskSensitiveData:
-    """敏感数据脱敏测试"""
-
-    def test_mask_api_key_long(self):
-        """测试脱敏长 API Key（保留首尾各4位）"""
-        config = {
-            'projects': [
-                {'name': 'Test', 'api_key': 'sk-1234567890abcdef'}
-            ]
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['projects'][0]['api_key'] == 'sk-1***cdef'
-
-    def test_mask_api_key_short(self):
-        """测试脱敏短 API Key（全部替换）"""
-        config = {
-            'projects': [
-                {'name': 'Test', 'api_key': 'short'}
-            ]
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['projects'][0]['api_key'] == '***'
-
-    def test_mask_api_key_exactly_8_chars(self):
-        """测试脱敏恰好8位的 API Key"""
-        config = {
-            'projects': [
-                {'name': 'Test', 'api_key': '12345678'}
-            ]
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['projects'][0]['api_key'] == '***'
-
-    def test_mask_api_key_9_chars(self):
-        """测试脱敏9位 API Key"""
-        config = {
-            'projects': [
-                {'name': 'Test', 'api_key': '123456789'}
-            ]
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['projects'][0]['api_key'] == '1234***6789'
-
-    def test_mask_email_password(self):
-        """测试脱敏邮箱密码"""
-        config = {
-            'email': [
-                {'name': 'work', 'password': 'my_secret_password'},
-                {'name': 'personal', 'password': 'another_secret'}
-            ]
-        }
-        masked = mask_sensitive_data(config)
-        assert masked['email'][0]['password'] == '***'
-        assert masked['email'][1]['password'] == '***'
-
-    def test_mask_does_not_modify_original(self):
-        """测试脱敏不修改原始配置"""
-        config = {
-            'projects': [
-                {'name': 'Test', 'api_key': 'sk-1234567890abcdef'}
-            ],
-            'email': [
-                {'name': 'work', 'password': 'secret'}
-            ]
-        }
-        original_api_key = config['projects'][0]['api_key']
-        original_password = config['email'][0]['password']
-
-        mask_sensitive_data(config)
-
-        assert config['projects'][0]['api_key'] == original_api_key
-        assert config['email'][0]['password'] == original_password
-
-    def test_mask_missing_sections(self):
-        """测试缺少可选节时不报错"""
-        config = {'settings': {'balance_refresh_interval_seconds': 3600}}
-        masked = mask_sensitive_data(config)
-        assert 'settings' in masked
-
-    def test_mask_empty_config(self):
-        """测试空配置不报错"""
-        config = {}
-        masked = mask_sensitive_data(config)
-        assert masked == {}
+    def test_database_not_queried_without_dynamic_config(self, monkeypatch):
+        monkeypatch.delenv('ENABLE_DYNAMIC_CONFIG', raising=False)
+        with patch('database.repository.ConfigRepository.get_all') as get_all:
+            load_config()
+        get_all.assert_not_called()
 
 
 class TestLoadEnvFile:
-    """加载 .env 文件测试"""
 
     @patch('core.config_loader.load_dotenv')
-    def test_load_existing_env_file(self, mock_load_dotenv):
-        """测试加载存在的 .env 文件"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
-            f.write('TEST_VAR=value\n')
-            env_path = f.name
-        try:
-            load_env_file(env_path)
-            mock_load_dotenv.assert_called_once_with(env_path, override=True)
-        finally:
-            os.unlink(env_path)
+    def test_loads_when_present(self, mock_dotenv, tmp_path):
+        env_file = tmp_path / '.env'
+        env_file.write_text('A=1', encoding='utf-8')
+        load_env_file(str(env_file))
+        mock_dotenv.assert_called_once_with(str(env_file), override=True)
 
     @patch('core.config_loader.load_dotenv')
-    def test_load_nonexistent_env_file(self, mock_load_dotenv):
-        """测试加载不存在的 .env 文件不报错"""
-        load_env_file('/nonexistent/.env')
-        mock_load_dotenv.assert_not_called()
+    def test_skips_when_missing(self, mock_dotenv, tmp_path):
+        load_env_file(str(tmp_path / 'absent'))
+        mock_dotenv.assert_not_called()
 
 
 if __name__ == '__main__':

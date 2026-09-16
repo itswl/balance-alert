@@ -24,7 +24,7 @@ class AppSettings(BaseSettings):
     """应用级环境变量配置。
 
     可选能力（数据库 / 订阅 / 历史 / Prometheus）默认关闭，核心版只跑余额告警。
-    取值为 ``None`` 的字段表示"未通过环境变量设置"，由调用方回退到 config.json 或内置默认。
+    取值为 ``None`` 的字段表示"未通过环境变量设置"，由调用方回退到内置默认。
     环境变量值非法（如 ``ENABLE_X=enabled``）会在启动时直接报错，而不是静默忽略。
     """
 
@@ -38,9 +38,6 @@ class AppSettings(BaseSettings):
             return data
         return {k: v for k, v in data.items() if not (isinstance(v, str) and v.strip() == '')}
 
-    # ---- 配置文件路径 ----
-    config_path: str = 'config.json'
-
     # ---- 可选能力开关 ----
     enable_database: bool = False
     enable_dynamic_config: bool = False
@@ -49,13 +46,13 @@ class AppSettings(BaseSettings):
     enable_prometheus: bool = False
     enable_web_alarm: bool = False
 
-    # ---- 调度与并发（None = 未设置，回退到 config.json/settings 或默认）----
+    # ---- 调度与并发（None = 未设置，回退到默认）----
     balance_refresh_interval_seconds: Optional[int] = None
     max_concurrent_checks: Optional[int] = None
     alert_cooldown_seconds: Optional[int] = None
     subscription_alert_cooldown_seconds: Optional[int] = None
 
-    # ---- Webhook（None = 未设置，回退到 config.json/webhook）----
+    # ---- Webhook ----
     webhook_url: Optional[str] = None
     webhook_source: Optional[str] = None
     webhook_type: Optional[str] = None
@@ -65,6 +62,9 @@ class AppSettings(BaseSettings):
     alert_schedule: str = '09:00,15:00'         # 余额 + 订阅真实告警检查
     email_scan_schedule: str = '10:00'          # 邮箱扫描（发送真实告警）
     email_scan_days: int = 1                    # 定时邮箱扫描覆盖最近几天
+    # 告警关键词：逗号分隔。alert 整体替换默认表，extra 在默认之上追加
+    email_alert_keywords: str = ''
+    email_extra_alert_keywords: str = ''
     weekly_report_schedule: str = 'Mon 09:00'   # 周报，格式「星期 时刻」，星期可省略表示每天
 
     # ---- 消耗与跑道分析（需要数据库历史；阈值设 0 关闭对应告警）----
@@ -132,6 +132,18 @@ class AppSettings(BaseSettings):
     @property
     def email_scan_schedule_times(self) -> list:
         return parse_daily_times(self.email_scan_schedule)
+
+    @staticmethod
+    def _split_list(text: str) -> list:
+        return [item.strip() for item in (text or '').split(',') if item.strip()]
+
+    @property
+    def alert_keyword_override(self) -> list:
+        return self._split_list(self.email_alert_keywords)
+
+    @property
+    def alert_keyword_extras(self) -> list:
+        return self._split_list(self.email_extra_alert_keywords)
 
     @property
     def weekly_report_plan(self) -> tuple:

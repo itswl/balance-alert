@@ -13,22 +13,21 @@ python -m services.monitor --show-config    # 自检：每个密钥从哪来、�
 python main.py                              # http://localhost:8080
 ```
 
-**不需要配置文件**：环境变量里有 `DEEPSEEK_API_KEY` 就会自动监控 DeepSeek，阈值取 `DEEPSEEK_THRESHOLD`。
-要一次声明很多账户，或者想把清单纳入版本管理，再 `cp config.json.example config.json`。
+**没有配置文件**：环境变量里有 `DEEPSEEK_API_KEY` 就会自动监控 DeepSeek，阈值取 `DEEPSEEK_THRESHOLD`。
+要一次管很多账户、想在页面上增删改，打开数据库动态配置。
 
 `.env` 的值后面不要写行内注释，注释单独一行。
 
 ## 配置
 
-三层各管一摊，一个值只有一个家。业务清单三种来路都行，按需要挑一种，也可以混用：
+两个来源，一个值只有一个家：
 
-| 来源 | 放什么 | 适合 |
+| 来源 | 放什么 | 生效方式 |
 | --- | --- | --- |
-| 环境变量（`.env` / K8s Secret） | 密钥、Webhook、数据库连接、功能开关、定时任务时刻；**设了 `{PROVIDER}_API_KEY` 就自动成为一个受监控项目** | 一个平台一个账号的常见场景，零配置 |
-| `config.json` | 业务清单 `projects` / `subscriptions` / `email`，支持 `${VAR}` 占位符 | 一次声明很多账户、想纳入版本管理 |
-| 数据库动态配置 | 同三段清单，可在页面上增删改 | 生产环境，需 `ENABLE_DATABASE` + `ENABLE_DYNAMIC_CONFIG` |
+| 环境变量（`.env` / K8s Secret） | 密钥、Webhook、数据库连接、功能开关、定时任务时刻；**设了 `{PROVIDER}_API_KEY` 就自动成为一个受监控项目，设了 `EMAIL_HOST` 就自动纳入邮箱扫描** | 改完重启 |
+| 数据库动态配置 | 业务清单 `projects` / `subscriptions` / `email`，在页面上或用 API 增删改 | 需 `ENABLE_DATABASE` + `ENABLE_DYNAMIC_CONFIG`，即时生效 |
 
-优先级：数据库里某一段有数据就覆盖文件里的同名段落；环境变量自动发现的项目追加在最后，**已经声明过的 provider 不会被重复添加**。
+数据库里的清单排在前面，环境变量发现的追加在后面，**已经声明过的 provider 和邮箱不会重复添加**。只配环境变量就能跑；订阅提醒只有数据库这一个去处，必须开动态配置。
 
 ### 环境变量自动发现
 
@@ -37,19 +36,15 @@ python main.py                              # http://localhost:8080
 | `{PROVIDER}_API_KEY` | 有值就监控这个平台，项目名即 provider 名 |
 | `{PROVIDER}_THRESHOLD` | 告警阈值，不填则只看不告警（自检会提示） |
 | `{PROVIDER}_OWNER_PROJECT` | 分组标签，可选 |
+| `EMAIL_HOST` + `EMAIL_USERNAME` + `EMAIL_PASSWORD` | 三个都设了就纳入邮箱扫描；`EMAIL_PORT`（993）、`EMAIL_USE_SSL`（true）、`EMAIL_NAME` 可选 |
 
-同一平台多个账号用 `{PROVIDER}_1_API_KEY`、`{PROVIDER}_2_API_KEY`，项目名自动变成 `volc-1`、`volc-2`，阈值对应 `VOLC_1_THRESHOLD`。
+同一平台多个账号用 `{PROVIDER}_1_API_KEY`、`{PROVIDER}_2_API_KEY`，项目名自动变成 `volc-1`、`volc-2`，阈值对应 `VOLC_1_THRESHOLD`；多个邮箱同理用 `EMAIL_1_HOST`、`EMAIL_2_HOST`。
 
 自动发现的项目在页面上是只读的，点编辑保存一次就会固化进数据库，之后以数据库为准；要移除它得先去掉对应的环境变量。
 
-### projects
+### 项目字段
 
-一个项目最少两个字段。密钥自动读环境变量 `{PROVIDER}_API_KEY`；同一 provider 多个账号用 `{PROVIDER}_{序号}_API_KEY`，序号按在 `projects` 里的出现顺序：
-
-```json
-{ "provider": "openrouter", "threshold": 10000 }
-{ "name": "火山-主账号", "provider": "volc", "threshold": 7000, "owner_project": "云服务" }
-```
+在页面上填，或 `POST /api/config/project`。除 `provider` 外都可省：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -58,6 +53,7 @@ python main.py                              # http://localhost:8080
 | `name` | 默认用 provider 名；动态配置里是唯一键 |
 | `type` | 展示用，按 provider 推导：`credits` / `balance` / `quota` |
 | `owner_project` / `enabled` | 分组标签 / 是否启用，默认启用 |
+| `api_key` | 留空则读环境变量 `{PROVIDER}_API_KEY`；同一 provider 多个账号按出现顺序取 `{PROVIDER}_{序号}_API_KEY` |
 
 | 平台 | `provider` | 密钥格式 |
 | --- | --- | --- |
@@ -66,14 +62,11 @@ python main.py                              # http://localhost:8080
 | 火山引擎 | `volc` | `AccessKeyId:SecretAccessKey` |
 | 阿里云 | `aliyun` | `AccessKeyId:AccessKeySecret` |
 
-### subscriptions 与 email
+### 订阅与邮箱字段
 
-```json
-{ "name": "域名续费", "cycle_type": "yearly", "renewal_day": "03-15", "amount": 88 }
-{ "host": "imap.example.com", "username": "me@example.com", "password": "${EMAIL_PASSWORD}" }
-```
+订阅 `cycle_type` 为 `weekly` / `monthly` / `yearly`：周付 `renewal_day` 写 1-7，月付写 1-31，年付直接写 `"03-15"`。`alert_days_before` 默认 3，续费当天也提醒，`amount` 与 `owner_project` 可选。
 
-订阅 `cycle_type` 为 `weekly` / `monthly` / `yearly`，年付的 `renewal_day` 直接写 `"03-15"`；`alert_days_before` 默认 3，续费当天也提醒。邮箱的 `port`（993）和 `use_ssl`（true）可省。匹配关键词默认覆盖中英文的欠费、续费、停机用语，要改就在 config.json 顶层加 `email_settings`：`alert_keywords` 整体替换，`extra_alert_keywords` 追加。
+邮箱要 `host` `username` `password`，`port`（993）和 `use_ssl`（true）可省。匹配关键词默认覆盖中英文的欠费、续费、停机用语，要改用环境变量：`EMAIL_ALERT_KEYWORDS` 整体替换，`EMAIL_EXTRA_ALERT_KEYWORDS` 追加，都是逗号分隔。
 
 ## 环境变量
 
@@ -82,10 +75,11 @@ python main.py                              # http://localhost:8080
 | `WEB_API_KEY` | 无 | `/api/*` 的访问密钥；未设置时接口一律 503 |
 | `WEBHOOK_URL` / `WEBHOOK_TYPE` / `WEBHOOK_SOURCE` | 无 / `custom` / `credit-monitor` | 告警机器人；类型 `feishu` `dingtalk` `wecom` `custom` |
 | `{PROVIDER}_API_KEY` | 无 | 各平台密钥，见上表 |
-| `CONFIG_PATH` | `config.json` | 配置文件路径 |
 | `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | 看板刷新间隔 |
 | `ALERT_SCHEDULE` | `09:00,15:00` | 真实告警检查时刻，逗号分隔，`off` 关闭 |
+| `EMAIL_HOST` / `EMAIL_USERNAME` / `EMAIL_PASSWORD` | 无 | 三个齐全就自动纳入邮箱扫描，另有 `EMAIL_PORT` `EMAIL_USE_SSL` `EMAIL_NAME` |
 | `EMAIL_SCAN_SCHEDULE` / `EMAIL_SCAN_DAYS` | `10:00` / `1` | 定时邮箱扫描时刻、覆盖最近几天（1-30） |
+| `EMAIL_ALERT_KEYWORDS` / `EMAIL_EXTRA_ALERT_KEYWORDS` | 无 | 邮件告警关键词，逗号分隔；前者替换默认词表，后者追加 |
 | `WEEKLY_REPORT_SCHEDULE` | `Mon 09:00` | 周报时刻，格式「星期 时刻」，星期可写 `Mon` / `周一` / `1`，`off` 关闭 |
 | `BURN_RATE_WINDOW_DAYS` | `7` | 算日均消耗看最近几天 |
 | `RUNWAY_ALERT_DAYS` | `7` | 按当前速率还剩几天就告警，`0` 关闭 |
@@ -103,7 +97,7 @@ python main.py                              # http://localhost:8080
 | `LOG_LEVEL` / `LOG_FORMAT` / `LOG_FILE` | `INFO` / `text` / 无 | 日志；格式可选 `json` |
 | `STRICT_DATABASE_ERRORS` | `false` | 数据库异常向上抛，排障时用 |
 
-值写错（如 `ENABLE_DATABASE=enabled`）启动即报错；留空视为未设置。已有 `config.json` 要导入数据库：`python scripts/migrate_config_to_db.py`。
+值写错（如 `ENABLE_DATABASE=enabled`）启动即报错；留空视为未设置。从旧版升级、手上还有 `config.json` 的，开好数据库后跑一次 `python scripts/migrate_config_to_db.py` 导进去，之后这个文件就可以删了。
 
 ## 定时任务
 
@@ -131,7 +125,7 @@ python main.py                              # http://localhost:8080
 
 ## 看板与 API
 
-看板四个视图：全部项目、仅告警、订阅管理、邮箱扫描；地址栏加 `#alerts` `#subscriptions` `#email` 可直达。首次打开填 `WEB_API_KEY`。开了动态配置能在页面上增删改项目、订阅和邮箱，`config.json` 就完全不用碰了；开了历史 API 有趋势图和历史告警邮件。接口清单见 [docs/API.md](docs/API.md)。
+看板四个视图：全部项目、仅告警、订阅管理、邮箱扫描；地址栏加 `#alerts` `#subscriptions` `#email` 可直达。首次打开填 `WEB_API_KEY`。开了动态配置能在页面上增删改项目、订阅和邮箱；开了历史 API 有趋势图和历史告警邮件。接口清单见 [docs/API.md](docs/API.md)。
 
 ## 部署
 
@@ -172,7 +166,7 @@ kubectl -n common-prod rollout status deploy/balance-alert
 
 ```text
 main.py                 入口：Flask + 进程内调度器 + 指标
-core/                   settings（环境变量）、config_loader（三层配置）、scheduler、timeutil、state_manager、secret_crypto
+core/                   settings（环境变量）、config_loader（环境变量发现 + 数据库清单）、scheduler、timeutil、state_manager、secret_crypto
 providers/              各平台余额适配器；base.py 的 ProviderSpec 用几行声明就能接一个新平台
 services/               monitor（余额检查）、runway（消耗与跑道）、weekly_report、subscription_checker、email_scanner、webhook_adapter、prometheus_exporter
 web/                    Flask 应用与蓝图（core / subscription / email / project / history）、请求校验

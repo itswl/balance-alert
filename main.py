@@ -22,7 +22,7 @@ from core.state_manager import StateManager
 from services.monitor import run_credit_monitor
 from services.prometheus_exporter import metrics_collector
 from core.logger import get_logger
-from core.config_loader import get_default_config_path, get_refresh_interval
+from core.config_loader import get_refresh_interval
 from core.settings import get_settings
 
 logger = get_logger('web_server')
@@ -39,7 +39,7 @@ global_state_manager = StateManager()
 
 def refresh_balances(state_mgr: StateManager, dry_run: bool) -> Dict[str, Any]:
     """检查全部项目余额，写入看板状态与指标"""
-    result = run_credit_monitor(get_default_config_path(), dry_run=dry_run)
+    result = run_credit_monitor(dry_run=dry_run)
     if not result.get('success'):
         raise RuntimeError(result.get('error') or '余额检查失败')
 
@@ -62,7 +62,7 @@ def refresh_subscriptions(state_mgr: StateManager, dry_run: bool) -> Dict[str, A
         return {'subscriptions': 0, 'enabled': False}
 
     from services.subscription_checker import SubscriptionChecker
-    results = SubscriptionChecker(get_default_config_path()).check_subscriptions(dry_run=dry_run) or []
+    results = SubscriptionChecker().check_subscriptions(dry_run=dry_run) or []
     state_mgr.update_subscription_state(results)
     metrics_collector.update_subscription_metrics(results)
     return {
@@ -75,7 +75,7 @@ def refresh_subscriptions(state_mgr: StateManager, dry_run: bool) -> Dict[str, A
 def scan_mailboxes(state_mgr: StateManager, days: int, dry_run: bool) -> Dict[str, Any]:
     """扫描所有启用的邮箱；扫描器内部会更新邮箱指标"""
     from services.email_scanner import EmailScanner
-    scanner = EmailScanner(get_default_config_path())
+    scanner = EmailScanner()
     if not scanner.email_configs:
         return {'mailboxes': 0, 'skipped': '未配置邮箱'}
 

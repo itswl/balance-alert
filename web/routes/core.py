@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 
-from core.config_loader import get_default_config_path, get_refresh_interval
+from core.config_loader import get_refresh_interval
 from core.logger import get_logger
 from core.settings import get_settings
 from services.monitor import run_credit_monitor
@@ -125,7 +125,7 @@ def refresh_credits_route():
     try:
         started = datetime.now()
         dry_run = not get_settings().enable_web_alarm
-        result = run_credit_monitor(get_default_config_path(), project_name, dry_run)
+        result = run_credit_monitor(project_name, dry_run)
         if not result['success']:
             return json_error(f"刷新失败: {result.get('error', 'Unknown error')}", 500)
 

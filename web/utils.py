@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 
 from flask import current_app, jsonify, make_response, request
 
-from core.config_loader import get_default_config_path, load_config
+from core.config_loader import load_config
 from core.logger import get_logger
 from core.state_manager import StateManager
 
@@ -109,10 +109,10 @@ def require_json_fields(*fields: str):
     return data, None
 
 
-def load_config_safe(config_path: str = None) -> Dict[str, Any]:
+def load_config_safe() -> Dict[str, Any]:
     """安全加载配置，失败返回空 dict"""
     try:
-        return load_config(config_path or get_default_config_path()) or {}
+        return load_config() or {}
     except Exception as e:
         logger.error(f"加载配置失败: {e}", exc_info=True)
         return {}

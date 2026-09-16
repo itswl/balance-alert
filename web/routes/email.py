@@ -9,7 +9,6 @@ import time
 
 from flask import Blueprint, request
 
-from core.config_loader import get_default_config_path
 from core.logger import get_logger
 from core.settings import get_settings
 from services.email_scanner import EmailScanner
@@ -121,7 +120,7 @@ def run_email_scan():
     if busy:
         return json_error(f'扫描{busy}', 429)
     try:
-        scanner = EmailScanner(get_default_config_path())
+        scanner = EmailScanner()
         if not scanner.email_configs:
             return json_error('未配置邮箱或所有邮箱均已停用', 400)
 

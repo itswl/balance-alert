@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-配置加载模块
+配置加载
 
-职责边界（一个值只有一个家）：
-- 环境变量（core.settings）：密钥、连接、开关、调度参数
-- config.json：业务清单 projects/subscriptions/email，支持 ${VAR} 占位符
-- 数据库动态配置：生产的业务清单，需 ENABLE_DYNAMIC_CONFIG，有数据时覆盖文件同名段落
+只有两个来源，一个值只有一个家：
+
+- 环境变量（core.settings 与本模块）：密钥、连接、开关、调度参数，以及由
+  ``{PROVIDER}_API_KEY`` / ``EMAIL_HOST`` 自动发现出来的项目与邮箱
+- 数据库动态配置：projects / subscriptions / email 三段业务清单，可在页面上增删改，
+  需要 ENABLE_DATABASE + ENABLE_DYNAMIC_CONFIG
+
+数据库里某一段有数据就用数据库的；环境变量发现的项目与邮箱追加在后面，
+已经声明过的不会重复添加。没有配置文件这一层。
 """
-import copy
 import hashlib
-import json
-import logging
 import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -26,20 +28,19 @@ DEFAULT_REFRESH_INTERVAL_SECONDS = 3600
 
 _DB_META_FIELDS = {'id', 'created_at', 'updated_at'}
 
+# 自动发现时一个 provider / 一组邮箱变量最多认几个账号（后缀 _1 … _N）
+MAX_ENV_ACCOUNTS = 10
+
 
 def load_env_file(env_file: str = '.env') -> None:
-    """加载 .env 文件"""
+    """把 .env 写进环境变量"""
     if os.path.exists(env_file):
         load_dotenv(env_file, override=True)
         logger.info(f"[Config] 已加载环境变量文件: {env_file}")
 
 
-# 进程启动时把 .env 写进环境变量，之后 settings / 占位符替换都直接读 os.environ
+# 进程启动时加载一次，之后所有配置都直接读 os.environ
 load_env_file()
-
-
-def get_default_config_path() -> str:
-    return get_settings().config_path
 
 
 def make_project_id(provider_name: str, project_name: str) -> str:
@@ -58,15 +59,8 @@ def get_refresh_interval() -> int:
     return interval
 
 
-def _ensure_base_shape(config: Dict[str, Any]) -> Dict[str, Any]:
-    config.setdefault('projects', [])
-    config.setdefault('subscriptions', [])
-    config.setdefault('email', [])
-    return config
-
-
-# ============ 配置规范化 ============
-# 目标：config.json 只写必要字段，其余按约定推导，文件/数据库/API 三条来路统一在此处理。
+# ============ 字段补齐 ============
+# 目标：只写必要字段，其余按约定推导；数据库与环境变量两条来路统一在此处理。
 
 # provider 的默认余额类型（仅影响展示与告警文案）
 PROVIDER_DEFAULT_TYPE = {
@@ -79,13 +73,6 @@ PROVIDER_DEFAULT_TYPE = {
     'deepseek': 'balance',
     'glm': 'quota',  # Coding Plan 剩余配额百分比
 }
-
-_PLACEHOLDER_PATTERN = re.compile(r'\$\{[^}]+\}')
-
-
-def is_unresolved_placeholder(value: Any) -> bool:
-    """``${VAR}`` 没被环境变量替换时视为未配置，避免把字面量当密钥发出去。"""
-    return isinstance(value, str) and bool(_PLACEHOLDER_PATTERN.search(value))
 
 
 def provider_key_env_names(provider: str, ordinal: int = 1) -> list:
@@ -102,75 +89,10 @@ def provider_key_env_names(provider: str, ordinal: int = 1) -> list:
     return [f'{upper}_{ordinal}_API_KEY']
 
 
-# 自动发现时一个 provider 最多认几个账号（{PROVIDER}_1_API_KEY … _N_API_KEY）
-MAX_ENV_ACCOUNTS = 10
-
-
-def _env_float(*names: str) -> Optional[float]:
-    """按顺序取第一个能解析成数字的环境变量"""
-    for name in names:
-        value = os.environ.get(name)
-        if value:
-            try:
-                return float(value)
-            except ValueError:
-                logger.warning(f"[Config] {name}={value!r} 不是数字，已忽略")
-    return None
-
-
-def _env_accounts(provider: str) -> list:
-    """某个 provider 在环境变量里配了几个账号，返回 [(序号, 密钥)]。
-
-    序号 1 同时接受 ``{PROVIDER}_API_KEY`` 与 ``{PROVIDER}_1_API_KEY``，避免重复建项目。
-    """
-    upper = provider.upper()
-    accounts = []
-    for ordinal in range(1, MAX_ENV_ACCOUNTS + 1):
-        names = provider_key_env_names(provider, ordinal)
-        value = next((os.environ[n] for n in names if os.environ.get(n)), None)
-        if value:
-            accounts.append((ordinal, value))
-    return accounts
-
-
-def discover_env_projects(declared: list) -> list:
-    """没在清单里声明过的 provider，只要设了 ``{PROVIDER}_API_KEY`` 就自动纳入监控。
-
-    阈值取 ``{PROVIDER}_THRESHOLD``（多账号时也接受 ``{PROVIDER}_{序号}_THRESHOLD``），
-    不填就不会告警，自检会提示。这样最常见的「一个平台一个账号」场景不需要任何配置文件。
-    """
-    from providers import PROVIDERS
-
-    declared_providers = {
-        str(p.get('provider') or '').strip().lower() for p in declared if isinstance(p, dict)
-    }
-    discovered = []
-    for provider in sorted(PROVIDERS):
-        if provider in declared_providers:
-            continue
-        accounts = _env_accounts(provider)
-        upper = provider.upper()
-        for ordinal, api_key in accounts:
-            suffix = f'-{ordinal}' if len(accounts) > 1 else ''
-            numbered = f'{upper}_{ordinal}'
-            discovered.append({
-                'name': f'{provider}{suffix}',
-                'provider': provider,
-                'api_key': api_key,
-                'threshold': _env_float(f'{numbered}_THRESHOLD', f'{upper}_THRESHOLD'),
-                'owner_project': os.environ.get(f'{numbered}_OWNER_PROJECT') or os.environ.get(f'{upper}_OWNER_PROJECT'),
-                'from_env': True,
-            })
-    if discovered:
-        logger.info(f"[Config] 从环境变量自动发现 {len(discovered)} 个项目: "
-                    + ', '.join(p['name'] for p in discovered))
-    return discovered
-
-
 def resolve_api_key(project: Dict[str, Any], provider: str, ordinal: int) -> tuple:
     """返回 (api_key, 来源说明)。显式 api_key 优先，其次按环境变量约定推导。"""
     api_key = project.get('api_key')
-    if api_key and not is_unresolved_placeholder(api_key):
+    if api_key:
         return str(api_key), 'api_key 字段'
 
     for name in provider_key_env_names(provider, ordinal):
@@ -215,8 +137,18 @@ def coerce_renewal_day(value: Any, cycle_type: str) -> Any:
     return value
 
 
+def to_float(value: Any, default: float = 0.0) -> float:
+    """把配置里的数字字段转成 float；空值或非数字用默认值。"""
+    if value is None or value == '':
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize_projects(projects: list) -> list:
-    """补齐项目的省略字段：provider 小写、name/type 默认值、api_key 按约定推导。"""
+    """补齐项目的省略字段：provider 小写、name/type 默认值、阈值转数字、api_key 按约定推导。"""
     ordinals: Dict[str, int] = {}
     for project in projects:
         if not isinstance(project, dict):
@@ -227,6 +159,8 @@ def normalize_projects(projects: list) -> list:
             project['name'] = provider or 'unknown'
         if not project.get('type'):
             project['type'] = PROVIDER_DEFAULT_TYPE.get(provider, 'balance')
+        # 没写阈值就是 0：永远不告警，自检会提示补上
+        project['threshold'] = to_float(project.get('threshold'))
 
         ordinals[provider] = ordinals.get(provider, 0) + 1
         project['api_key'] = resolve_api_key(project, provider, ordinals[provider])[0]
@@ -256,8 +190,6 @@ def normalize_emails(emails: list) -> list:
             email_config['use_ssl'] = True
         if not email_config.get('name'):
             email_config['name'] = email_config.get('username') or 'mailbox'
-        if is_unresolved_placeholder(email_config.get('password')):
-            email_config['password'] = ''
     return emails
 
 
@@ -279,103 +211,138 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
-def _substitute_env_placeholders(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {k: _substitute_env_placeholders(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_substitute_env_placeholders(v) for v in value]
-    if isinstance(value, str):
-        pattern = r'\$\{([^}]+)\}'
+# ============ 环境变量自动发现 ============
 
-        def replace_env(match):
-            var_name = match.group(1)
-            return os.environ.get(var_name, match.group(0))
-
-        return re.sub(pattern, replace_env, value)
-    return value
-
-
-def load_config_with_env_vars(config_file: str = 'config.json') -> Dict[str, Any]:
-    """读取配置文件并替换 ${VAR} 占位符；文件很小，每次都直接读，不做缓存
-
-    Raises:
-        ValueError: 配置文件不是合法 JSON 时
-    """
-    config: Dict[str, Any] = {}
-
-    if os.path.isfile(config_file):
-        with open(config_file, 'r', encoding='utf-8') as f:
-            raw = f.read().strip()
-        if not raw:
-            # 空文件等同于没有配置：镜像里预置的占位文件、被清空的挂载都会是这种状态
-            logger.info(f"[Config] 配置文件 {config_file} 为空，业务清单来自数据库与环境变量")
-        else:
+def _env_float(*names: str) -> Optional[float]:
+    """按顺序取第一个能解析成数字的环境变量"""
+    for name in names:
+        value = os.environ.get(name)
+        if value:
             try:
-                config = _substitute_env_placeholders(json.loads(raw))
-            except json.JSONDecodeError as e:
-                raise ValueError(f"配置文件格式错误: {e}")
-    else:
-        logger.info(f"[Config] 未使用配置文件 {config_file}，业务清单来自数据库与环境变量")
-
-    config = _ensure_base_shape(config)
-
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"配置加载完成: {json.dumps(mask_sensitive_data(config), ensure_ascii=False)}")
-
-    return config
+                return float(value)
+            except ValueError:
+                logger.warning(f"[Config] {name}={value!r} 不是数字，已忽略")
+    return None
 
 
-def _add_env_projects(config: Dict[str, Any]) -> Dict[str, Any]:
-    """把环境变量里发现的项目补进清单，已声明过的 provider 不重复添加"""
-    config['projects'] = (config.get('projects') or []) + discover_env_projects(config.get('projects') or [])
-    return config
+def _env_bool(name: str) -> Optional[bool]:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
-def _strip_meta_fields(items):
+def _env_variants(prefix: str, suffix: str, ordinal: int) -> List[str]:
+    """序号 1 同时接受 ``PREFIX_SUFFIX`` 与 ``PREFIX_1_SUFFIX``，避免同一账号被认成两个"""
+    if ordinal <= 1:
+        return [f'{prefix}_{suffix}', f'{prefix}_1_{suffix}']
+    return [f'{prefix}_{ordinal}_{suffix}']
+
+
+def _env_first(prefix: str, suffix: str, ordinal: int) -> Optional[str]:
+    return next((os.environ[n] for n in _env_variants(prefix, suffix, ordinal) if os.environ.get(n)), None)
+
+
+def discover_env_projects(declared: list) -> list:
+    """没在清单里声明过的 provider，只要设了 ``{PROVIDER}_API_KEY`` 就自动纳入监控。
+
+    阈值取 ``{PROVIDER}_THRESHOLD``（多账号时也接受 ``{PROVIDER}_{序号}_THRESHOLD``），
+    不填就不会告警，自检会提示。
+    """
+    from providers import PROVIDERS
+
+    declared_providers = {
+        str(p.get('provider') or '').strip().lower() for p in declared if isinstance(p, dict)
+    }
+    discovered = []
+    for provider in sorted(PROVIDERS):
+        if provider in declared_providers:
+            continue
+        upper = provider.upper()
+        accounts = [
+            (ordinal, key) for ordinal in range(1, MAX_ENV_ACCOUNTS + 1)
+            for key in [_env_first(upper, 'API_KEY', ordinal)] if key
+        ]
+        for ordinal, api_key in accounts:
+            suffix = f'-{ordinal}' if len(accounts) > 1 else ''
+            numbered = f'{upper}_{ordinal}'
+            discovered.append({
+                'name': f'{provider}{suffix}',
+                'provider': provider,
+                'api_key': api_key,
+                'threshold': _env_float(f'{numbered}_THRESHOLD', f'{upper}_THRESHOLD'),
+                'owner_project': os.environ.get(f'{numbered}_OWNER_PROJECT') or os.environ.get(f'{upper}_OWNER_PROJECT'),
+                'from_env': True,
+            })
+    if discovered:
+        logger.info(f"[Config] 从环境变量发现 {len(discovered)} 个项目: " + ', '.join(p['name'] for p in discovered))
+    return discovered
+
+
+def discover_env_mailboxes(declared: list) -> list:
+    """设了 ``EMAIL_HOST`` / ``EMAIL_USERNAME`` / ``EMAIL_PASSWORD`` 就自动纳入扫描。
+
+    多个邮箱用 ``EMAIL_1_HOST`` / ``EMAIL_2_HOST``，名称取 ``EMAIL_{序号}_NAME``，缺省用账号。
+    """
+    # 名称和账号都算数：数据库里改过显示名的邮箱不该被再扫一遍
+    declared_names = {str(m.get(k) or '') for m in declared if isinstance(m, dict) for k in ('name', 'username')}
+    discovered = []
+    for ordinal in range(1, MAX_ENV_ACCOUNTS + 1):
+        host = _env_first('EMAIL', 'HOST', ordinal)
+        username = _env_first('EMAIL', 'USERNAME', ordinal)
+        password = _env_first('EMAIL', 'PASSWORD', ordinal)
+        if not (host and username and password):
+            continue
+        name = _env_first('EMAIL', 'NAME', ordinal) or username
+        if name in declared_names or username in declared_names:
+            continue
+        port = _env_float(*_env_variants('EMAIL', 'PORT', ordinal))
+        use_ssl = next(
+            (v for v in (_env_bool(n) for n in _env_variants('EMAIL', 'USE_SSL', ordinal)) if v is not None), None
+        )
+        discovered.append({
+            'name': name,
+            'host': host,
+            'port': int(port) if port else 993,
+            'username': username,
+            'password': password,
+            'use_ssl': True if use_ssl is None else use_ssl,
+            'from_env': True,
+        })
+    if discovered:
+        logger.info(f"[Config] 从环境变量发现 {len(discovered)} 个邮箱: " + ', '.join(m['name'] for m in discovered))
+    return discovered
+
+
+# ============ 最终配置 ============
+
+def _db_sections() -> Dict[str, list]:
+    """数据库里的三段业务清单；未启用动态配置或读取失败时返回空"""
+    if not get_settings().enable_dynamic_config:
+        return {}
+    try:
+        from database.repository import ConfigRepository
+        return {section: ConfigRepository.get_all(section) for section in ConfigRepository.SECTIONS}
+    except Exception as e:
+        logger.warning(f"[Config] 读取数据库动态配置失败，仅使用环境变量: {e}")
+        return {}
+
+
+def _strip_meta_fields(items: list) -> list:
     return [{k: v for k, v in item.items() if k not in _DB_META_FIELDS} for item in items]
 
 
-def load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
-    """加载最终配置：文件配置（含 env 覆盖）+ 数据库动态配置。每次返回新字典，调用方可安全修改。"""
-    config_file = config_file or get_default_config_path()
-    config = load_config_with_env_vars(config_file)
+def load_config() -> Dict[str, Any]:
+    """数据库动态配置 + 环境变量自动发现，返回补齐字段后的三段业务清单。
 
-    if not get_settings().enable_dynamic_config:
-        return normalize_config(_add_env_projects(config))
-
-    try:
-        from database.repository import ConfigRepository
-        db_sections = {section: ConfigRepository.get_all(section) for section in ConfigRepository.SECTIONS}
-    except Exception as e:
-        logger.warning(f"[Config] 读取数据库动态配置失败，回退到文件配置: {e}")
-        return normalize_config(config)
-
-    # 数据库里有数据的段落覆盖文件里的同名段落
-    for section, rows in db_sections.items():
-        if rows:
-            config[section] = _strip_meta_fields(rows)
-
-    return normalize_config(_add_env_projects(config))
-
-
-def mask_sensitive_data(config: Dict[str, Any]) -> Dict[str, Any]:
-    """脱敏处理，用于日志输出"""
-    masked = copy.deepcopy(config)
-
-    # 脱敏邮箱密码
-    if 'email' in masked:
-        for email in masked['email']:
-            if 'password' in email:
-                email['password'] = '***'
-
-    # 脱敏 API Key
-    if 'projects' in masked:
-        for project in masked['projects']:
-            if 'api_key' in project:
-                api_key = project['api_key']
-                if len(api_key) > 8:
-                    project['api_key'] = api_key[:4] + '***' + api_key[-4:]
-                else:
-                    project['api_key'] = '***'
-
-    return masked
+    每次返回新字典，调用方可安全修改。
+    """
+    db = _db_sections()
+    config = {
+        'projects': _strip_meta_fields(db.get('projects') or []),
+        'subscriptions': _strip_meta_fields(db.get('subscriptions') or []),
+        'email': _strip_meta_fields(db.get('email') or []),
+    }
+    config['projects'] += discover_env_projects(config['projects'])
+    config['email'] += discover_env_mailboxes(config['email'])
+    return normalize_config(config)

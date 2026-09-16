@@ -1,5 +1,5 @@
 """
-配置规范化测试：让 config.json 只写必要字段
+配置规范化测试：让数据库与环境变量里的清单只写必要字段
 """
 import os
 from unittest.mock import patch
@@ -8,7 +8,6 @@ import pytest
 
 from core.config_loader import (
     coerce_renewal_day,
-    is_unresolved_placeholder,
     normalize_config,
     normalize_emails,
     normalize_projects,
@@ -52,10 +51,10 @@ class TestResolveApiKey:
         assert key == 'ak:sk'
         assert source == '环境变量 VOLC_2_API_KEY'
 
-    def test_unresolved_placeholder_falls_back_to_env(self):
+    def test_empty_api_key_falls_back_to_env(self):
         """${VAR} 未被替换时不能当密钥用，应回退到约定推导"""
         with patch.dict(os.environ, {'TIKHUB_API_KEY': 'real'}, clear=True):
-            key, _ = resolve_api_key({'api_key': '${MISSING_VAR}'}, 'tikhub', 1)
+            key, _ = resolve_api_key({'api_key': ''}, 'tikhub', 1)
         assert key == 'real'
 
     def test_missing_everywhere(self):
@@ -179,22 +178,6 @@ class TestNormalizeEmails:
         assert emails[0]['use_ssl'] is False
         assert emails[0]['name'] == 'work'
 
-    def test_unresolved_password_cleared(self):
-        emails = normalize_emails([{'name': 'x', 'password': '${NOT_SET}'}])
-        assert emails[0]['password'] == ''
-
-
-class TestIsUnresolvedPlaceholder:
-    @pytest.mark.parametrize('value,expected', [
-        ('${FOO}', True),
-        ('prefix-${FOO}', True),
-        ('sk-real-key', False),
-        ('', False),
-        (None, False),
-        (123, False),
-    ])
-    def test_cases(self, value, expected):
-        assert is_unresolved_placeholder(value) is expected
 
 
 class TestNormalizeConfig:

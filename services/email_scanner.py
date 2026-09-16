@@ -32,7 +32,7 @@ logger = get_logger('email_scanner')
 BATCH_SIZE = 100         # 一次 IMAP FETCH 拉多少封
 MAX_MAILBOX_WORKERS = 5  # 同时扫描的邮箱数
 
-# 默认告警关键词，可用 config.json 的 email_settings.alert_keywords 整体替换、extra_alert_keywords 追加
+# 默认告警关键词，可用 EMAIL_ALERT_KEYWORDS 整体替换、EMAIL_EXTRA_ALERT_KEYWORDS 追加
 DEFAULT_ALERT_KEYWORDS = [
     # 中文关键词
     '欠费', '余额不足', '余额预警', '余额告警',
@@ -91,10 +91,8 @@ def imap_connection(host: str, port: int, username: str, password: str, use_ssl:
 class EmailScanner:
     """邮箱扫描器"""
 
-    def __init__(self, config_path='config.json'):
-        self.config_path = config_path
-        self.config = load_config(config_path)
-        self.email_configs = self._parse_email_configs()
+    def __init__(self):
+        self.email_configs = filter_enabled(load_config().get('email') or [])
         self.results: List[Dict[str, Any]] = []  # 上次扫描命中的告警邮件
         self.alert_keywords = self._load_keywords()
         self._keywords_pattern = re.compile(
@@ -104,21 +102,12 @@ class EmailScanner:
         self._seen_ids: set = set()
         self._seen_lock = threading.Lock()
 
-    def _parse_email_configs(self):
-        """解析邮箱配置，兼容单个（dict）与多个（list）两种写法"""
-        email_config = self.config.get('email', [])
-        if isinstance(email_config, dict):
-            email_config = [email_config]
-        if not isinstance(email_config, list):
-            return []
-        return filter_enabled(email_config)
-
-    def _load_keywords(self) -> List[str]:
-        settings = self.config.get('email_settings') or {}
-        custom = settings.get('alert_keywords')
-        keywords = list(custom) if custom is not None else list(DEFAULT_ALERT_KEYWORDS)
-        keywords.extend(settings.get('extra_alert_keywords') or [])
-        return keywords
+    @staticmethod
+    def _load_keywords() -> List[str]:
+        """EMAIL_ALERT_KEYWORDS 整体替换默认表，EMAIL_EXTRA_ALERT_KEYWORDS 在其上追加"""
+        settings = get_settings()
+        keywords = settings.alert_keyword_override or list(DEFAULT_ALERT_KEYWORDS)
+        return keywords + settings.alert_keyword_extras
 
     # ---------- 扫描 ----------
 
@@ -396,17 +385,14 @@ class EmailScanner:
 def main():
     """命令行入口：手动扫描一次"""
     import argparse
-    from core.config_loader import get_default_config_path
 
     parser = argparse.ArgumentParser(description='邮箱告警扫描器')
     parser.add_argument('--days', type=int, default=1, help='扫描最近几天的邮件（默认1天）')
     parser.add_argument('--dry-run', action='store_true', help='测试模式，不发送告警')
-    default_config = get_default_config_path()
-    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
     args = parser.parse_args()
 
     try:
-        EmailScanner(args.config).scan_emails(days=args.days, dry_run=args.dry_run)
+        EmailScanner().scan_emails(days=args.days, dry_run=args.dry_run)
     except Exception as e:
         logger.error(f"错误: {e}", exc_info=True)
         sys.exit(1)

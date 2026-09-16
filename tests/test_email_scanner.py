@@ -21,8 +21,6 @@ _ANY = object()
 def _create_scanner():
     """创建 EmailScanner 实例（绕过 __init__，不加载真实配置）"""
     scanner = EmailScanner.__new__(EmailScanner)
-    scanner.config_path = 'config.json'
-    scanner.config = {'email': []}
     scanner.email_configs = []
     scanner.results = []
     # 直接复用生产默认关键词，避免拷贝出现静默腐烂

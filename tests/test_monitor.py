@@ -1,13 +1,33 @@
 """
 余额监控器测试
 """
-import pytest
-import json
-import tempfile
 import os
-from unittest.mock import patch, MagicMock
-from services.monitor import CreditMonitor
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from core import config_loader
 from services import monitor as monitor_module
+from services.monitor import CreditMonitor
+
+PROJECT = {
+    'name': 'TestProject', 'provider': 'openrouter', 'api_key': 'sk-test',
+    'threshold': 10.0, 'type': 'credits', 'enabled': True,
+}
+
+
+def _db(projects):
+    """项目清单来自数据库动态配置，不再有配置文件"""
+    return patch.object(config_loader, '_db_sections', return_value={
+        'projects': projects, 'subscriptions': [], 'email': [],
+    })
+
+
+def _provider(mock_get_provider, **credits):
+    provider_class = MagicMock()
+    provider_class.return_value.get_credits.return_value = credits
+    mock_get_provider.return_value = provider_class
+    return provider_class
 
 
 class TestCreditMonitor:
@@ -19,192 +39,104 @@ class TestCreditMonitor:
         monitor_module._response_cache.clear()
         monitor_module._provider_cache.clear()
 
-    def _create_config_file(self, config_data):
-        """创建临时配置文件"""
-        f = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        json.dump(config_data, f, ensure_ascii=False)
-        f.close()
-        return f.name
+    def test_loads_projects_from_config(self):
+        with _db([PROJECT]):
+            assert [p['name'] for p in CreditMonitor().config['projects']] == ['TestProject']
 
-    def _base_config(self, **overrides):
-        """生成基础配置"""
-        config = {
-            'settings': {'max_concurrent_checks': 5},
-            'projects': [
-                {
-                    'name': 'TestProject',
-                    'provider': 'openrouter',
-                    'api_key': 'sk-test',
-                    'threshold': 10.0,
-                    'type': 'credits',
-                    'enabled': True
-                }
-            ],
-            'subscriptions': [],
-            'email': [],
-            'webhook': {
-                'url': 'https://example.com/webhook',
-                'type': 'custom'
-            }
-        }
-        config.update(overrides)
-        return config
-
-    @patch.dict(os.environ, {}, clear=True)
-    @patch('core.config_loader.load_env_file')
-    def test_load_config(self, mock_load_env):
-        """测试加载配置文件"""
-        config = self._base_config()
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
-            assert any(p['name'] == 'TestProject' for p in monitor.config['projects'])
-        finally:
-            os.unlink(config_path)
-
-    def test_load_config_file_not_found(self):
-        """测试配置文件不存在"""
-        with pytest.raises(FileNotFoundError):
-            CreditMonitor('/nonexistent/config.json')
-
-    def test_load_config_invalid_json(self):
-        """测试无效 JSON 配置"""
-        f = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        f.write('{invalid json}')
-        f.close()
-        try:
-            with pytest.raises(ValueError):
-                CreditMonitor(f.name)
-        finally:
-            os.unlink(f.name)
+    def test_no_projects_is_not_an_error(self):
+        """一个项目都没有时照样能起来，页面上加就是了"""
+        with _db([]):
+            assert CreditMonitor().config['projects'] == []
 
     def test_get_max_concurrent_checks_default(self):
         """未设置 MAX_CONCURRENT_CHECKS 时使用默认并发数"""
-        config_path = self._create_config_file(self._base_config(settings={}))
-        try:
-            os.environ.pop('MAX_CONCURRENT_CHECKS', None)
-            monitor = CreditMonitor(config_path)
-            assert monitor._get_max_concurrent_checks() == 20
-        finally:
-            os.unlink(config_path)
+        os.environ.pop('MAX_CONCURRENT_CHECKS', None)
+        with _db([]):
+            assert CreditMonitor()._get_max_concurrent_checks() == 20
 
     def test_get_max_concurrent_checks_clamped(self):
         """MAX_CONCURRENT_CHECKS 环境变量钳制在 [1, 50]"""
-        config_path = self._create_config_file(self._base_config(settings={}))
+        with _db([]):
+            monitor = CreditMonitor()
         try:
-            monitor = CreditMonitor(config_path)
             os.environ['MAX_CONCURRENT_CHECKS'] = '100'
             assert monitor._get_max_concurrent_checks() == 50  # 上限
             os.environ['MAX_CONCURRENT_CHECKS'] = '-5'
-            assert monitor._get_max_concurrent_checks() == 1  # 下限
+            assert monitor._get_max_concurrent_checks() == 1   # 下限
         finally:
             os.environ.pop('MAX_CONCURRENT_CHECKS', None)
-            os.unlink(config_path)
 
     @patch('services.monitor.get_provider')
     def test_check_project_success(self, mock_get_provider):
         """测试项目检查成功"""
-        mock_provider_class = MagicMock()
-        mock_provider = MagicMock()
-        mock_provider.get_credits.return_value = {'success': True, 'credits': 50.0}
-        mock_provider_class.return_value = mock_provider
-        mock_get_provider.return_value = mock_provider_class
+        _provider(mock_get_provider, success=True, credits=50.0)
+        with _db([PROJECT]):
+            result = CreditMonitor().check_project(PROJECT)
 
-        config = self._base_config()
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
-            result = monitor.check_project(config['projects'][0])
-
-            assert result['success'] is True
-            assert result['credits'] == 50.0
-            assert result['need_alarm'] is False
-        finally:
-            os.unlink(config_path)
+        assert result['success'] is True
+        assert result['credits'] == 50.0
+        assert result['need_alarm'] is False
 
     @patch('services.monitor.get_provider')
     def test_check_project_need_alarm(self, mock_get_provider):
         """测试项目余额不足触发告警"""
-        mock_provider_class = MagicMock()
-        mock_provider = MagicMock()
-        mock_provider.get_credits.return_value = {'success': True, 'credits': 5.0}
-        mock_provider_class.return_value = mock_provider
-        mock_get_provider.return_value = mock_provider_class
+        _provider(mock_get_provider, success=True, credits=5.0)
+        with _db([PROJECT]):
+            result = CreditMonitor().check_project(PROJECT, dry_run=True)
 
-        config = self._base_config()
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
-            result = monitor.check_project(config['projects'][0], dry_run=True)
-
-            assert result['success'] is True
-            assert result['credits'] == 5.0
-            assert result['need_alarm'] is True
-            assert result['alarm_sent'] is False  # dry_run 不发送
-        finally:
-            os.unlink(config_path)
+        assert result['success'] is True
+        assert result['credits'] == 5.0
+        assert result['need_alarm'] is True
+        assert result['alarm_sent'] is False  # dry_run 不发送
 
     @patch('services.monitor.get_provider')
     def test_check_project_provider_error(self, mock_get_provider):
         """测试 provider 获取失败"""
         mock_get_provider.side_effect = ValueError("Unknown provider: test")
+        with _db([PROJECT]):
+            result = CreditMonitor().check_project(PROJECT)
 
-        config = self._base_config()
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
-            result = monitor.check_project(config['projects'][0])
-
-            assert result['success'] is False
-            assert 'Unknown provider' in result['error']
-        finally:
-            os.unlink(config_path)
+        assert result['success'] is False
+        assert 'Unknown provider' in result['error']
 
     @patch('services.monitor.get_provider')
     def test_check_project_api_error(self, mock_get_provider):
         """测试 API 调用失败"""
-        mock_provider_class = MagicMock()
-        mock_provider = MagicMock()
-        mock_provider.get_credits.return_value = {'success': False, 'error': 'API timeout'}
-        mock_provider_class.return_value = mock_provider
-        mock_get_provider.return_value = mock_provider_class
+        _provider(mock_get_provider, success=False, error='API timeout')
+        with _db([PROJECT]):
+            result = CreditMonitor().check_project(PROJECT)
 
-        config = self._base_config()
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
-            result = monitor.check_project(config['projects'][0])
-
-            assert result['success'] is False
-            assert result['error'] == 'API timeout'
-        finally:
-            os.unlink(config_path)
+        assert result['success'] is False
+        assert result['error'] == 'API timeout'
 
     @patch('services.monitor.get_provider')
     def test_run_filters_disabled_projects(self, mock_get_provider):
         """测试跳过禁用的项目"""
-        mock_provider_class = MagicMock()
-        mock_provider = MagicMock()
-        mock_provider.get_credits.return_value = {'success': True, 'credits': 100}
-        mock_provider_class.return_value = mock_provider
-        mock_get_provider.return_value = mock_provider_class
-
-        config = self._base_config(projects=[
+        _provider(mock_get_provider, success=True, credits=100)
+        projects = [
             {'name': 'Enabled', 'provider': 'openrouter', 'api_key': 'k', 'threshold': 5, 'enabled': True},
             {'name': 'Disabled', 'provider': 'openrouter', 'api_key': 'k', 'threshold': 5, 'enabled': False},
-        ])
-        config_path = self._create_config_file(config)
-        try:
-            monitor = CreditMonitor(config_path)
+        ]
+        with _db(projects):
+            monitor = CreditMonitor()
             monitor.run(dry_run=True)
 
-            # 只有 1 个被检查的测试项目
-            test_results = [r for r in monitor.results if r['project'] in ['Enabled', 'Disabled']]
-            assert len(test_results) == 1
-            assert test_results[0]['project'] == 'Enabled'
-        finally:
-            os.unlink(config_path)
+        assert [r['project'] for r in monitor.results] == ['Enabled']
 
+    @patch('services.monitor.get_provider')
+    def test_env_discovered_project_is_checked(self, mock_get_provider):
+        """只在环境变量里放了密钥，也照样会被检查"""
+        _provider(mock_get_provider, success=True, credits=42.0)
+        os.environ['OPENROUTER_API_KEY'] = 'sk-from-env'
+        try:
+            with _db([]):
+                monitor = CreditMonitor()
+                monitor.run(dry_run=True)
+        finally:
+            os.environ.pop('OPENROUTER_API_KEY', None)
+
+        assert [r['project'] for r in monitor.results] == ['openrouter']
+        assert monitor.results[0]['credits'] == 42.0
 
 class TestProviderCache:
     """Provider 实例缓存测试（Phase 2.2）"""

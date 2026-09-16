@@ -10,7 +10,6 @@ import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from providers import get_provider
 from services.subscription_checker import SubscriptionChecker
 from services.email_scanner import EmailScanner
@@ -85,11 +84,8 @@ def _get_or_create_provider(provider_name: str, api_key: str) -> Any:
 class CreditMonitor:
     """余额监控器"""
     
-    def __init__(self, config_path: str = 'config.json') -> None:
-        self.config_path: Path = Path(config_path)
-        if not self.config_path.exists() and not get_settings().enable_dynamic_config:
-            raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
-        self.config: Dict[str, Any] = load_config(str(self.config_path))
+    def __init__(self) -> None:
+        self.config: Dict[str, Any] = load_config()
         self.results: List[Dict[str, Any]] = []
 
     def _get_max_concurrent_checks(self) -> int:
@@ -231,7 +227,7 @@ class CreditMonitor:
         projects = self.config.get('projects', [])
 
         if not projects:
-            logger.warning("配置文件中没有项目")
+            logger.warning("没有可监控的项目，检查 {PROVIDER}_API_KEY 或数据库动态配置")
             return
 
         # 过滤项目
@@ -284,9 +280,9 @@ class CreditMonitor:
             log(f"  {r['project']}: {r['credits']} / {r['threshold']} - {state}")
 
 
-def run_credit_monitor(config_path: str, project_name: Optional[str] = None, dry_run: bool = True) -> Dict[str, Any]:
+def run_credit_monitor(project_name: Optional[str] = None, dry_run: bool = True) -> Dict[str, Any]:
     try:
-        monitor = CreditMonitor(config_path)
+        monitor = CreditMonitor()
         monitor.run(project_name=project_name, dry_run=dry_run)
         # 阈值告警看的是当下，跑道与突增看的是趋势，后者依赖历史，放在整轮检查之后
         from services import runway
@@ -315,17 +311,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
   %(prog)s                          # 检查所有启用的项目
   %(prog)s --project "项目A"        # 检查指定项目
   %(prog)s --dry-run                # 测试模式，不发送告警
-  %(prog)s --config custom.json     # 使用自定义配置文件
   %(prog)s --check-subscriptions    # 检查订阅续费提醒
   %(prog)s --check-email            # 扫描邮箱告警邮件
   %(prog)s --check-email --email-days 3  # 扫描最近3天的邮件
         """
     )
 
-    from core.config_loader import get_default_config_path
-    default_config = get_default_config_path()
-
-    parser.add_argument('--config', default=default_config, help=f'配置文件路径 (默认: {default_config})')
     parser.add_argument('--project', help='指定要检查的项目名称')
     parser.add_argument('--dry-run', action='store_true', help='测试模式，只显示余额不发送告警')
     parser.add_argument('--check-subscriptions', action='store_true', help='检查订阅续费提醒')
@@ -339,18 +330,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _run_from_args(args) -> None:
     if args.show_config:
         from core.config_check import check_config
-        sys.exit(1 if check_config(args.config) else 0)
+        sys.exit(1 if check_config() else 0)
 
-    monitor = CreditMonitor(args.config)
+    monitor = CreditMonitor()
     monitor.run(project_name=args.project, dry_run=args.dry_run)
 
     # 与 Web 主流程同一开关语义：--check-subscriptions 可强制执行
     if args.check_subscriptions or (args.project is None and get_settings().enable_subscriptions):
-        subscription_checker = SubscriptionChecker(args.config)
+        subscription_checker = SubscriptionChecker()
         subscription_checker.check_subscriptions(dry_run=args.dry_run)
 
     if args.check_email:
-        email_scanner = EmailScanner(args.config)
+        email_scanner = EmailScanner()
         email_scanner.scan_emails(days=args.email_days, dry_run=args.dry_run)
 
 
