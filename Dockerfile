@@ -12,7 +12,8 @@
 #   docker build --build-arg GOPROXY=https://goproxy.cn,direct \
 #                --build-arg NPM_REGISTRY=https://registry.npmmirror.com .
 
-ARG GO_IMAGE=golang:1.25-alpine
+# 版本要跟得上 go.mod 的 go 指令，否则 go mod download 会直接拒绝
+ARG GO_IMAGE=golang:1.27-alpine
 ARG NODE_IMAGE=node:22-alpine
 
 # ---------- 前端 ----------
