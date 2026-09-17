@@ -1,0 +1,15 @@
+# 本地构建覆盖层：改了代码、想跑自己这份而不是已发布的镜像时叠上。
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 构建会跑完整的三段流程（前端 → 二进制 → scratch 运行镜像），
+# 在 1 核的小机器上要几分钟，所以部署机默认不走这条路。
+services:
+  balance-alert:
+    build:
+      context: .
+      args:
+        # 本地构建的版本号标成 local，/health 里一眼能区分于正式发布的镜像
+        VERSION: local
+    image: balance-alert:local
+    pull_policy: build

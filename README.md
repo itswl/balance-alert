@@ -149,17 +149,28 @@ go build -o balance-alert ./cmd/balance-alert
 
 ## 部署
 
-**Docker**：运行镜像基于 `scratch`，里面只有一个静态二进制和 CA 证书，不到 30 MB；不锁架构，arm64 与 amd64 都能构建。
+**Docker**：镜像发布在 `ghcr.io/itswl/balance-alert`，amd64 与 arm64 都有。运行镜像基于 `scratch`，里面只有一个静态二进制和 CA 证书，不到 30 MB。
 
 ```bash
-docker compose up -d                                                          # 核心版
-docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d   # 带 Prometheus + Grafana
+docker compose up -d          # 拉已发布的镜像直接跑，部署机不需要装 Go 和 Node
+docker compose pull && docker compose up -d   # 升级
+```
 
-docker build -t balance-alert .
+版本默认跟 `latest`。生产上建议在 `.env` 里钉死：`BALANCE_ALERT_VERSION=0.1.0`，否则 `docker compose pull` 可能在你不知情的时候换掉运行中的版本。
+
+```bash
+# 带 Prometheus + Grafana
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# 改了代码想跑自己这份，叠一层构建
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+# 单独构建（国内换源）
 docker build --build-arg GOPROXY=https://goproxy.cn,direct \
              --build-arg NPM_REGISTRY=https://registry.npmmirror.com -t balance-alert .
-docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
 ```
+
+镜像由流水线在打 tag 时构建：`git tag v1.2.3 && git push origin v1.2.3`，产出 `1.2.3` / `1.2` / `1` / `latest` 四个标签。
 
 **Kubernetes**：`k8s/common-prod.yaml` 含 Deployment、Service、Ingress，apply 前替换 `YOUR_REGISTRY` 与 `YOUR_DOMAIN`。
 

@@ -1,14 +1,27 @@
+# 默认直接拉已发布的镜像，不在部署机上构建。
+#
+#   docker compose up -d
+#
+# 要本地构建（改了代码想先试）就叠一层：
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 带 Prometheus + Grafana：
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
 services:
   balance-alert:
-    build: .
-    image: balance-alert:latest
+    # 版本默认跟着 latest 走。生产上建议在 .env 里钉死一个版本
+    # （BALANCE_ALERT_VERSION=0.1.0），否则 docker compose pull 可能在你不知情的
+    # 时候换掉运行中的版本，出问题也说不清换之前是哪个。
+    image: ghcr.io/itswl/balance-alert:${BALANCE_ALERT_VERSION:-latest}
     container_name: balance-alert
     restart: unless-stopped
+    pull_policy: missing
     ports:
       - "8080:8080"  # Web 看板与 API
       - "9100:9100"  # Prometheus 指标
     volumes:
-      - ./data:/app/data   # 数据库持久化
+      - ./data:/app/data   # 数据库持久化，用 SQLite 时是库文件所在
       - ./logs:/app/logs   # 设了 LOG_FILE 才会用到
     env_file:
       - .env
