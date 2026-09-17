@@ -6,7 +6,7 @@ version: "2"
 #
 # overrides 把 postgres/mysql 的 INTEGER 列钉成 NullInt64：sqlc 默认给它们 NullInt32，
 # 而 sqlite 给 NullInt64，不统一就破坏了上面那条「布局一致」的前提。
-# 列本身仍声明为 INTEGER，与 SQLAlchemy 建出来的现有生产库一致。
+# 列本身仍声明为 INTEGER，与既有生产库的表结构一致。
 sql:
   - engine: "sqlite"
     schema: "internal/store/schema/sqlite.sql"
