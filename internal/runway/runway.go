@@ -208,10 +208,11 @@ func median(values []float64) float64 {
 	return (sorted[n/2-1] + sorted[n/2]) / 2
 }
 
-// round 保留 n 位小数，用银行家舍入（四舍六入五成双）。
+// round 保留 n 位小数，用银行家舍入（四舍六入五成双）：2.125 进成 2.12 而不是 2.13。
 //
-// 必须和 Python 的 round() 一致：2.125 要进成 2.12 而不是 2.13。差这 0.01 平时无所谓，
-// 但跑道天数正好压在告警阈值上时会决定发不发告警，迁移前后的看板数字也会对不上。
+// 不能图省事换成普通四舍五入：库里的历史记录都是按这个口径算出来的，换了口径同一批数据
+// 会算出不一样的数字，看板上的曲线会在切换那天出现台阶。差这 0.01 平时无所谓，
+// 但跑道天数正好压在告警阈值上时，它决定发不发告警。
 func round(value float64, decimals int) float64 {
 	shift := math.Pow(10, float64(decimals))
 	return math.RoundToEven(value*shift) / shift

@@ -311,7 +311,7 @@ func problemLines(s Summary) []string {
 	return out
 }
 
-// fmtNum 对应 Python 的 _fmt：空值显示成横杠，其余带千位分隔保留两位小数。
+// fmtNum 格式化卡片里的数字：空值显示成横杠，其余带千位分隔保留两位小数。
 func fmtNum(value *float64) string {
 	if value == nil {
 		return "-"
@@ -340,7 +340,8 @@ func thousands(value float64, decimals int) string {
 	return sign + grouped.String() + "." + frac
 }
 
-// round2 用银行家舍入，与 Python 的 round(x, 2) 保持一致。
+// round2 用银行家舍入（四舍六入五成双），与 runway 的取整口径一致：
+// 周报里的汇总数字要和看板、历史记录对得上，两边用不同的舍入方式就会差那么一分钱。
 func round2(value float64) float64 {
 	return math.RoundToEven(value*100) / 100
 }

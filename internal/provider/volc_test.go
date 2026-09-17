@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// 固定密钥与固定时刻，基准值由 Python 版 providers.volc._build_headers 生成，
-// 签名改坏了这里立刻会红——线上签错的表现是 403，光看 Go 自己测不出来。
+// 签名必须与火山引擎文档规定的 HMAC-SHA256 算法一致，这里用固定密钥与固定时刻把结果钉死，
+// 签名改坏了立刻会红——线上签错的表现只有一个 403，不看这几条测试很难定位。
 const (
 	volcTestAK = "AKLTtest-access-key"
 	volcTestSK = "test-secret-key"
@@ -25,7 +25,7 @@ func volcProviderAt(rawURL string) *volcProvider {
 	}
 }
 
-func TestVolcSignatureMatchesPython(t *testing.T) {
+func TestVolcSignature(t *testing.T) {
 	got := volcProviderAt(volcBaseURL).buildHeaders(volcTestTime, "")
 	want := map[string]string{
 		"Host":             "open.volcengineapi.com",

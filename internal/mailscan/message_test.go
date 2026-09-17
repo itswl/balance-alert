@@ -138,7 +138,7 @@ func TestParseMessageMultipart(t *testing.T) {
 	if !strings.Contains(msg.Body, "余额") || strings.Contains(msg.Body, "<b>") {
 		t.Errorf("正文 = %q, 期望 HTML 分段去掉标签后保留文字", msg.Body)
 	}
-	// 附件正文进了匹配范围就会凭附件里的词误报，Python 版也是跳过的
+	// 附件正文进了匹配范围就会凭附件里的词误报，所以解析时整段跳过
 	if strings.Contains(msg.Body, "附件内容") {
 		t.Errorf("正文 = %q, 附件不该进正文", msg.Body)
 	}
@@ -159,8 +159,8 @@ func TestParseMessageID(t *testing.T) {
 		t.Errorf("ID = %q, 期望直接用 Message-ID", withID.ID)
 	}
 
-	// 没有 Message-ID 时退回 md5(date|subject|from)，与 Python 版同一个算法：
-	// 这个值另外用 hashlib 算过，改了实现就会在这里露馅
+	// 没有 Message-ID 时退回 md5(date|subject|from)。
+	// 期望值是独立算出来的，改了实现就会在这里露馅
 	fallback, err := parseMessage(rawMessage(headers, "正文"))
 	if err != nil {
 		t.Fatalf("parseMessage 报错: %v", err)

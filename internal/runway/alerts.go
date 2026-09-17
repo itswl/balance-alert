@@ -188,7 +188,7 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// thousands 把数字格式化成带千位分隔的形式，对应 Python 的 {:,.2f}。
+// thousands 把数字格式化成带千位分隔的形式，小数位固定 decimals 位。
 func thousands(value float64, decimals int) string {
 	text := strconv.FormatFloat(value, 'f', decimals, 64)
 	sign := ""
@@ -210,7 +210,7 @@ func thousands(value float64, decimals int) string {
 	return sign + grouped.String() + "." + frac
 }
 
-// trimFloat 对应 Python 的 {:g}：7.0 显示成 7，7.5 还是 7.5。
+// trimFloat 去掉无意义的小数尾巴：7.0 显示成 7，7.5 还是 7.5。
 func trimFloat(value float64) string {
 	return strconv.FormatFloat(value, 'g', -1, 64)
 }

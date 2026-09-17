@@ -2,8 +2,8 @@ package mailscan
 
 import "testing"
 
-// 用例取自 Python 版 tests/test_email_scanner.py::TestExtractServiceInfo，
-// 一行不差地照抄过来，行为对齐就看这张表。
+// 这张表是服务名与金额提取的行为契约：四种括号、四条金额规则的优先级，
+// 以及各种提不出金额的写法，全都靠它钉住。
 func TestExtractServiceInfo(t *testing.T) {
 	tests := []struct {
 		name        string

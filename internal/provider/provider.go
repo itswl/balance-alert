@@ -22,7 +22,7 @@ import (
 // DefaultTimeout 单次请求的超时；重试由 Client 负责。
 const DefaultTimeout = 15 * time.Second
 
-// MaxRetries 是失败后的重试次数，与 Python 版 urllib3 Retry(total=3) 对齐。
+// MaxRetries 是失败后的重试次数。
 const MaxRetries = 3
 
 // Provider 查询一个账户的当前余额。
@@ -125,7 +125,7 @@ func NewClient(timeout time.Duration) *Client {
 var retriableStatus = map[int]bool{429: true, 500: true, 502: true, 503: true, 504: true}
 
 // Do 发送请求，对可重试的状态码与网络错误退避重试。
-// 只对幂等方法重试，与 Python 版 allowed_methods 一致。
+// 只重试幂等方法：非幂等请求可能已经在服务端生效了，重发就成了第二次。
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	idempotent := req.Method == http.MethodGet || req.Method == http.MethodHead || req.Method == http.MethodOptions
 
@@ -201,7 +201,8 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, headers map[string]
 	return data, nil
 }
 
-// classify 把底层网络错误翻译成给用户看的消息，与 Python 版 _classify_exception 对齐。
+// classify 把底层网络错误翻译成给用户看的消息：超时说"请求超时"，
+// 带 HTTP 状态码的原样透出，其余一律归到"网络连接错误"。
 func classify(err error) error {
 	if err == nil {
 		return nil
@@ -363,7 +364,7 @@ func MaskURL(raw string) string {
 				parsed.Path += "/" + tail
 			}
 			// String() 默认会把 * 转义成 %2A，日志里的 abcd%2A%2A%2A7890 没法看；
-			// RawPath 指定原样输出，与 Python 版打出来的一致
+			// RawPath 指定原样输出
 			parsed.RawPath = parsed.Path
 		}
 		break

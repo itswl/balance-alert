@@ -19,14 +19,14 @@ import (
 	"github.com/itswl/balance-alert/internal/store"
 )
 
-// 与 Python 版一致的几个上限。
+// 扫描过程中的几个上限。
 const (
 	maxMailboxWorkers = 5    // 同时扫描的邮箱数
 	batchSize         = 100  // 一次 IMAP FETCH 拉多少封
 	defaultMaxEmails  = 1000 // MaxEmails 没给时的上限，对应 MAX_EMAILS_TO_SCAN 的默认值
 
-	// 连接重试节奏照搬 Python 的 tenacity(stop_after_attempt(3), wait_exponential(1, 4, 10))：
-	// 一共三次，两次重试各等 4 秒。网络抖动和邮箱限流很常见，重来一次多半就过去了。
+	// 连接重试节奏：一共三次，两次重试各等 4 秒。
+	// 网络抖动和邮箱限流很常见，重来一次多半就过去了。
 	connectAttempts   = 3
 	connectRetryDelay = 4 * time.Second
 )
@@ -150,7 +150,7 @@ func (s *Scanner) scanInbox(ctx context.Context, m model.Mailbox, name string, s
 		}
 	}()
 
-	// 与 Python 的 datetime.now() - timedelta(days=days) 一致：按本地时区的日期过滤
+	// 按本地时区往前推 days 天，IMAP SINCE 只比日期不比时刻
 	since := time.Now().Add(-time.Duration(state.days) * 24 * time.Hour)
 	nums, err := conn.Search(since)
 	if err != nil {
@@ -268,7 +268,7 @@ func (s *Scanner) duplicated(ctx context.Context, alert model.EmailAlert, days i
 	return recent
 }
 
-// send 发一封邮件告警并留痕。留痕带上发送结果，与 Python 版一致：
+// send 发一封邮件告警并留痕。留痕带上发送结果：
 // 没发出去的也要记，下次才知道这封邮件已经处理过、现在是什么状态。
 func (s *Scanner) send(ctx context.Context, alert model.EmailAlert) bool {
 	if s.Notifier == nil {
@@ -312,7 +312,7 @@ func (s *Scanner) sendMailboxError(ctx context.Context, mailbox, host, reason st
 	}
 }
 
-// connect 建连接，失败按 Python 的节奏重试。
+// connect 建连接，失败按 connectAttempts / connectRetryDelay 的节奏重试。
 func (s *Scanner) connect(ctx context.Context, m model.Mailbox) (mailConn, error) {
 	dial := s.dial
 	if dial == nil {
@@ -359,7 +359,7 @@ func (s *seenSet) mark(id string) bool {
 	return true
 }
 
-// keywords 为空时用默认词表，与 Python 版 _load_keywords 的兜底一致。
+// keywords 没配置时兜底用默认词表，否则一个词都不配就等于关掉了整个扫描。
 func (s *Scanner) keywords() []string {
 	if len(s.Keywords) > 0 {
 		return s.Keywords
@@ -367,7 +367,7 @@ func (s *Scanner) keywords() []string {
 	return DefaultAlertKeywords
 }
 
-// maxEmails 没配置时用默认上限；配成负数按 1 算，与 Python 的 max(1, ...) 同义。
+// maxEmails 没配置时用默认上限；配成负数按 1 算，免得算出个负的取信范围。
 func (s *Scanner) maxEmails() int {
 	if s.MaxEmails == 0 {
 		return defaultMaxEmails
@@ -397,7 +397,7 @@ func (s *Scanner) log() *slog.Logger {
 	return slog.Default()
 }
 
-// displayName 与 Python 的 _mailbox_display_name 一致：没名字就用账号。
+// displayName 取邮箱在日志和告警里的显示名：没配名字就退回账号。
 func displayName(m model.Mailbox) string {
 	if m.Name != "" {
 		return m.Name

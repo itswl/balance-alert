@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// unknownService 是认不出服务名时的占位，与 Python 版一致——
+// unknownService 是认不出服务名时的占位。
 // 这个字符串会原样出现在告警正文里，改了群里的文案就变了。
 const unknownService = "未知服务"
 
@@ -19,12 +19,12 @@ var servicePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\((.+?)\)`),
 }
 
-// space 补齐 Go 与 Python 对 \s 的分歧：Python 的 \s 在 str 模式下连不换行空格（U+00A0）
-// 和全角空格（U+3000）一起吃，Go 的只认 ASCII。账单邮件从 HTML 转成文本后这两种空格很常见，
-// 不补上就会出现"Python 认得出金额、Go 认不出"。
+// space 是比 \s 更宽的空白类：Go 的 \s 只认 ASCII 空白，而账单邮件从 HTML 转成文本后
+// 不换行空格（U+00A0）和全角空格（U+3000）很常见。不把它们算成空白，
+// "余额： 12.50 元"这种写法就会整条匹配不上，金额提不出来。
 const space = `[\s\p{Z}]`
 
-// 金额提取规则，顺序照搬 Python 版 _AMOUNT_PATTERNS：
+// 金额提取规则，顺序就是优先级：
 // 带"余额/金额"前缀的最可信，最后才退到"裸数字 + 元"这种容易误伤的写法。
 var amountPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`余额[：:]` + space + `*([0-9,]+\.?[0-9]*)` + space + `*元`),
@@ -52,7 +52,7 @@ func extractServiceInfo(subject, body string) (string, *float64) {
 		}
 		amount, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", ""), 64)
 		if err != nil {
-			// 形如 ",,," 的假数字：换下一条规则再试，与 Python 的 except ValueError 一致
+			// 形如 ",,," 的假数字：这条规则不算数，换下一条再试
 			continue
 		}
 		return service, &amount

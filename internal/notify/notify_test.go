@@ -49,7 +49,7 @@ func TestNewNormalizesType(t *testing.T) {
 	}{
 		{"FeiShu", TypeFeishu},
 		{" dingtalk ", TypeDingTalk},
-		{"", TypeCustom}, // 与 Python 版 `webhook_type or 'custom'` 一致
+		{"", TypeCustom}, // 没填类型按 custom 处理
 	}
 
 	for _, tt := range tests {
@@ -174,7 +174,8 @@ func TestMaskURL(t *testing.T) {
 			"https://open.feishu.cn/open-apis/bot/v2/hook/abcd***"},
 		{"https://oapi.dingtalk.com/robot/send?access_token=deadbeefcafe",
 			"https://oapi.dingtalk.com/robot/send?access_token=dead***"},
-		// 企微地址里的 webhook/ 先命中 hook/，Python 版就是这个结果
+		// 企微地址里的 webhook/ 会先命中 hook/ 这个标记，key= 那条规则走不到；
+		// 结果仍然是密钥整段不进日志，符合预期
 		{"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc123456",
 			"https://qyapi.weixin.qq.com/cgi-bin/webhook/send***"},
 		{"https://example.com/a", "https://exam***om/a"},

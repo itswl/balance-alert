@@ -37,7 +37,7 @@ func testBackends() []backend {
 	backends := []backend{{
 		name: "sqlite",
 		dsn: func(t *testing.T) string {
-			// t.TempDir() 给的是绝对路径，SQLAlchemy 写法里绝对路径是四条斜杠。
+			// t.TempDir() 给的是绝对路径，连接串里绝对路径是四条斜杠。
 			return "sqlite:///" + filepath.Join(t.TempDir(), "store_test.db")
 		},
 	}}
@@ -170,7 +170,7 @@ func TestProjectConfigCRUD(t *testing.T) {
 		if len(got) != 0 {
 			t.Fatalf("删除后应当没有项目，却有 %d 条", len(got))
 		}
-		// 删不存在的行不算错误，和 Python 版一致。
+		// 删不存在的行不算错误，删除保持幂等。
 		if err := s.DeleteProject(ctx, "根本不存在"); err != nil {
 			t.Errorf("删除不存在的项目不该报错: %v", err)
 		}
@@ -287,7 +287,7 @@ func TestSecretsAreEncryptedAtRest(t *testing.T) {
 		const apiKey = "sk-or-v1-super-secret"
 		const password = "mailbox-secret"
 
-		s := f.open(Options{EncryptionKey: pythonFernetKey})
+		s := f.open(Options{EncryptionKey: sampleFernetKey})
 		if err := s.UpsertProject(ctx, model.Project{
 			Name: "p1", Provider: "openrouter", APIKey: apiKey, Enabled: true,
 		}); err != nil {
@@ -354,7 +354,7 @@ func TestAutoEncryptOnRead(t *testing.T) {
 		}
 
 		// 配上密钥后第一次读取就把明文加密回写。
-		s := f.open(Options{EncryptionKey: pythonFernetKey, AutoEncryptOnRead: true})
+		s := f.open(Options{EncryptionKey: sampleFernetKey, AutoEncryptOnRead: true})
 		projects, err := s.ListProjects(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -396,7 +396,7 @@ func TestAutoEncryptOnReadDisabled(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s := f.open(Options{EncryptionKey: pythonFernetKey, AutoEncryptOnRead: false})
+		s := f.open(Options{EncryptionKey: sampleFernetKey, AutoEncryptOnRead: false})
 		if _, err := s.ListProjects(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -711,7 +711,7 @@ func TestBalanceTrendSinglePointHasNoChange(t *testing.T) {
 		if trend.Change != nil || trend.ChangePercent != nil {
 			t.Errorf("单点趋势不该有 change/change_percent: %v %v", trend.Change, trend.ChangePercent)
 		}
-		// 没设阈值时是 0，和 Python 版一致。
+		// 没设阈值时按 0 返回，是接口的既有约定。
 		if trend.Threshold != 0 {
 			t.Errorf("threshold = %v，期望 0", trend.Threshold)
 		}
@@ -946,7 +946,7 @@ func TestAlertStats(t *testing.T) {
 		if stats.Days != 30 {
 			t.Errorf("days = %d，期望 30", stats.Days)
 		}
-		// 统计不看 status，失败的也算，和 Python 版一致。
+		// 统计不看 status，发送失败的也计进总数，这是接口的既有口径。
 		if stats.TotalAlerts != 4 {
 			t.Errorf("total_alerts = %d，期望 4", stats.TotalAlerts)
 		}
@@ -1040,7 +1040,7 @@ func TestSaveAndQueryEmailAlerts(t *testing.T) {
 		if !row.AlertSent {
 			t.Error("alert_sent 应当是 true")
 		}
-		// 关键词存成 JSON 数组文本，中文与 & 都不转义，和 Python 的 ensure_ascii=False 对齐。
+		// 关键词存成 JSON 数组文本，中文与 & 都不转义，与库里既有行的写法一致。
 		const wantKeywords = `["账单","扣费","R&D"]`
 		if row.MatchedKeywords == nil || *row.MatchedKeywords != wantKeywords {
 			t.Errorf("matched_keywords = %v，期望 %s", row.MatchedKeywords, wantKeywords)
@@ -1217,14 +1217,14 @@ func TestOpenRejectsBadURL(t *testing.T) {
 	}
 }
 
-// ---------- 与 Python 版数据的兼容 ----------
+// ---------- 与既有数据的兼容 ----------
 
-// sqlalchemyTimeLayout 是 SQLAlchemy 在 SQLite 上写 DateTime 用的格式。
+// legacyTimeLayout 是重写前的实现在 SQLite 上写时间列用的格式，生产库里的历史行都长这样。
 // SQLite 没有真正的时间类型，这一列是文本，timestamp >= ? 走的是字符串比较，
-// 所以新旧两版写进去的格式必须能互相比较，否则升级后历史查询会整段错位。
-const sqlalchemyTimeLayout = "2006-01-02 15:04:05.000000"
+// 所以新写入的格式必须能和历史行互相比较，否则升级后历史查询会整段错位。
+const legacyTimeLayout = "2006-01-02 15:04:05.000000"
 
-// 旧行是 Python 写的，新行是 Go 写的，两种格式必须能在同一个时间窗口里正确比较与排序。
+// 旧行是重写前写的，新行是现在写的，两种格式必须能在同一个时间窗口里正确比较与排序。
 // legacy_test.go 验的是「读得出来」，这里验的是「读写混在一起还对」。
 func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 	ctx := t.Context()
@@ -1254,7 +1254,7 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 		`INSERT INTO balance_history (project_id, project_name, provider, balance, threshold, balance_type, need_alarm, timestamp)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		"f4c50bfa74c0cf0c11cfb68aed887252", "glm", "glm", 98.7, 10.0, "quota", 0,
-		written.Format(sqlalchemyTimeLayout)); err != nil {
+		written.Format(legacyTimeLayout)); err != nil {
 		t.Fatal(err)
 	}
 	if err := legacy.Close(); err != nil {
@@ -1272,7 +1272,7 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(rows) != 1 {
-		t.Fatalf("应当读出 Python 写的那 1 条，得到 %d 条", len(rows))
+		t.Fatalf("应当读出旧格式的那 1 条，得到 %d 条", len(rows))
 	}
 	if rows[0].ProjectName != "glm" || rows[0].Balance != 98.7 || rows[0].BalanceType != "quota" {
 		t.Errorf("读出来的字段不对: %+v", rows[0])
@@ -1304,10 +1304,10 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 	}
 }
 
-// Go 写进 SQLite 的时间必须仍是 SQLAlchemy 认得的 ISO 文本。
-// 驱动默认会写成 time.Time.String()（"... +0000 UTC"），Python 的正则读不全，
+// 写进 SQLite 的时间必须仍是历史行那种 ISO 文本。
+// 驱动默认会写成 time.Time.String()（"... +0000 UTC"），和历史行的写法对不上，
 // 也让文本比较变得不可预期，所以 DSN 里钉了 _time_format=sqlite。
-func TestSQLiteTimestampStaysSQLAlchemyReadable(t *testing.T) {
+func TestSQLiteTimestampStaysLegacyReadable(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "format.db")
 
@@ -1332,15 +1332,15 @@ func TestSQLiteTimestampStaysSQLAlchemyReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// SQLAlchemy 的 SQLite DATETIME 用 ^(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)(?:\.(\d+))? 从头匹配。
+	// 历史行的 DATETIME 文本形如 2026-09-14 03:09:37.277711，从头匹配这个形状才算格式没跑偏。
 	matched, err := regexp.MatchString(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?`, stored)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !matched {
-		t.Errorf("落盘的时间戳 %q 不是 SQLAlchemy 读得懂的格式", stored)
+		t.Errorf("落盘的时间戳 %q 不是历史行那种格式", stored)
 	}
 	if strings.Contains(stored, "UTC") {
-		t.Errorf("落盘的时间戳 %q 用了 Go 的默认格式，Python 侧解析会出错", stored)
+		t.Errorf("落盘的时间戳 %q 用了驱动的默认格式，和历史行没法比较", stored)
 	}
 }

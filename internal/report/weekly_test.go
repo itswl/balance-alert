@@ -11,7 +11,7 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-// buildFixture 与 testdata/python_case.json 用的是同一份输入，两边渲染结果必须一致。
+// buildFixture 是基准数据对应的那份输入，改了它就得同步改 testdata/baseline_case.json。
 func buildFixture() Summary {
 	results := []model.CheckResult{
 		{Project: "deepseek", Provider: "deepseek", Success: true, Credits: ptr(100.0), Threshold: ptr(50.0)},
@@ -39,11 +39,12 @@ func buildFixture() Summary {
 	return Build(results, subs, mailboxes, 3, runways, now)
 }
 
-// TestRenderMatchesPython 整张卡片逐字对齐旧实现。用户的飞书群里看惯了这个格式。
-func TestRenderMatchesPython(t *testing.T) {
-	raw, err := os.ReadFile("testdata/python_case.json")
+// TestRenderMatchesBaseline 把整张周报卡片逐字钉死：基准数据是渲染后的完整文本，
+// 排版、字段顺序、数字格式动一个字都会在这里炸出来。用户的飞书群里看惯了这个格式。
+func TestRenderMatchesBaseline(t *testing.T) {
+	raw, err := os.ReadFile("testdata/baseline_case.json")
 	if err != nil {
-		t.Fatalf("读取对照数据失败: %v", err)
+		t.Fatalf("读取基准数据失败: %v", err)
 	}
 	var baseline struct {
 		Rendered string `json:"rendered"`
@@ -53,7 +54,7 @@ func TestRenderMatchesPython(t *testing.T) {
 		} `json:"summary"`
 	}
 	if err := json.Unmarshal(raw, &baseline); err != nil {
-		t.Fatalf("解析对照数据失败: %v", err)
+		t.Fatalf("解析基准数据失败: %v", err)
 	}
 
 	summary := buildFixture()

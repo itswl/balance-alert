@@ -56,7 +56,7 @@ func TestParseURL(t *testing.T) {
 			filePath: "",
 		},
 		{
-			name:     "sqlite 带 pysqlite 驱动后缀",
+			name:     "sqlite 带驱动后缀",
 			input:    "sqlite+pysqlite:///./data/x.db",
 			engine:   EngineSQLite,
 			driver:   "sqlite",
@@ -87,14 +87,14 @@ func TestParseURL(t *testing.T) {
 			dsn:    "postgres://user:pass@localhost:5432/balance_alert?sslmode=disable",
 		},
 		{
-			name:   "postgresql+psycopg2 去掉 Python 驱动后缀",
+			name:   "postgresql 去掉驱动后缀",
 			input:  "postgresql+psycopg2://u:p@h:5432/db",
 			engine: EnginePostgres,
 			driver: "pgx",
 			dsn:    "postgres://u:p@h:5432/db",
 		},
 		{
-			name:   "mysql+pymysql 保留 charset 并补 parseTime",
+			name:   "mysql 带驱动后缀，保留 charset 并补 parseTime",
 			input:  "mysql+pymysql://user:pass@db.internal:3306/balance_alert?charset=utf8mb4",
 			engine: EngineMySQL,
 			driver: "mysql",
@@ -202,8 +202,8 @@ func TestSQLiteDSNQueryIsParsable(t *testing.T) {
 // TestPasswordWithURLSpecialCharacters 密码里的 # 和 ? 不能把连接串截断。
 //
 // 这是生产上真踩过的坑：OCI 生成的 MySQL 密码里带一个 #，net/url 把它当片段起点，
-// 连接串在那里断掉，报成「invalid port」，服务连不上数据库。Python 侧的 SQLAlchemy
-// 用自己的正则解析，从来不受影响，所以升级到 Go 之前没人发现。
+// 连接串在那里断掉，报成「invalid port」，服务连不上数据库。
+// 连接串因此是自己按正则拆的，这几条用例钉住这个行为，免得有人图省事又改回 net/url。
 func TestPasswordWithURLSpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -14,8 +14,7 @@ import (
 	"github.com/itswl/balance-alert/internal/model"
 )
 
-// defaultPort 是 IMAPS 端口，对应 Python 的 email_config.get('port', 993)：
-// 配置里没写（Go 里就是零值）按 993 算。
+// defaultPort 是 IMAPS 端口：配置里没写端口（零值）时按 993 算。
 const defaultPort = 993
 
 // mailConn 是扫描一个邮箱要用到的全部 IMAP 能力。
@@ -88,8 +87,8 @@ func (c *imapConn) Fetch(nums []uint32) ([][]byte, error) {
 		return nil, nil
 	}
 
-	// BODY.PEEK[] 取整封原文，内容与 Python 版的 RFC822 一样；
-	// 用 PEEK 是为了不把用户的邮件标成已读——监控扫一遍不该动收件箱的状态。
+	// BODY.PEEK[] 取整封原文。用 PEEK 而不是普通取信，是为了不把用户的邮件标成已读——
+	// 监控扫一遍不该动收件箱的状态。
 	section := &imap.FetchItemBodySection{Peek: true}
 	messages, err := c.client.Fetch(
 		imap.SeqSetNum(nums...),

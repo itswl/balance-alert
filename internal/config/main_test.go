@@ -8,7 +8,7 @@ import (
 
 // TestMain 清掉会影响自动发现的环境变量。
 //
-// Python 版在这里栽过：开发机 .env 里的真实密钥漏进测试，用例一跑就真的去请求上游平台。
+// 这里栽过一次：开发机 .env 里的真实密钥漏进测试，用例一跑就真的去请求上游平台。
 // 测试必须从一张白纸开始，只看用例自己 Setenv 的那些值。
 func TestMain(m *testing.M) {
 	for _, entry := range os.Environ() {

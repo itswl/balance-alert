@@ -32,7 +32,7 @@ var wxrankSpec = Spec{
 			}
 		}
 
-		// msg 里没有数字时的后备字段，顺序照搬 Python：data 本身是数字 > data.score/credits > 顶层 score/credits
+		// msg 里没有数字时的后备字段，按这个顺序找：data 本身是数字 > data.score/credits > 顶层 score/credits
 		switch raw := data["data"].(type) {
 		case float64:
 			return raw, nil

@@ -1,6 +1,6 @@
 -- PostgreSQL 建表。自增主键用 BIGSERIAL，浮点用 DOUBLE PRECISION，时间用 TIMESTAMP（无时区，存 UTC）。
 -- timestamp 既是列名又是类型名，所有出现处一律加双引号，免得解析器把它当类型。
--- 现有生产库是 SQLAlchemy 用 SERIAL 建的（int4），IF NOT EXISTS 不会改它；int4 读进 int64 没问题。
+-- 现有生产库的自增主键是 SERIAL（int4），IF NOT EXISTS 不会把它改成 int8；int4 读进 int64 没问题。
 
 CREATE TABLE IF NOT EXISTS balance_history (
     id BIGSERIAL NOT NULL,

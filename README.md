@@ -222,11 +222,3 @@ ui/              TypeScript 前端，esbuild 打包后由 embed.FS 提供
 grafana/ prometheus.yml   监控面板与抓取配置
 k8s/             生产部署清单
 ```
-
-## 从 Python 版升级
-
-这个项目原本是 Python 写的，现在是 Go。升级不需要迁移数据：
-
-- 表结构、`project_id` 的算法、密文格式（`enc:v1:` + Fernet）全部没变，直接连原来的数据库即可
-- 所有环境变量保持同名同义，`.env` 可以原样用
-- `/api/*` 与 Prometheus 指标一个字都没改，现有的看板、抓取配置和告警规则继续工作

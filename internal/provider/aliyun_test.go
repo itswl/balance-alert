@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// 固定密钥、时刻和随机数，基准签名由 Python 版 providers.aliyun._calculate_signature 生成。
+// 签名串必须与阿里云文档规定的算法逐字节一致，这里用固定的密钥、时刻和随机数把结果钉死，
+// 防止改坏——线上签错的表现只是一个 403，不看这几条测试很难定位到是哪一步算歪了。
 const (
 	aliyunTestID     = "LTAI5tTestAccessKey"
 	aliyunTestSecret = "testAccessKeySecret"
@@ -27,7 +28,7 @@ func aliyunProviderAt(rawURL string) *aliyunProvider {
 	}
 }
 
-func TestAliyunSignatureMatchesPython(t *testing.T) {
+func TestAliyunSignature(t *testing.T) {
 	params := aliyunProviderAt(aliyunBaseURL).buildParams(aliyunTestTime, aliyunTestNonce)
 
 	want := map[string]string{
@@ -64,7 +65,7 @@ func TestAliyunSignatureUsesUTC(t *testing.T) {
 }
 
 func TestPercentEncode(t *testing.T) {
-	// 基准取自 Python 的 _percent_encode：空格是 %20 不是 +，* 要编码，~ 不编码
+	// RFC 3986 的编码规则，签名要求的就是这一套：空格是 %20 不是 +，* 要编码，~ 不编码
 	got := percentEncode("a b+c*d~e/f=g&h%i中")
 	if want := "a%20b%2Bc%2Ad~e%2Ff%3Dg%26h%25i%E4%B8%AD"; got != want {
 		t.Fatalf("percentEncode\n = %q\n期望 %q", got, want)
@@ -124,7 +125,7 @@ func TestAliyunFetch(t *testing.T) {
 			errMsg: "无法从响应中解析余额字段，响应内容: ",
 		},
 		{
-			// Python 在这里会崩在 'str' object has no attribute 'get' 上，把英文原文当错误消息
+			// Data 不是对象时也要走正常的中文提示，不能把类型断言失败漏给用户
 			name:   "Data 不是对象",
 			body:   `{"Code":"Success","Data":"oops"}`,
 			errMsg: "无法从响应中解析余额字段，响应内容: ",

@@ -276,8 +276,8 @@ export interface EmailAlert {
   amount: number | null;
   alert_sent: boolean;
   /**
-   * 冷却期内重复命中、没再发通知时才出现。Python 版在 email_scanner 里写这个字段，
-   * 但 model.EmailAlert 还没有对应成员 —— Go 版补上之前，「已通知过，跳过」这个状态显示不出来。
+   * 冷却期内重复命中、这次没再发通知时才出现。
+   * 看板据此显示「已通知过」徽章，好让人区分「已经通知过」和「没匹配上」。
    */
   duplicate?: boolean;
 }

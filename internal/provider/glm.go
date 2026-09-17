@@ -49,7 +49,8 @@ var glmSpec = Spec{
 }
 
 // glmCodeOK 判业务状态码。没有 code 字段视为成功（老接口不返回），
-// 有就必须是数字 200——字符串 "200" 在 Python 里也不算通过，这里保持一致。
+// 有就必须是数字 200：这里走 jsonNum 而不是 Num，字符串 "200" 不算通过——
+// 理由见 jsonNum 的说明，放宽会让配额算歪。
 func glmCodeOK(code any) bool {
 	if code == nil {
 		return true

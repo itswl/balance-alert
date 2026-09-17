@@ -10,8 +10,8 @@ import (
 
 // BalanceAlert 余额不足。
 //
-// Python 版的 send_balance_alert 还带 balance_type 和 unit 两个参数，但调用点只传过
-// "余额" 和空串——真正的余额类型（点数 / 套餐）只影响看板，不进告警文案。
+// 底下的 balanceAlert 还带 balanceType 和 unit 两个参数，但调用点只会传 "余额" 和空串——
+// 真正的余额类型（点数 / 套餐）只影响看板，不进告警文案。
 // 这里就不把它们摊到签名上了，需要时改 balanceAlert。
 func BalanceAlert(projectName string, ownerProject *string, provider string, currentValue, threshold float64) Message {
 	return balanceAlert(projectName, ownerProject, provider, "余额", currentValue, threshold, "")
@@ -125,8 +125,8 @@ func EmailAlert(mailbox, subject, sender, date string, keywords []string,
 
 // MailboxError 邮箱连不上。
 //
-// host 是调用方手里的上下文，Python 版的正文里没有这一行，这里也不加——
-// 值班群认的就是这三行。要加得先改 Python 侧的模板，两边一起动。
+// host 是调用方手里的上下文，但正文里不写这一行——值班群认的就是这三行，
+// 多一行就是改模板。参数留着是为了不动调用点。
 func MailboxError(mailbox, host, reason string) Message {
 	return mailboxError(mailbox, reason, time.Now())
 }
@@ -147,7 +147,8 @@ func mailboxError(mailbox, reason string, at time.Time) Message {
 // FormatSubscriptionCycle 把续费周期说成人话，订阅检查与配置自检也用它。
 //
 // 返回 "未知周期" 表示周期类型不认识，调用方靠这个值把配置错误报出来。
-// Python 版在这里会当月付兜底（"每月 15 号"），非法的 cycle_type 就永远没人发现了。
+// 别改成按月付兜底（"每月 15 号"）：那样写错的周期类型会一直发着看起来正常的提醒，
+// 直到有人发现续费日期对不上才查得出来。
 func FormatSubscriptionCycle(cycleType string, renewalDay int) string {
 	switch cycleType {
 	case model.CycleWeekly:
@@ -184,7 +185,7 @@ func splitMMDD(renewalDay int) (month, day int, ok bool) {
 	return month, day, true
 }
 
-// formatDays 把天数说成人话，对应 Python 版 _format_days_text。
+// formatDays 把天数说成人话：0 是今天，1 是明天，其余写 "N 天后"。
 func formatDays(days int) string {
 	switch days {
 	case 0:
@@ -195,7 +196,7 @@ func formatDays(days int) string {
 	return fmt.Sprintf("%d 天后", days)
 }
 
-// appendOwner 没归属项目时整行不出现，与 Python 版的 `if owner_project else ""` 一致。
+// appendOwner 没归属项目时整行不出现，而不是留一行空的 "所属项目: "。
 func appendOwner(lines []string, ownerProject *string) []string {
 	if ownerProject == nil || *ownerProject == "" {
 		return lines
@@ -203,8 +204,8 @@ func appendOwner(lines []string, ownerProject *string) []string {
 	return append(lines, "所属项目: "+*ownerProject)
 }
 
-// serviceText 没识别出服务名时，Python 版会把 None 直接印进正文，群里看到的就是
-// "**服务**: None"。照搬，不然同一封邮件重发一次文案还变了。
+// serviceText 没识别出服务名时写的是字面量 "None"，群里看到的就是 "**服务**: None"。
+// 看着别扭，但值班群认的就是这个词，换成 "未知" 属于文案变更，message_test.go 钉住了它。
 func serviceText(name *string) string {
 	if name == nil {
 		return "None"

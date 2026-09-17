@@ -201,7 +201,7 @@ func TestClientExhaustsRetries(t *testing.T) {
 	if testing.Short() {
 		t.Skip("退避要等 3.5 秒")
 	}
-	// 一直 503：重试 MaxRetries 次后把最后一次响应交出去，与 Python 的 raise_on_status=False 一致
+	// 一直 503：重试 MaxRetries 次后把最后一次响应交出去，由调用方按状态码报错
 	srv, rec := serveJSON(t, http.StatusServiceUnavailable, `{"error":"down"}`)
 
 	_, err := NewClient(2*time.Second).GetJSON(context.Background(), srv.URL, nil, nil)
@@ -270,7 +270,7 @@ func TestGetJSONMergesParams(t *testing.T) {
 // ---------- 日志脱敏 ----------
 
 func TestMaskURL(t *testing.T) {
-	// 基准取自 Python 版 providers.base.mask_url，日志里的脱敏效果必须一致
+	// 日志里不能出现完整密钥：下面每条都钉死打码后的样子，改 MaskURL 前先看这里
 	cases := []struct {
 		name string
 		in   string
@@ -302,14 +302,14 @@ func TestMaskURL(t *testing.T) {
 			want: "https://api.example.com/v1/x",
 		},
 		{
-			// Python 的 urlunsplit 不重新编码，Go 的 URL.String() 会；
+			// url.URL.String() 会把空格重新编码，所以输出和输入长得不一样；
 			// 只影响本来就不合法的 URL 打进日志时的样子，不影响脱敏本身
 			name: "不是 URL 也不能炸",
 			in:   "not a url",
 			want: "not%20a%20url",
 		},
 		{
-			// Go 按键名排序输出查询串，Python 保留原顺序；脱敏结果相同，顺序不同
+			// url.Values.Encode() 按键名排序输出，查询串的顺序不一定和输入相同
 			name: "多个敏感参数",
 			in:   "https://api.example.com/x?token=1234567890abcdef&foo=bar",
 			want: "https://api.example.com/x?foo=bar&token=1234%2A%2A%2Acdef",

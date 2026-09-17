@@ -30,16 +30,17 @@ type Project struct {
 }
 
 // ID 是项目在历史表与告警冷却里的稳定标识。
-// 必须与 Python 版 make_project_id 一致，否则升级后历史数据对不上。
+// 库里的历史记录都是按这个算法存的，换算法等于把既有数据全部认成另一批项目：
+// 余额曲线断掉、跑道重新从零开始算、冷却状态全部失效。
 func (p Project) ID() string { return ProjectID(p.Provider, p.Name) }
 
-// ProjectID = md5("provider:name")，与 Python 版 core.config_loader.make_project_id 等价。
+// ProjectID = md5("provider:name")。
 func ProjectID(provider, name string) string {
 	sum := md5.Sum([]byte(provider + ":" + name))
 	return hex.EncodeToString(sum[:])
 }
 
-// SubscriptionID = md5("subscription:name")，与 Python 版 make_subscription_id 等价。
+// SubscriptionID = md5("subscription:name")，同样是既有数据的稳定标识，改不得。
 func SubscriptionID(name string) string {
 	sum := md5.Sum([]byte("subscription:" + name))
 	return hex.EncodeToString(sum[:])
@@ -83,7 +84,7 @@ type Config struct {
 	Mailboxes     []Mailbox      `json:"email"`
 }
 
-// EnabledProjects 等过滤器对应 Python 的 filter_enabled。
+// EnabledProjects 等过滤器只留下 Enabled 为真的条目，关掉的配置项照样留在清单里供页面展示。
 func (c Config) EnabledProjects() []Project {
 	out := make([]Project, 0, len(c.Projects))
 	for _, p := range c.Projects {
@@ -170,7 +171,7 @@ const (
 	ConfidenceHigh   = "high"
 )
 
-// Runway 一个账户的消耗画像。字段与 Python 版 services.runway.Runway 一一对应。
+// Runway 一个账户的消耗画像。字段名同时是接口响应的 JSON 键，前端和看板按这套名字取值。
 type Runway struct {
 	ProjectID      string       `json:"project_id"`
 	ProjectName    string       `json:"project_name"`
@@ -264,7 +265,7 @@ type BalancePoint struct {
 	Timestamp   int64 // Unix 秒，UTC
 }
 
-// NormalizeProject 补齐省略字段，对应 Python 的 normalize_projects。
+// NormalizeProject 补齐省略字段：provider 统一成小写，name 缺省跟 provider 走，type 按 provider 推导。
 func NormalizeProject(p *Project) {
 	p.Provider = strings.ToLower(strings.TrimSpace(p.Provider))
 	if p.Name == "" {
@@ -293,7 +294,7 @@ func DefaultBalanceType(provider string) string {
 // Ptr 用于给可空字段取地址，避免到处写临时变量。
 func Ptr[T any](v T) *T { return &v }
 
-// OwnerProjectOf 把空字符串归一成 nil，对应 Python 的 owner_project_of。
+// OwnerProjectOf 把空字符串（含纯空白）归一成 nil，"没填归属项目"只有这一种表示。
 func OwnerProjectOf(s string) *string {
 	if strings.TrimSpace(s) == "" {
 		return nil

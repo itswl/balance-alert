@@ -168,7 +168,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// round2 与 Python 的 round(x, 2) 一致，接口里的耗时数字不因换语言而变。
+// round2 保留两位小数，用银行家舍入，与项目里其它地方的取整口径统一。
 func round2(value float64) float64 {
 	return math.RoundToEven(value*100) / 100
 }

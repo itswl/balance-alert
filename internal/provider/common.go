@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-// 这里放移植 Python 版时要保持一致的小语义：真值判断、dict.get 的默认值、
-// "是不是数字" 的判定。它们决定了边界数据（0、空串、null、字符串数字）走哪条分支，
+// 这里放各适配器共用的取值语义：真值判断、带默认值的取字段、"是不是数字" 的判定。
+// 它们决定了边界数据（0、空串、null、字符串数字）走哪条分支，
 // 集中一处才不会各适配器各写一份、各错一处。
 
-// truthy 复刻 Python 的真值判断：None / false / 0 / 空串 / 空容器为假。
-// 平台返回 success 或 code 这类字段时，Python 用的是真值而不是相等判断，
-// 直接写 v == true 会在 success: 1 这种响应上判错。
+// truthy 判定一个 JSON 值是不是"真"：null / false / 0 / 空串 / 空容器为假，其余为真。
+// 平台的 success、code 这类字段类型不统一，同一个语义可能写成 true、1 或非空字符串，
+// 直接写 v == true 会在 success: 1 这种响应上判错，所以统一走真值判断。
 func truthy(v any) bool {
 	switch value := v.(type) {
 	case nil:
@@ -40,9 +40,11 @@ func truthy(v any) bool {
 	return true
 }
 
-// jsonNum 只认 JSON 里的数字，不认字符串。
-// 对应 Python 的 isinstance(x, (int, float))：GLM 算配额、wxrank 判 code 都靠它，
-// 这些地方把 "0" 当成数字 0 会算出错误的余额，所以不能用宽松的 Num。
+// jsonNum 只认 JSON 里真正的数字，字符串一律不认。
+//
+// 这个严格是有意的，别"顺手优化"成宽松的 Num：GLM 算配额、wxrank 判 code 都靠它，
+// 把字符串 "0"、"50" 当成数字参与运算，算出来的余额是错的，而且看着很正常、没人会发现。
+// Num 的宽松解析是给「平台本来就用字符串传数值」的字段准备的，两者不能互换。
 func jsonNum(v any) (float64, bool) {
 	switch value := v.(type) {
 	case float64:
@@ -56,7 +58,8 @@ func jsonNum(v any) (float64, bool) {
 	return 0, false
 }
 
-// orElse 复刻 Python 的 `a or b`：a 为假值就取 b，哪怕 b 也是假值。
+// orElse 取第一个真值：a 为假值就取 b，哪怕 b 也是假值。
+// wxrank 的后备字段就靠它：score 为 0 时要继续看 credits，而不是直接认 0。
 func orElse(a, b any) any {
 	if truthy(a) {
 		return a
@@ -64,8 +67,8 @@ func orElse(a, b any) any {
 	return b
 }
 
-// messageOr 复刻 Python 的 dict.get(key, fallback)：键存在就用它的值，
-// 哪怕值是空串或 null——只有键不存在才退回默认文案。
+// messageOr 取一个字段当错误文案：键存在就用它的值，哪怕值是空串或 null，
+// 只有键不存在才退回默认文案。
 func messageOr(data map[string]any, key, fallback string) string {
 	value, ok := data[key]
 	if !ok {
@@ -76,7 +79,7 @@ func messageOr(data map[string]any, key, fallback string) string {
 
 // formatValue 把 JSON 值渲染成错误消息里的一段文本。
 // 数字按十进制原样打（float64(200) 打成 "200" 而不是 "2e+02"），
-// 对象和数组转成 JSON——Python 打的是 dict 字面量，Go 没有等价写法，JSON 最接近且可读。
+// 对象和数组转成 JSON——错误消息是给人看的，JSON 比 Go 的 %v 可读。
 func formatValue(v any) string {
 	switch value := v.(type) {
 	case string:
@@ -95,8 +98,8 @@ func formatValue(v any) string {
 	return strings.TrimRight(buf.String(), "\n")
 }
 
-// round2 保留两位小数，用十进制格式化再解回来，
-// 与 Python round(x, 2) 的「四舍六入五成双」一致（Go 的 strconv 在正中间时同样进偶数）。
+// round2 保留两位小数：按十进制格式化再解回来，正中间的值进偶数（四舍六入五成双）。
+// 边界值在 glm_test.go 里钉着，改实现前先看那几条。
 func round2(v float64) float64 {
 	rounded, err := strconv.ParseFloat(strconv.FormatFloat(v, 'f', 2, 64), 64)
 	if err != nil {
@@ -141,8 +144,8 @@ func fetchBody(client *Client, req *http.Request) (int, string, error) {
 	return resp.StatusCode, string(body), nil
 }
 
-// parseJSONObject 解析响应体。空体与 null 都返回空 map，
-// 由调用方报「API 返回空响应」——Python 版就是这么分的层。
+// parseJSONObject 解析响应体。空体与 null 都返回空 map，不在这里报错：
+// 「API 返回空响应」是业务层的判断，各适配器的措辞和处理不一样，交给调用方报。
 func parseJSONObject(body string) (map[string]any, error) {
 	if strings.TrimSpace(body) == "" {
 		return nil, nil

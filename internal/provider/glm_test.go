@@ -93,8 +93,8 @@ func TestGLMSendsBearerToken(t *testing.T) {
 }
 
 func TestGLMRemainingPercentIgnoresStringNumbers(t *testing.T) {
-	// Python 用 isinstance(x, (int, float)) 判定，字符串 "50" 不算数字；
-	// 这里若放宽成 Num 会把字符串也算进去，得出和 Python 不一样的余额
+	// 配额字段必须是真正的数字，字符串 "50" 不算；
+	// 这里若放宽成 Num 会把字符串也算进去，得出一个看着正常的错余额
 	if _, ok := glmRemainingPercent(map[string]any{"usage": "100", "remaining": "50"}); ok {
 		t.Error("字符串的 usage/remaining 不该被当成数字")
 	}
@@ -103,8 +103,8 @@ func TestGLMRemainingPercentIgnoresStringNumbers(t *testing.T) {
 	}
 }
 
-func TestRound2MatchesPython(t *testing.T) {
-	// 基准取自 Python 的 round(x, 2)：正中间时进偶数，其余按二进制里的真实值定
+func TestRound2HalfToEven(t *testing.T) {
+	// round2 的契约：正中间时进偶数，其余按二进制里存的真实值定
 	cases := []struct{ in, want float64 }{
 		{0.125, 0.12}, // 正中间，进偶数
 		{0.135, 0.14}, // 二进制里略大于 0.135

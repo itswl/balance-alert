@@ -20,20 +20,24 @@
 - **依赖尽量少**。目前只有：Prometheus 客户端、go-imap、fernet、三个数据库驱动。
 - 日期、签名、解析这三类必须有表驱动测试，边界条件写进用例名。
 
-## 数据兼容
+## 数据契约
 
-从 Python 版升级不需要迁移数据，以下几处刻意保持不变：
+下面这些一旦改动，跑起来不会报错，但会和既有部署的数据对不上——历史曲线断成两截、
+告警冷却重新计时、库里的密文解不开。改之前先想清楚已经在跑的实例怎么办。
 
-- `project_id` = `md5("provider:name")`，`subscription_id` = `md5("subscription:name")`
+- `project_id` = `md5("provider:name")`，`subscription_id` = `md5("subscription:name")`。
+  它是历史记录与告警冷却的关联键，换算法等于把既有历史全部作废
 - 六张表的表名与列名
 - 密文格式 `enc:v1:` + Fernet token。`CONFIG_ENCRYPTION_KEY` 本身是合法 Fernet key 就直接用，
   否则取它的 SHA-256 再 urlsafe-base64 当 key
-- `DATABASE_URL` 仍用 SQLAlchemy 写法，由 `internal/store` 翻译成 Go DSN
-- 浮点数的舍入用银行家舍入（`math.RoundToEven`），与 Python 的 `round()` 一致。
-  差 0.01 平时无所谓，但跑道天数压在告警阈值上时会决定发不发告警
+- `DATABASE_URL` 是 `scheme://user:password@host:port/database?params` 形式，
+  由 `internal/store` 翻译成各驱动认的 DSN。`scheme` 里 `+` 后面是驱动名，只取前半段。
+  注意解析不能用 `net/url`：密码里的 `#` 会被当成片段起点，连接串在那儿断掉
+- 浮点数用银行家舍入（`math.RoundToEven`）而不是普通四舍五入。差 0.01 平时无所谓，
+  但跑道天数正好压在告警阈值上时会决定发不发告警，同一份数据也不该因为换了实现就显示成别的数字
 
-`internal/store/testdata/legacy_python.db` 是用旧版真实写出来的库，
-`TestReadsLegacyPythonDatabase` 每次都拿它验证一遍。
+`internal/store/testdata/legacy.db` 是一个真实写出来的库，`TestReadsLegacyDatabase`
+每次跑测试都拿它验证一遍六张表能不能正常读写。
 
 ## 时间
 

@@ -2,7 +2,7 @@ package provider
 
 import "testing"
 
-// 这些小工具决定了边界数据走哪条分支，是移植时最容易和 Python 走岔的地方，
+// 这些小工具决定了边界数据（0、空串、null、字符串数字）走哪条分支，
 // 所以单独钉住，不只靠各平台的用例顺带覆盖。
 
 func TestTruthy(t *testing.T) {
@@ -33,7 +33,7 @@ func TestTruthy(t *testing.T) {
 }
 
 func TestJSONNumRejectsStrings(t *testing.T) {
-	// 和 Num 的区别就在这：字符串数字不算数字，对应 Python 的 isinstance 判定
+	// 和 Num 的区别就在这：字符串数字不算数字
 	if _, ok := jsonNum("12"); ok {
 		t.Error(`jsonNum("12") 不该通过`)
 	}
@@ -46,7 +46,7 @@ func TestJSONNumRejectsStrings(t *testing.T) {
 }
 
 func TestOrElse(t *testing.T) {
-	// Python 的 `a or b`：a 是假值就取 b，哪怕 b 也是假值
+	// 取第一个真值：a 是假值就取 b，哪怕 b 也是假值
 	if got := orElse(nil, float64(5)); got != float64(5) {
 		t.Errorf("orElse(nil, 5) = %v", got)
 	}
@@ -63,7 +63,7 @@ func TestMessageOr(t *testing.T) {
 	if got := messageOr(data, "msg", "未知错误"); got != "出错了" {
 		t.Errorf("msg = %q", got)
 	}
-	// 键存在但是空串就用空串，只有键不存在才退回默认——Python 的 dict.get 就是这个语义
+	// 键存在但是空串就用空串，只有键不存在才退回默认
 	if got := messageOr(data, "empty", "未知错误"); got != "" {
 		t.Errorf("empty = %q", got)
 	}

@@ -28,7 +28,7 @@ func TestWxRankFetch(t *testing.T) {
 			want: 1234,
 		},
 		{
-			// Python 用的是 `score or credits`，score 是 0 会落到 credits
+			// 后备字段按真值挑：score 是 0 就继续看 credits
 			name: "后备：score 为 0 时看 credits",
 			body: `{"code":0,"msg":"查询成功","data":{"score":0,"credits":66}}`,
 			want: 66,
@@ -54,7 +54,7 @@ func TestWxRankFetch(t *testing.T) {
 			errMsg: "API 返回错误: 未知错误",
 		},
 		{
-			// Python 在这里会把 TypeError 的英文原文当错误消息抛给用户，Go 走正常的中文提示
+			// msg 不是字符串时也要给出正常的中文提示，不能把类型断言失败漏给用户
 			name:   "msg 不是字符串",
 			body:   `{"code":0,"msg":12345}`,
 			errMsg: "无法从响应中解析余额",

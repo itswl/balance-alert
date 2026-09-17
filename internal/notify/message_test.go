@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// 消息模板的快照。期望值全部来自 Python 版实跑输出：
-// services/webhook_adapter.py 的 _build_*_text，以及 services/email_scanner.py 里拼的正文。
+// 消息模板的快照。正文里每一行的字段、顺序和数字写法都是值班群认的样子，
+// 这里逐字钉死——改模板必须是有意的，不能是顺手改出来的。
 
 func TestMessageTemplates(t *testing.T) {
 	owner := "核心业务"
@@ -90,7 +90,7 @@ func TestMessageTemplates(t *testing.T) {
 			},
 		},
 		{
-			// 认不出服务名时 Python 版会把 None 印进正文，金额缺失则整行不出现
+			// 认不出服务名时正文里写字面量 None，金额缺失则整行不出现
 			name: "邮件命中_服务未识别且无金额",
 			msg: EmailAlert("", "账单", "noreply@x.com", "2026-09-16",
 				[]string{"账单"}, nil, nil),
@@ -140,7 +140,7 @@ func TestMessageTemplates(t *testing.T) {
 	}
 }
 
-// 金额为 0 时 Python 版走的是 falsy 分支，整行不出现。
+// 金额为 0 等同于"没认出金额"，整行不出现——群里看到 "**金额**: 0.0" 只会让人多查一遍。
 func TestEmailAlertSkipsZeroAmount(t *testing.T) {
 	zero := 0.0
 	msg := EmailAlert("m", "s", "from", "date", []string{"k"}, nil, &zero)
@@ -212,7 +212,7 @@ func TestFormatDays(t *testing.T) {
 		{1, "明天"},
 		{2, "2 天后"},
 		{30, "30 天后"},
-		{-1, "-1 天后"}, // 已经过期的订阅，Python 版就是这么写的
+		{-1, "-1 天后"}, // 已经过期的订阅就这么写，不做特殊措辞
 	}
 
 	for _, tt := range tests {
@@ -222,7 +222,7 @@ func TestFormatDays(t *testing.T) {
 	}
 }
 
-// 期望值来自 Python：f"{v:,.2f}"。
+// 千位分隔 + 固定两位小数，下面每条都是一个边界。
 func TestFormatAmount(t *testing.T) {
 	tests := []struct {
 		value float64
@@ -235,7 +235,7 @@ func TestFormatAmount(t *testing.T) {
 		{10000, "10,000.00"},
 		{1000000, "1,000,000.00"},
 		{1234567.891, "1,234,567.89"},
-		{2.675, "2.67"}, // 二进制里存的比 2.675 略小，Python 同样进不上去
+		{2.675, "2.67"}, // 二进制里存的比 2.675 略小，进不上去
 		{-1234.5, "-1,234.50"},
 		{1e-5, "0.00"},
 	}
@@ -247,7 +247,7 @@ func TestFormatAmount(t *testing.T) {
 	}
 }
 
-// 期望值来自 Python：str(v)。订阅金额就是这么拼进文本的。
+// 最短可往返的写法，整数补 ".0"。订阅金额就是这么拼进文本的。
 func TestFormatFloat(t *testing.T) {
 	tests := []struct {
 		value float64
@@ -257,7 +257,7 @@ func TestFormatFloat(t *testing.T) {
 		{20, "20.0"},
 		{15.99, "15.99"},
 		{1234.5, "1234.5"},
-		{1234567, "1234567.0"}, // %g 会写成 1.234567e+06，Python 不会
+		{1234567, "1234567.0"}, // 换成 %g 这里就成了 1.234567e+06
 		{0.30000000000000004, "0.30000000000000004"}, // 精度尾巴要原样留着，别被四舍五入抹平
 		{1e16, "1e+16"},
 		{1e-5, "1e-05"},
@@ -276,7 +276,7 @@ func TestISOLocal(t *testing.T) {
 	if got, want := isoLocal(withMicros), "2026-09-16T23:50:26.026504"; got != want {
 		t.Errorf("isoLocal = %q，期望 %q", got, want)
 	}
-	// Python 的 isoformat() 在微秒为 0 时不写小数部分
+	// 微秒为 0 时不写小数部分
 	whole := time.Date(2026, 9, 16, 23, 50, 26, 0, time.Local)
 	if got, want := isoLocal(whole), "2026-09-16T23:50:26"; got != want {
 		t.Errorf("isoLocal = %q，期望 %q", got, want)

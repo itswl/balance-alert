@@ -20,8 +20,8 @@ logs/
 *.sqlite
 *.sqlite3
 
-# 但测试夹具要进仓库：legacy_python.db 是用旧版 Python 实现真实写出来的库，
-# 验证 Go 版能不能直接接上现有生产数据。被 *.db 挡掉的话这条测试在 CI 里根本不会跑。
+# 但测试夹具要进仓库：testdata 下那个库用来验证能不能直接接上既有生产数据。
+# 被上面的 *.db 挡掉的话，这条测试在本地是绿的、在 CI 里根本没有数据可读。
 # 里面全是造的假数据（AK:SK / sk-old / pw），没有真实密钥。
 !**/testdata/*.db
 
@@ -40,8 +40,3 @@ k8s/*-secret.yaml
 *~
 .DS_Store
 Thumbs.db
-
-# Python 时代的遗留物，清理未尽时不进仓库
-__pycache__/
-*.py[cod]
-venv/

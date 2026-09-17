@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// 下面每一段期望报文都是 Python 版 services/webhook_adapter.py 实跑导出的
-// （json.dumps(..., ensure_ascii=False, separators=(',', ':'))），与 Go 的
-// encoding/json 输出可以逐字节比。改动本包时它们只有一个作用：拦住"顺手优化"的格式改动。
+// 下面每一段期望报文都是飞书 / 自定义 / 钉钉 / 企业微信这四个平台的对外契约，
+// 按各平台文档规定的报文格式逐字节钉死。改动本包时它们只有一个作用：
+// 拦住"顺手优化"的格式改动——报文错了的表现是群里干脆收不到，或者收到一段没人看得懂的东西。
 
 // 自定义报文里带时间戳，钉死时钟才能逐字节比对。
 var pinnedNow = time.Date(2026, 9, 16, 23, 50, 26, 26504000, time.Local)
@@ -89,7 +89,7 @@ func payloadCases() []payloadCase {
 	}
 }
 
-func TestSendPayloadMatchesPython(t *testing.T) {
+func TestSendPayloadMatchesContract(t *testing.T) {
 	for _, tc := range payloadCases() {
 		for _, typ := range SupportedTypes() {
 			t.Run(tc.name+"/"+typ, func(t *testing.T) {
@@ -97,13 +97,13 @@ func TestSendPayloadMatchesPython(t *testing.T) {
 				want := tc.want[typ]
 
 				if typ == TypeCustom && tc.msg.envelope != nil {
-					// 信封里有原始数值：Python 写 10000.0、Go 写 10000，是同一个数，
-					// 按 token 流比——字段顺序变了照样能查出来。
+					// 信封里有原始数值，10000 和 10000.0 是同一个数，逐字节比会误报；
+					// 改成按 token 流比——字段顺序变了照样能查出来。
 					assertSameJSON(t, want, got)
 					return
 				}
 				if got != want {
-					t.Errorf("报文与 Python 版不一致\n期望: %s\n实际: %s", want, got)
+					t.Errorf("报文与约定不一致\n期望: %s\n实际: %s", want, got)
 				}
 			})
 		}
@@ -168,7 +168,7 @@ func sendCaptured(t *testing.T, webhookType string, msg Message) (string, http.H
 }
 
 // assertSameJSON 按 token 流比较两段 JSON：层级、字段顺序、取值都要一致，
-// 只有数字按数值比——Python 的 10000.0 和 Go 的 10000 是同一个数。
+// 只有数字按数值比——10000 和 10000.0 是同一个数，不该算差异。
 func assertSameJSON(t *testing.T, want, got string) {
 	t.Helper()
 

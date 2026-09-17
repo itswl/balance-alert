@@ -10,13 +10,13 @@ import (
 	"github.com/itswl/balance-alert/internal/model"
 )
 
-// TestReadsLegacyPythonDatabase 证明 Go 版能直接接上旧版建的库。
+// TestReadsLegacyDatabase 证明现在的实现能直接接上旧版建的库。
 //
-// testdata/legacy_python.db 是用 Python 版的 SQLAlchemy 模型与 repository 真实写出来的，
-// 六张表都有数据。升级不需要迁移脚本、不需要停机导数据，这条是整个重写的前提。
-func TestReadsLegacyPythonDatabase(t *testing.T) {
+// testdata/legacy.db 是重写前的实现真实写出来的库，六张表都有数据。
+// 升级不需要迁移脚本、不需要停机导数据，这条是整个重写的前提。
+func TestReadsLegacyDatabase(t *testing.T) {
 	// 复制一份再打开：建表语句会写库，不能弄脏 testdata
-	source, err := os.ReadFile("testdata/legacy_python.db")
+	source, err := os.ReadFile("testdata/legacy.db")
 	if err != nil {
 		t.Fatalf("读取旧版数据库失败: %v", err)
 	}

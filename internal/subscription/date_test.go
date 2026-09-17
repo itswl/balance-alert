@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// pythonCase 是从 Python 版跑出来的对照数据，用来证明两边的日期推算完全一致。
-// 生成方式见 testdata/python_cases.json 的来源：调用 SubscriptionChecker 的内部方法穷举组合。
-type pythonCase struct {
+// baselineCase 是一组日期推算的期望值：给定周期、续费日、当天和上次续费时间，
+// 下次续费应当是哪天、还差几天、本周期算不算已经续过。
+type baselineCase struct {
 	Cycle          string  `json:"cycle"`
 	RenewalDay     int     `json:"renewal_day"`
 	Today          string  `json:"today"`
@@ -19,19 +19,19 @@ type pythonCase struct {
 	AlreadyRenewed bool    `json:"already_renewed"`
 }
 
-// TestMatchesPythonBaseline 是这个包最重要的测试：385 组日期边界逐一对齐旧实现。
-// 闰年、月末、跨年、已续费判断都在里面，改坏任何一处都会在这里炸出来。
-func TestMatchesPythonBaseline(t *testing.T) {
-	raw, err := os.ReadFile("testdata/python_cases.json")
+// TestMatchesBaseline 是这个包最重要的测试，钉住的是日期推算的行为契约：
+// 385 组日期边界的期望值，闰年、月末、跨年、已续费判断都在里面，改坏任何一处都会在这里炸出来。
+func TestMatchesBaseline(t *testing.T) {
+	raw, err := os.ReadFile("testdata/baseline_cases.json")
 	if err != nil {
-		t.Fatalf("读取对照数据失败: %v", err)
+		t.Fatalf("读取基准数据失败: %v", err)
 	}
-	var cases []pythonCase
+	var cases []baselineCase
 	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatalf("解析对照数据失败: %v", err)
+		t.Fatalf("解析基准数据失败: %v", err)
 	}
 	if len(cases) < 300 {
-		t.Fatalf("对照数据只有 %d 条，太少，怀疑生成有问题", len(cases))
+		t.Fatalf("基准数据只有 %d 条，太少，怀疑生成有问题", len(cases))
 	}
 
 	for _, c := range cases {

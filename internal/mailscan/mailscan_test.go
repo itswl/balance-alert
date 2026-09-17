@@ -189,7 +189,7 @@ func (h *harness) dialCount() int {
 
 // ---------- 邮件样例 ----------
 
-// alertMail 是一封典型的欠费提醒，主题与正文取自 Python 版的测试样例：
+// alertMail 是一封典型的欠费提醒，主题和正文按真实账单邮件的样子写：
 // 主题 =【阿里云】余额不足提醒，正文 = 您的账户余额不足，请及时充值。余额：12.50元
 func alertMail(messageID string) []byte {
 	return rawMessage([]string{
@@ -274,7 +274,7 @@ func TestScanDryRunFindsAlertWithoutSending(t *testing.T) {
 		t.Error("测试模式不该发通知")
 	}
 
-	// 测试模式既不查去重也不留痕，Python 版就是这个约定
+	// 测试模式既不查去重也不留痕：试跑一次不该把这封邮件记成"已处理"
 	if len(h.store.queries) != 0 || len(h.store.saved) != 0 {
 		t.Errorf("测试模式动了数据库: queries=%d saved=%d", len(h.store.queries), len(h.store.saved))
 	}
@@ -429,7 +429,7 @@ func TestScanIncompleteMailboxConfig(t *testing.T) {
 	if h.dialCount() != 0 {
 		t.Error("配置不完整不该去连服务器")
 	}
-	// 配置错误不是故障告警，Python 版也只是记一笔
+	// 配置错误不是故障告警，只在结果里记一笔，不打扰群里的人
 	if len(h.notifier.messages()) != 0 {
 		t.Error("配置不完整不该发系统告警")
 	}
@@ -446,7 +446,7 @@ func TestScanConnectionFailure(t *testing.T) {
 	if box.Success || box.Error == nil || !strings.Contains(*box.Error, "login failed") {
 		t.Errorf("邮箱结果 = %+v, 期望记下连接错误", box)
 	}
-	// 与 Python 的 tenacity(stop_after_attempt(3)) 对齐
+	// 连不上要按 connectAttempts 重试满，不能试一次就放弃
 	if got := h.dialCount(); got != connectAttempts {
 		t.Errorf("连接尝试 = %d 次, 期望 %d 次", got, connectAttempts)
 	}

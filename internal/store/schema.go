@@ -15,8 +15,8 @@ import (
 //go:embed schema/*.sql
 var schemaFS embed.FS
 
-// createTables 启动时建表，与 Python 版 init_database() 的 create_all 行为一致：
-// 全是 CREATE ... IF NOT EXISTS，接上现有生产库时是空操作。
+// createTables 启动时建表：全是 CREATE ... IF NOT EXISTS，
+// 接上现有生产库时是空操作，不会动已有的表结构和数据。
 func createTables(ctx context.Context, db *sql.DB, engine Engine) error {
 	raw, err := schemaFS.ReadFile("schema/" + string(engine) + ".sql")
 	if err != nil {

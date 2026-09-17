@@ -10,10 +10,10 @@ import (
 	"github.com/itswl/balance-alert/internal/model"
 )
 
-// 对照数据的生成基准时刻，必须和 testdata/python_cases.json 里用的一致。
+// 基准数据里的小时偏移都是相对这个时刻算的，改了它整份 testdata/baseline_cases.json 就对不上了。
 var baselineNow = time.Date(2026, 9, 16, 20, 0, 0, 0, time.Local)
 
-type pythonCase struct {
+type baselineCase struct {
 	Name   string      `json:"name"`
 	Points [][]float64 `json:"points"` // [小时偏移, 余额]
 	Result struct {
@@ -33,16 +33,16 @@ type pythonCase struct {
 	Daily []model.DailySpend `json:"daily"`
 }
 
-// TestMatchesPythonBaseline 12 个真实形状的余额序列逐字段对齐旧实现。
-// 消耗、充值、置信度、跑道、突增倍数全都在里面，改坏任何一处都会炸。
-func TestMatchesPythonBaseline(t *testing.T) {
-	raw, err := os.ReadFile("testdata/python_cases.json")
+// TestMatchesBaseline 钉住这个包的行为契约：12 个真实形状的余额序列，逐字段比对期望值。
+// 消耗、充值、置信度、跑道、突增倍数全都在里面，算法改坏任何一处都会在这里炸出来。
+func TestMatchesBaseline(t *testing.T) {
+	raw, err := os.ReadFile("testdata/baseline_cases.json")
 	if err != nil {
-		t.Fatalf("读取对照数据失败: %v", err)
+		t.Fatalf("读取基准数据失败: %v", err)
 	}
-	var cases []pythonCase
+	var cases []baselineCase
 	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatalf("解析对照数据失败: %v", err)
+		t.Fatalf("解析基准数据失败: %v", err)
 	}
 
 	for _, c := range cases {

@@ -6,7 +6,7 @@ import (
 )
 
 // 默认词表是产品行为的一部分：漏一个词就少一类告警，多一个词就多一批误报。
-// 数量对不上说明有人顺手改了表，改之前先确认 Python 版是不是也改了。
+// 数量对不上说明有人顺手改了表，改之前先想清楚会多出还是少掉哪一类告警。
 func TestDefaultAlertKeywordsIsUnchanged(t *testing.T) {
 	if got, want := len(DefaultAlertKeywords), 40; got != want {
 		t.Fatalf("默认关键词数量 = %d, 期望 %d", got, want)

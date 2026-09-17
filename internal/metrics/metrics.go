@@ -3,7 +3,8 @@
 // 指标名与标签名是对外契约（见 grafana/README.md）：既有的面板、告警规则和抓取配置都按这套名字写死了，
 // 改一个字就会让线上看板变成 No Data，所以这里的字符串字面量不许"顺手优化"。
 //
-// 指标只在跑定时任务的这个进程里更新，命令行手动跑出来的结果不进指标——这和 Python 版一致。
+// 指标只在跑定时任务的这个进程里更新，命令行手动跑出来的结果不进指标——
+// 否则一次人工排查就会在曲线上留下一个假的检查峰值。
 package metrics
 
 import (
@@ -385,7 +386,8 @@ func deref(v *float64) float64 {
 	return *v
 }
 
-// unixSeconds 保留亚秒精度，和 Python 的 time.time() 对齐。
+// unixSeconds 转成带小数的 Unix 秒。保留亚秒精度是因为一轮检查往往不到一秒，
+// 只取整秒会让"距上次检查多久"这类面板全是 0。
 func unixSeconds(t time.Time) float64 {
 	return float64(t.Unix()) + float64(t.Nanosecond())/1e9
 }

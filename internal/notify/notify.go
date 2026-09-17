@@ -1,7 +1,8 @@
 // Package notify 把一条告警发到群机器人（飞书 / 钉钉 / 企业微信 / 自定义 HTTP）。
 //
-// 报文结构、消息模板、字段顺序与数字写法全部照搬 Python 版 services/webhook_adapter.py：
-// 值班群里看惯了这个格式，改一个字都算回归。本包只负责发出去，
+// 报文结构、消息模板、字段顺序与数字写法都是对外契约：值班群里看惯了这个格式，
+// 自定义 webhook 那头还有系统在按字段名取值，改一个字都算回归。
+// payload_test.go 与 message_test.go 把它们逐字节钉死了。本包只负责发出去，
 // 成功失败的指标由调用方记——同一条消息可能来自余额、跑道、周报等不同场景。
 package notify
 
@@ -18,7 +19,7 @@ import (
 	"time"
 )
 
-// 支持的目标平台。顺序与 Python 版 SUPPORTED_TYPES 一致，配置自检会原样列给用户看。
+// 支持的目标平台。顺序是固定的，配置自检会原样列给用户看。
 const (
 	TypeFeishu   = "feishu"
 	TypeCustom   = "custom"
@@ -26,7 +27,7 @@ const (
 	TypeWeCom    = "wecom"
 )
 
-// 指标分类。前两类在 Python 版走纯文本/结构化报文，其余走富文本卡片，
+// 指标分类。余额与订阅走纯文本/结构化报文，其余走富文本卡片，
 // Send 就是靠 Kind 区分这两条路的——它们的正文格式本来就不一样。
 const (
 	KindBalance      = "balance"
@@ -38,8 +39,7 @@ const (
 	KindWeeklyReport = "weekly_report"
 )
 
-// 重试节奏与 Python 版 tenacity(stop_after_attempt(3), wait_exponential(2,2,10)) 对齐：
-// 总共三次尝试，失败后分别等 2 秒、4 秒。
+// 重试节奏：总共三次尝试，失败后分别等 2 秒、4 秒。
 var defaultBackoff = []time.Duration{2 * time.Second, 4 * time.Second}
 
 // 响应体只读这么多，用于拼错误信息；机器人的错误响应都很短。
@@ -48,7 +48,7 @@ const maxResponseBody = 4096
 // Message 是一条待发的告警。
 //
 // Lines 是正文的每一行：富文本告警（跑道、邮件、周报）写成 "**字段**: 值"，
-// 余额与订阅沿用 Python 版的纯文本 "字段: 值"——钉钉那边会自己补上列表和加粗。
+// 余额与订阅用纯文本 "字段: 值"——钉钉那边会自己补上列表和加粗。
 type Message struct {
 	Title string
 	Lines []string
@@ -73,8 +73,8 @@ func SupportedTypes() []string {
 // New 按配置造一个通知器。
 //
 // 没配 URL 说明这套部署压根不发告警，返回 nil, nil，调用方据此跳过发送。
-// 类型不认识时直接报错：Python 版是打个 warning 然后按 custom 发，
-// 结果是飞书群收到一条谁也解析不了的 JSON，还不如起不来的时候就说清楚。
+// 类型不认识时直接报错，不按 custom 兜底：兜底发出去的是一条谁也解析不了的 JSON，
+// 而且要等真出告警那天才会有人发现，还不如起不来的时候就把配置问题说清楚。
 func New(url, webhookType, source string, client *http.Client) (Notifier, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, nil
@@ -82,7 +82,7 @@ func New(url, webhookType, source string, client *http.Client) (Notifier, error)
 
 	typ := strings.ToLower(strings.TrimSpace(webhookType))
 	if typ == "" {
-		// 与 Python 版 from_settings 的 `settings.webhook_type or 'custom'` 一致
+		// 没填类型按 custom 处理；只有真写错了类型名才报错
 		typ = TypeCustom
 	}
 	if !supported(typ) {
@@ -207,9 +207,9 @@ func wait(ctx context.Context, d time.Duration) error {
 
 // MaskURL 把 webhook 地址里的密钥打码后再写日志。
 //
-// 规则照搬 Python 版 _mask_webhook_url：按 hook/ → access_token= → key= 的顺序取第一个
-// 命中的标记，保留密钥前 4 位。provider.MaskURL 是另一套规则（只认路径里的段），
-// 这里不复用也不 import：notify 被 provider 的上层用着，反向依赖会绕回来。
+// 按 hook/ → access_token= → key= 的顺序取第一个命中的标记，保留密钥前 4 位。
+// provider.MaskURL 是另一套规则（只认路径里的段），这里不复用也不 import：
+// notify 被 provider 的上层用着，反向依赖会绕回来。
 func MaskURL(raw string) string {
 	if raw == "" {
 		return ""

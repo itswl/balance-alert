@@ -22,15 +22,16 @@ import (
 // 刻意不依赖 internal/config：store 只要这三个值，把依赖方向保持成单向，
 // 测试里也能不碰环境变量就构造出一个库。
 type Options struct {
-	DatabaseURL string // SQLAlchemy 写法，由 ParseURL 翻译
+	DatabaseURL string // 连接串 URL 形式，由 ParseURL 翻译成驱动 DSN
 	// EncryptionKey 为空表示不加密，api_key 与 password 原样存取。
 	EncryptionKey string
-	// AutoEncryptOnRead 对应 AUTO_ENCRYPT_ON_READ（Python 侧默认 true）：
-	// 读到历史遗留的明文时顺手加密回写。调用方要显式传，Go 的零值是 false。
+	// AutoEncryptOnRead 对应 AUTO_ENCRYPT_ON_READ（配置里默认 true）：
+	// 读到历史遗留的明文时顺手加密回写。调用方要显式传，结构体零值是 false。
 	AutoEncryptOnRead bool
 }
 
-// 各查询的窗口与条数默认值，与 database/repository.py 里的函数签名默认值一一对应。
+// 各查询的窗口与条数默认值：调用方传 0 表示没指定，回落到这里。
+// 这组值是接口对外的既有约定，改了会让不带参数的调用拿到不一样的数据范围。
 const (
 	defaultBalanceDays    = 7
 	defaultBalanceLimit   = 100
@@ -59,7 +60,7 @@ func Open(ctx context.Context, opts Options) (Store, error) {
 		return nil, err
 	}
 
-	// SQLite 的库文件放在 ./data 这类目录下，首次启动目录还不存在，和 Python 版一样先建出来。
+	// SQLite 的库文件放在 ./data 这类目录下，首次启动目录还不存在，先建出来免得 Open 直接失败。
 	if target.FilePath != "" {
 		if dir := filepath.Dir(target.FilePath); dir != "" && dir != "." {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -349,7 +350,7 @@ func (s *sqlStore) BalanceTrend(ctx context.Context, projectID string, days int)
 		MinBalance:     minBalance,
 		MaxBalance:     maxBalance,
 		AvgBalance:     sum / float64(len(rows)),
-		Threshold:      last.Threshold.Float64, // 没设阈值时是 0，和 Python 一致
+		Threshold:      last.Threshold.Float64, // 没设阈值时按 0 返回，是接口的既有约定
 		FirstTimestamp: isoUTC(first.Timestamp),
 		LastTimestamp:  isoUTC(last.Timestamp),
 		History:        history,
@@ -508,8 +509,8 @@ func (s *sqlStore) EmailAlerts(ctx context.Context, q EmailAlertQuery) ([]EmailA
 
 // encodeKeywords 把命中的关键词存成 JSON 数组文本。
 //
-// 关掉 HTML 转义是为了和 Python 的 ensure_ascii=False 对齐：中文和 & < > 都按原样存，
-// 不然同一条记录两边读出来的字节不一样。
+// 关掉 HTML 转义：中文和 & < > 都按原样存，与库里既有行的写法一致。
+// 若按 encoding/json 的默认行为把它们转义掉，同一批关键词在新旧行里字节不同，比对时就对不上。
 func encodeKeywords(keywords []string) (string, error) {
 	if keywords == nil {
 		keywords = []string{} // nil 会被编码成 null，而这一列的约定是 JSON 数组
@@ -525,7 +526,7 @@ func encodeKeywords(keywords []string) (string, error) {
 
 // ---------- 取值辅助 ----------
 
-// daysOf / limitOf 补齐窗口与条数：传 0 表示调用方没指定，用 Python 版同名参数的默认值。
+// daysOf / limitOf 补齐窗口与条数：传 0 表示调用方没指定，回落到上面那组默认值。
 func daysOf(days, fallback int) int {
 	if days <= 0 {
 		return fallback
