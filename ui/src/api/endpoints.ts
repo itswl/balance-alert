@@ -28,7 +28,7 @@ export const getFeatures = (): Promise<FeaturesResponse> => request<FeaturesResp
 
 export const getCredits = (): Promise<CreditsResponse> => request<CreditsResponse>('/api/credits');
 
-/** noCache：订阅改完立刻重拉时要绕开 ETag 缓存，否则看到的还是旧值 */
+/** noCache：Subscription改完立刻重拉时要绕开 ETag 缓存，否则看到的还是旧值 */
 export const getSubscriptions = (noCache = false): Promise<SubscriptionsResponse> =>
   request<SubscriptionsResponse>(
     '/api/subscriptions',
@@ -73,7 +73,7 @@ export const runEmailScan = (days: number): Promise<EmailScanState> =>
   request<EmailScanState>('/api/email/scan', { method: 'POST', body: JSON.stringify({ days }) });
 
 // 下面这些经由 mutate() 调用，只把路径集中在这里，载荷类型用来卡住调用方。
-// docs/API.md 里的 /api/config/threshold 是只改阈值的快捷入口，页面上阈值在项目弹窗里改，用不到它。
+// docs/API.md 里的 /api/config/threshold 是只改阈值的快捷入口，页面上阈值在Project弹窗里改，用不到它。
 export const ENDPOINTS = {
   saveProject: '/api/config/project',
   deleteProject: '/api/config/project/delete',

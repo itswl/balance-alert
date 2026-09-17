@@ -1,4 +1,4 @@
-/** 顶部概览数字：总数、正常、告警、最短跑道、最后更新。 */
+/** 顶部概览数字：Total、Healthy、Alert、Shortest runway、Last update。 */
 
 import { byId, setText } from '../dom.js';
 import { formatRunway, getRelativeTime } from '../format.js';
@@ -24,8 +24,8 @@ export function updateStats(data: CreditsResponse): void {
 }
 
 /**
- * 查询失败的项目既不算正常也不算告警，总数对不上时得有个说法。
- * 挂在告警卡片的标签上，不用为此多占一格。
+ * 查询失败的Project既不算Healthy也不算Alert，Total对不上时得有个说法。
+ * 挂在Alert卡片的标签上，不用为此多占一格。
  */
 export function updateFailedHint(projects: CheckResult[]): void {
   const label = byId('alert-projects-label');
@@ -33,12 +33,12 @@ export function updateFailedHint(projects: CheckResult[]): void {
 
   const failed = projects.filter((p) => !p.success);
   if (failed.length === 0) {
-    label.textContent = '告警项目';
+    label.textContent = 'Alerting projects';
     label.title = '';
     return;
   }
-  label.textContent = `告警项目 · ${failed.length} 个查不到`;
-  label.title = `查不到余额：${failed.map((p) => p.project).join('、')}`;
+  label.textContent = `Alerting projects · ${failed.length} unavailable`;
+  label.title = `Unavailable balances: ${failed.map((p) => p.project).join(', ')}`;
 }
 
 export function updateRunwayStat(projects: CheckResult[]): void {
@@ -50,14 +50,14 @@ export function updateRunwayStat(projects: CheckResult[]): void {
   if (!first) {
     value.textContent = '—';
     value.className = 'stat-value';
-    label.textContent = '最短跑道';
-    label.title = '开启数据库后，攒够余额历史即可估算';
+    label.textContent = 'Shortest runway';
+    label.title = 'Enable the database and collect balance history to estimate runway';
     return;
   }
 
   const runway = formatRunway(first.runway);
   value.textContent = runway.text;
   value.className = `stat-value runway-${runway.level}`;
-  label.textContent = `最短跑道 · ${first.project}`;
+  label.textContent = `Shortest runway · ${first.project}`;
   label.title = runway.hint;
 }

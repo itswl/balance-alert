@@ -1,13 +1,13 @@
 /**
- * 看板的全局状态。
+ * 看板的全局Status。
  *
- * 刻意保持成一个可变对象而不是引入状态库：这个看板的数据流只有
+ * 刻意保持成一个可变对象而不是引入Status库：这个看板的数据流只有
  * 「拉接口 → 写进来 → 重绘」一条，多一层抽象只会让排查变难。
  */
 
 import type { CreditsResponse, Features, SubscriptionsResponse } from './api/types.js';
 
-/** 四个视图；alerts 与 all 共用项目区，只是多一层筛选 */
+/** 四个视图；alerts 与 all 共用Project区，只是多一层筛选 */
 export type ViewName = 'all' | 'alerts' | 'subscriptions' | 'email';
 
 export const VIEW_NAMES: readonly ViewName[] = ['all', 'alerts', 'subscriptions', 'email'];
@@ -19,7 +19,7 @@ export interface AppStateShape {
   currentTheme: Theme;
   currentView: ViewName;
   projectViewStyle: ProjectViewStyle;
-  /** 平台筛选，'all' 表示不筛 */
+  /** Provider筛选，'all' 表示不筛 */
   currentFilter: string;
   searchQuery: string;
   balanceData: CreditsResponse | null;

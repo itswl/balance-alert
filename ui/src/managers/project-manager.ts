@@ -1,6 +1,6 @@
 /**
- * 项目管理：新增 / 编辑 / 删除。
- * 开了 ENABLE_DYNAMIC_CONFIG 后，项目清单可以完全在页面上维护。
+ * Project管理：新增 / Edit / Delete。
+ * 开了 ENABLE_DYNAMIC_CONFIG 后，Project清单可以完全在页面上维护。
  */
 
 import { mutate, request } from '../api/client.js';
@@ -13,7 +13,7 @@ import { showToast } from '../ui/toast.js';
 
 const MODAL_ID = 'project-modal';
 
-/** 平台清单基本不变，拉一次缓存住 */
+/** Provider清单基本不变，拉一次缓存住 */
 let providers: ProviderOption[] = [];
 
 async function loadProviders(): Promise<ProviderOption[]> {
@@ -22,7 +22,7 @@ async function loadProviders(): Promise<ProviderOption[]> {
     const result = await getProviders();
     providers = result.providers || [];
   } catch (error) {
-    console.warn('平台列表加载失败:', error);
+    console.warn('Failed to load provider list:', error);
   }
   return providers;
 }
@@ -37,22 +37,22 @@ function fillProviderOptions(selected = ''): void {
   );
 }
 
-/** 类型影响阈值的含义：配额型按剩余百分比填，不提示一句用户会填成金额 */
+/** 类型影响阈值的含义：Quota型按剩余百分比填，不提示一句用户会填成Amount */
 function syncTypeHint(): void {
   const provider = byId<HTMLSelectElement>('project-provider')?.value;
   const known = providers.find((p) => p.value === provider);
   const typeSelect = byId<HTMLSelectElement>('project-type');
   const hint = byId('project-threshold-hint');
 
-  // 用户手动选过类型就不再跟着平台变
+  // 用户手动选过类型就不再跟着Provider变
   if (known && typeSelect && !typeSelect.dataset['touched']) {
     typeSelect.value = known.default_type;
   }
   if (hint) {
     hint.textContent =
       typeSelect?.value === 'quota'
-        ? '配额型平台按剩余百分比填，例如 10 表示不足 10% 时告警'
-        : '余额低于此值时告警；留空则不告警';
+        ? 'Enter a remaining percentage for quota providers; for example, 10 alerts below 10%.'
+        : 'Alert when the balance is below this value; leave empty to disable alerts.';
   }
 }
 
@@ -65,7 +65,7 @@ export async function openProjectModal(project: ProjectConfig | null = null): Pr
 
   const isEdit = Boolean(project);
   const title = byId('project-modal-title');
-  if (title) title.textContent = isEdit ? '编辑项目' : '添加项目';
+  if (title) title.textContent = isEdit ? 'Edit project' : 'Add project';
   setInputValue('project-edit-mode', String(isEdit));
 
   const nameInput = inputById('project-name');
@@ -80,9 +80,9 @@ export async function openProjectModal(project: ProjectConfig | null = null): Pr
   setInputValue('project-api-key', '');
 
   const keyHint = byId('project-api-key-hint');
-  if (keyHint) keyHint.textContent = isEdit ? '留空则保持原密钥不变' : '';
+  if (keyHint) keyHint.textContent = isEdit ? 'Leave empty to keep the existing API key' : '';
 
-  // 环境变量发现的项目在这里保存会被固化进数据库，得先说清楚
+  // 环境变量发现的Project在这里Save会被固化进数据库，得先说清楚
   const envNote = byId('project-env-note');
   if (envNote) envNote.style.display = project?.from_env ? 'block' : 'none';
 
@@ -113,17 +113,17 @@ async function saveProject(event: Event): Promise<void> {
   if (apiKey) data.api_key = apiKey;
 
   if (!data.name) {
-    showToast('项目名称不能为空', 'warning');
+    showToast('Project name is required', 'warning');
     return;
   }
   if (!isEdit && !apiKey) {
-    showToast('新增项目需要填写密钥', 'warning');
+    showToast('An API key is required for a new project', 'warning');
     return;
   }
 
   const result = await mutate(ENDPOINTS.saveProject, data, {
-    success: isEdit ? '项目已更新' : '项目已添加',
-    fail: '保存失败',
+    success: isEdit ? 'Project updated' : 'Project added',
+    fail: 'Save failed',
   });
   if (result) {
     closeProjectModal();
@@ -132,25 +132,25 @@ async function saveProject(event: Event): Promise<void> {
 }
 
 export async function deleteProject(name: string): Promise<void> {
-  if (!confirm(`确定要删除项目"${name}"吗？\n\n历史记录会保留，但不再检查余额。`)) return;
-  if (await mutate(ENDPOINTS.deleteProject, { name }, { success: '项目已删除', fail: '删除失败' })) {
+  if (!confirm(`Delete project "${name}"?\n\nHistory is retained, but the balance will no longer be checked.`)) return;
+  if (await mutate(ENDPOINTS.deleteProject, { name }, { success: 'Project deleted', fail: 'Delete failed' })) {
     await reloadProjects();
   }
 }
 
-/** 看板状态里没有密钥、阈值这些配置字段，编辑前要单独拉一次项目配置 */
+/** 看板Status里没有密钥、阈值这些配置字段，Edit前要单独拉一次Project配置 */
 export async function editProject(name: string): Promise<void> {
   try {
     const result = await request<ProjectsConfigResponse>('/api/config/projects');
     const project = (result.projects || []).find((p) => p.name === name);
     if (!project) {
-      showToast('未找到该项目的配置', 'error');
+      showToast('Project configuration not found', 'error');
       return;
     }
     await openProjectModal(project);
   } catch (error) {
-    console.error('加载项目配置失败:', error);
-    showToast('加载失败', 'error');
+    console.error('Failed to load project configuration:', error);
+    showToast('Load failed', 'error');
   }
 }
 

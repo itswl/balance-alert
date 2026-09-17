@@ -1,9 +1,9 @@
 /**
- * 余额趋势折线图。
+ * Balance趋势折线图。
  *
  * 原来这张图靠 CDN 上的 Chart.js（压缩后 ~200KB）画，而 Go 版是把前端产物
  * embed 进单个二进制的 —— 留一个 jsdelivr 的 <script> 会让内网 / 离线部署
- * 打开弹窗就是一片空白。这里用 canvas 直接画：一条余额线 + 一条阈值虚线，
+ * 打开弹窗就是一片空白。这里用 canvas 直接画：一条Balance线 + 一条阈值虚线，
  * 图例、坐标轴刻度、悬停提示都按原来的样子复刻，整段代码不到 8KB。
  */
 
@@ -51,7 +51,7 @@ export class LineChart {
 
   constructor(canvas: HTMLCanvasElement, options: LineChartOptions) {
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('当前浏览器不支持 canvas 2d');
+    if (!ctx) throw new Error('This browser does not support 2D canvas');
     this.canvas = canvas;
     this.ctx = ctx;
     this.options = options;
@@ -119,7 +119,7 @@ export class LineChart {
     let min = Math.min(...values);
     let max = Math.max(...values);
     if (min === max) {
-      // 余额一直没变时给一个上下留白，否则线会贴在边上
+      // Balance一直没变时给一个上下留白，否则线会贴在边上
       const pad = Math.abs(min) * 0.1 || 1;
       min -= pad;
       max += pad;

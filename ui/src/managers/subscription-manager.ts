@@ -1,4 +1,4 @@
-/** 订阅管理：新增 / 编辑 / 删除 / 标记已续费。 */
+/** Subscription管理：新增 / Edit / Delete / Mark renewed。 */
 
 import { mutate } from '../api/client.js';
 import { ENDPOINTS, getSubscriptionsConfig } from '../api/endpoints.js';
@@ -11,7 +11,7 @@ import { showToast } from '../ui/toast.js';
 
 const MODAL_ID = 'subscription-modal';
 
-/** 可选的「所属项目」取自当前看板里出现过的分组名 */
+/** 可选的「所属Project」取自当前看板里出现过的分组名 */
 function populateProjectOptions(selectedProject = ''): void {
   const select = byId<HTMLSelectElement>('sub-owner-project');
   if (!select) return;
@@ -21,7 +21,7 @@ function populateProjectOptions(selectedProject = ''): void {
   select.innerHTML = '';
   const emptyOption = document.createElement('option');
   emptyOption.value = '';
-  emptyOption.textContent = '未关联项目';
+  emptyOption.textContent = 'No owner project';
   select.appendChild(emptyOption);
 
   for (const project of known) {
@@ -32,7 +32,7 @@ function populateProjectOptions(selectedProject = ''): void {
     select.appendChild(option);
   }
 
-  // 已有订阅关联的项目可能已经不在看板里了，补一个选项免得编辑时被悄悄清空
+  // 已有Subscription关联的Project可能已经不在看板里了，补一个选项免得Edit时被悄悄清空
   if (selectedProject && !known.includes(selectedProject)) {
     const option = document.createElement('option');
     option.value = selectedProject;
@@ -42,7 +42,7 @@ function populateProjectOptions(selectedProject = ''): void {
   }
 }
 
-/** 续费日的取值范围随周期变：周付 1-7，月付 1-31，年付 MMDD */
+/** 续费日的取值范围随周期变：Weekly 1-7，Monthly 1-31，Yearly MMDD */
 function updateRenewalDayInputForCycle(): void {
   const cycle = byId<HTMLSelectElement>('sub-cycle')?.value || 'monthly';
   const input = byId<HTMLInputElement>('sub-renewal-day');
@@ -55,7 +55,7 @@ function updateRenewalDayInputForCycle(): void {
   } else if (cycle === 'yearly') {
     input.min = '101';
     input.max = '1231';
-    input.placeholder = 'MMDD，例如 315';
+    input.placeholder = 'MMDD, for example 0315';
   } else {
     input.min = '1';
     input.max = '31';
@@ -71,7 +71,7 @@ export function openSubscriptionModal(subscription: EditableSubscription | null 
 
   const title = byId('modal-title');
   if (subscription) {
-    if (title) title.textContent = '编辑订阅';
+    if (title) title.textContent = 'Edit subscription';
     setInputValue('edit-mode', 'true');
     setInputValue('original-name', subscription.name);
     setInputValue('sub-name', subscription.name);
@@ -85,7 +85,7 @@ export function openSubscriptionModal(subscription: EditableSubscription | null 
     }
     setChecked('sub-enabled', 'enabled' in subscription ? subscription.enabled !== false : true);
   } else {
-    if (title) title.textContent = '添加订阅';
+    if (title) title.textContent = 'Add subscription';
     setInputValue('edit-mode', 'false');
     setChecked('sub-enabled', true);
   }
@@ -127,45 +127,45 @@ async function saveSubscription(event: Event): Promise<void> {
     }
   }
 
-  const result = await mutate(endpoint, data, { success: isEdit ? '订阅已更新' : '订阅已添加', fail: '保存失败' });
+  const result = await mutate(endpoint, data, { success: isEdit ? 'Subscription updated' : 'Subscription added', fail: 'Save failed' });
   if (result) {
     closeSubscriptionModal();
     await reloadSubscriptions();
   }
 }
 
-/** 看板上的订阅状态不含 alert_days_before，编辑前要拿一次完整配置 */
+/** 看板上的SubscriptionStatus不含 alert_days_before，Edit前要拿一次完整配置 */
 export async function editSubscription(name: string): Promise<void> {
   try {
     const current = (AppState.subscriptionData?.subscriptions || []).find((s) => s.name === name);
     if (!current) {
-      showToast('未找到该订阅', 'error');
+      showToast('Subscription not found', 'error');
       return;
     }
     const result = await getSubscriptionsConfig();
     const full = (result.subscriptions || []).find((s) => s.name === name);
     openSubscriptionModal(full ?? current);
   } catch (error) {
-    console.error('加载订阅失败:', error);
-    showToast('加载失败', 'error');
+    console.error('Failed to load subscription:', error);
+    showToast('Load failed', 'error');
   }
 }
 
 export async function deleteSubscription(name: string): Promise<void> {
-  if (!confirm(`确定要删除订阅"${name}"吗？\n\n此操作不可恢复。`)) return;
-  if (await mutate(ENDPOINTS.deleteSubscription, { name }, { success: '订阅已删除', fail: '删除失败' })) {
+  if (!confirm(`Delete subscription "${name}"?\n\nThis action cannot be undone.`)) return;
+  if (await mutate(ENDPOINTS.deleteSubscription, { name }, { success: 'Subscription deleted', fail: 'Delete failed' })) {
     await reloadSubscriptions();
   }
 }
 
 export async function markSubscriptionRenewed(name: string): Promise<void> {
-  if (await mutate(ENDPOINTS.markRenewed, { name }, { success: '已标记为已续费' })) {
+  if (await mutate(ENDPOINTS.markRenewed, { name }, { success: 'Marked as renewed' })) {
     await reloadSubscriptions();
   }
 }
 
 export async function clearSubscriptionRenewed(name: string): Promise<void> {
-  if (await mutate(ENDPOINTS.clearRenewed, { name }, { success: '已取消续费标记' })) {
+  if (await mutate(ENDPOINTS.clearRenewed, { name }, { success: 'Renewal mark cleared' })) {
     await reloadSubscriptions();
   }
 }

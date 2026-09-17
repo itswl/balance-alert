@@ -1,12 +1,11 @@
 version: "2"
 
-# 三种引擎各生成一个包。差异只在 SQL 文本（占位符、upsert 写法、标识符引号），
-# Go 侧的行与参数结构体刻意保持完全一致的字段布局，internal/store 才能用结构体转换
-# 把三个包适配到同一个 Store 接口上，而不必逐字段搬运。
+# Generate one package per database engine. Differences are limited to SQL syntax
+# (placeholders, upserts, and identifier quoting); Go row and parameter structs keep
+# the same layout so internal/store can adapt all three packages to one Store interface.
 #
-# overrides 把 postgres/mysql 的 INTEGER 列钉成 NullInt64：sqlc 默认给它们 NullInt32，
-# 而 sqlite 给 NullInt64，不统一就破坏了上面那条「布局一致」的前提。
-# 列本身仍声明为 INTEGER，与既有生产库的表结构一致。
+# These overrides pin PostgreSQL/MySQL INTEGER columns to NullInt64. sqlc defaults to
+# NullInt32 for those engines while SQLite uses NullInt64, which would break the layout.
 sql:
   - engine: "sqlite"
     schema: "internal/store/schema/sqlite.sql"

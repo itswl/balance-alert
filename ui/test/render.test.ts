@@ -56,24 +56,24 @@ function runway(overrides: Partial<Runway> = {}): Runway {
 }
 
 describe('renderProjectCard', () => {
-  it('把项目名、平台、余额和跑道都放进卡片', () => {
+  it('把Project名、Provider、Balance和跑道都放进卡片', () => {
     const html = renderProjectCard(project({ runway: runway() }), ALL_OFF);
     assert.match(html, /<h3>deepseek<\/h3>/);
     assert.match(html, /class="project-provider">deepseek</);
     assert.match(html, />430\.37</);
-    assert.match(html, />6\.9 天</);
+    assert.match(html, />6\.9 days</);
     assert.match(html, /runway-warning/);
-    assert.match(html, /约 2026-09-21 耗尽/);
+    assert.match(html, /estimated to deplete around 2026-09-21/);
   });
 
-  it('没有跑道数据时显示「数据积累中」而不是 0 天', () => {
+  it('没有跑道数据时显示「Accumulating data」而不是 0 天', () => {
     const html = renderProjectCard(project(), ALL_OFF);
-    assert.match(html, />数据积累中</);
+    assert.match(html, />Accumulating data</);
     assert.match(html, /runway-unknown/);
-    assert.match(html, /<span class="detail-value">—<\/span>/); // 日均消耗
+    assert.match(html, /<span class="detail-value">—<\/span>/); // Daily spend
   });
 
-  it('项目名里的 HTML 被转义，不会注入标签', () => {
+  it('Project名里的 HTML 被转义，不会注入标签', () => {
     const html = renderProjectCard(project({ project: '<img src=x onerror=alert(1)>' }), ALL_OFF);
     assert.ok(!html.includes('<img src=x'));
     assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
@@ -93,20 +93,20 @@ describe('renderProjectCard', () => {
     assert.match(html, /js-show-trend" data-project="deepseek" data-provider="deepseek"/);
   });
 
-  it('告警项目的状态位和文案都切换', () => {
+  it('Alerting projects的Status位和文案都切换', () => {
     const html = renderProjectCard(project({ need_alarm: true }), ALL_OFF);
     assert.match(html, /data-status="alert"/);
-    assert.match(html, /status-text alert">告警</);
+    assert.match(html, /status-text alert">Alert</);
   });
 
-  it('配额型显示百分比和「剩余配额」', () => {
+  it('Quota型显示百分比和「剩余Quota」', () => {
     const html = renderProjectCard(project({ type: 'quota', credits: 42.35, threshold: 10 }), ALL_OFF);
-    assert.match(html, /剩余配额/);
+    assert.match(html, /Remaining quota/);
     assert.match(html, /42\.4<span class="unit">%<\/span>/);
   });
 });
 
-describe('查不到余额的项目', () => {
+describe('UnavailableBalance的Project', () => {
   const failed = project({
     success: false,
     credits: null,
@@ -114,16 +114,16 @@ describe('查不到余额的项目', () => {
     error: 'HTTP 401: Unauthorized',
   });
 
-  it('不把 null 余额渲染成 0.00', () => {
+  it('不把 null Balance渲染成 0.00', () => {
     const html = renderProjectCard(failed, ALL_OFF);
-    assert.ok(html.includes('查不到'), '应该明说查不到');
-    assert.ok(!html.includes('0.00'), '不能编造一个 0.00 的余额');
+    assert.ok(html.includes('Unavailable'), '应该明说Unavailable');
+    assert.ok(!html.includes('0.00'), '不能编造一个 0.00 的Balance');
   });
 
-  it('不把失败标成正常', () => {
+  it('不把失败标成Healthy', () => {
     const html = renderProjectCard(failed, ALL_OFF);
-    assert.ok(html.includes('data-status="failed"'), '状态应是 failed');
-    assert.ok(!html.includes('>正常<'), '失败的项目不能显示成正常');
+    assert.ok(html.includes('data-status="failed"'), 'Status应是 failed');
+    assert.ok(!html.includes('>Healthy<'), '失败的Project不能显示成Healthy');
     assert.ok(!html.includes('balance-progress-bar'), '不该画一条满格的进度条');
   });
 
@@ -154,13 +154,13 @@ describe('filterProjects', () => {
     project({ project: 'openrouter', provider: 'openrouter', need_alarm: false }),
   ];
 
-  it('搜索同时匹配项目名和平台名，且不区分大小写', () => {
+  it('搜索同时匹配Project名和Provider名，且不区分大小写', () => {
     assert.equal(filterProjects(projects, { search: 'DEEP', provider: 'all', alertsOnly: false }).length, 1);
     assert.equal(filterProjects(projects, { search: 'volcengine', provider: 'all', alertsOnly: false }).length, 1);
     assert.equal(filterProjects(projects, { search: '火山', provider: 'all', alertsOnly: false }).length, 1);
   });
 
-  it('平台筛选和「仅告警」可以叠加', () => {
+  it('Provider筛选和「仅Alert」可以叠加', () => {
     assert.equal(filterProjects(projects, { search: '', provider: 'openrouter', alertsOnly: false }).length, 1);
     assert.equal(filterProjects(projects, { search: '', provider: 'all', alertsOnly: true }).length, 1);
     assert.equal(filterProjects(projects, { search: '', provider: 'openrouter', alertsOnly: true }).length, 0);
@@ -168,7 +168,7 @@ describe('filterProjects', () => {
 });
 
 describe('概览里的检查失败提示', () => {
-  it('有失败时在告警卡片标签上说明，总数才对得上', () => {
+  it('有失败时在Alert卡片标签上说明，总数才对得上', () => {
     resetStubDom();
     const label = stubElement('alert-projects-label');
     updateFailedHint([
@@ -176,15 +176,15 @@ describe('概览里的检查失败提示', () => {
       project({ project: 'glm', success: false, credits: null, error: 'HTTP 401' }),
       project({ project: 'volc', success: false, credits: null, error: '超时' }),
     ]);
-    assert.ok(label.textContent.includes('2 个查不到'), `实际是 ${label.textContent}`);
+    assert.ok(label.textContent.includes('2 unavailable'), `Actual: ${label.textContent}`);
     assert.ok(label.title.includes('glm'), '悬停要能看到是哪几个');
   });
 
-  it('全都正常时不留多余文字', () => {
+  it('全都Healthy时不留多余文字', () => {
     resetStubDom();
     const label = stubElement('alert-projects-label');
     updateFailedHint([project()]);
-    assert.equal(label.textContent, '告警项目');
+    assert.equal(label.textContent, 'Alerting projects');
   });
 });
 
@@ -198,7 +198,7 @@ describe('shortestRunway', () => {
     assert.equal(shortestRunway(projects)?.project, 'b');
   });
 
-  it('失败的项目和没有估算的项目都不参与排序', () => {
+  it('失败的Project和没有估算的Project都不参与排序', () => {
     const projects = [
       project({ project: 'failed', success: false, runway: runway({ runway_days: 0.1 }) }),
       project({ project: 'no-estimate', runway: runway({ runway_days: null }) }),
@@ -234,9 +234,9 @@ describe('renderSubscriptionCard', () => {
     const html = renderSubscriptionCard(subscription());
     assert.match(html, /<h3>Netflix<\/h3>/);
     assert.match(html, />99\.00</);
-    assert.match(html, />月付</);
+    assert.match(html, />Monthly</);
     assert.match(html, />2026-10-15</);
-    assert.match(html, /days-remaining ">20<span class="unit">天<\/span>/);
+    assert.match(html, /days-remaining ">20<span class="unit"> days<\/span>/);
   });
 
   it('剩余 7 天内标红，14 天内标黄', () => {
@@ -244,14 +244,14 @@ describe('renderSubscriptionCard', () => {
     assert.match(renderSubscriptionCard(subscription({ days_until_renewal: 10 })), /days-remaining warning/);
   });
 
-  it('已续费时换成「取消续费标记」按钮', () => {
+  it('Renewed时换成「Clear renewal mark」按钮', () => {
     const html = renderSubscriptionCard(subscription({ already_renewed: true }));
     assert.match(html, /js-clear-renewed/);
     assert.ok(!html.includes('js-mark-renewed'));
-    assert.match(html, /status-badge success">已续费</);
+    assert.match(html, /status-badge success">Renewed</);
   });
 
-  it('未续费时是「标记已续费」按钮', () => {
+  it('未续费时是「标记Renewed」按钮', () => {
     const html = renderSubscriptionCard(subscription());
     assert.match(html, /js-mark-renewed/);
     assert.ok(!html.includes('js-clear-renewed'));
@@ -280,15 +280,15 @@ describe('桩 DOM 上的顶部概览', () => {
     updateStats(data);
 
     assert.equal(total.textContent, '3');
-    assert.equal(normal.textContent, '1'); // 失败的和告警的都不算正常
+    assert.equal(normal.textContent, '1'); // 失败的和Alert的都不算Healthy
     assert.equal(alert.textContent, '1');
-    assert.equal(lastUpdate.textContent, '刚刚');
-    assert.equal(runwayValue.textContent, '2.0 天');
+    assert.equal(lastUpdate.textContent, 'Just now');
+    assert.equal(runwayValue.textContent, '2.0 days');
     assert.equal(runwayValue.className, 'stat-value runway-danger');
-    assert.equal(runwayLabel.textContent, '最短跑道 · a');
+    assert.equal(runwayLabel.textContent, 'Shortest runway · a');
   });
 
-  it('一个项目都估算不出跑道时退回破折号', () => {
+  it('一个Project都估算不出跑道时退回破折号', () => {
     resetStubDom();
     stubElement('total-projects');
     stubElement('normal-projects');
@@ -301,22 +301,22 @@ describe('桩 DOM 上的顶部概览', () => {
 
     assert.equal(runwayValue.textContent, '—');
     assert.equal(runwayValue.className, 'stat-value');
-    assert.equal(runwayLabel.textContent, '最短跑道');
+    assert.equal(runwayLabel.textContent, 'Shortest runway');
   });
 });
 
-describe('桩 DOM 上的项目列表', () => {
-  it('筛不出结果时渲染空状态而不是空白', () => {
+describe('桩 DOM 上的Project列表', () => {
+  it('筛不出结果时渲染空Status而不是空白', () => {
     resetStubDom();
     const container = stubElement('projects-container');
     renderProjects({ last_update: null, projects: [], summary: {} });
 
     assert.match(container.innerHTML, /empty-state/);
-    assert.match(container.innerHTML, /没有找到符合条件的项目/);
+    assert.match(container.innerHTML, /No projects match the filters/);
     assert.equal(container.className, 'projects-grid');
   });
 
-  it('有数据时每个项目一张卡片', () => {
+  it('有数据时每个Project一张卡片', () => {
     resetStubDom();
     const container = stubElement('projects-container');
     renderProjects({

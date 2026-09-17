@@ -2,7 +2,7 @@
  * 折线图的冒烟测试。
  *
  * 这张图是本次唯一新写的渲染代码（替掉了 CDN 上的 Chart.js），所以要盯住几条：
- * 画布尺寸、数据点个数、阈值线不画点、以及余额一直不变 / 只有一个点这类会除零的边界。
+ * 画布尺寸、数据点个数、阈值线不画点、以及Balance一直不变 / 只有一个点这类会除零的边界。
  */
 
 import './stub-dom.js';
@@ -84,8 +84,8 @@ function options(overrides: Partial<LineChartOptions> = {}): LineChartOptions {
     dark: false,
     formatValue: (v) => v.toFixed(2),
     series: [
-      { label: '余额', values: [100, 80, 60], color: '#6366f1', fill: 'rgba(99,102,241,0.1)' },
-      { label: '告警阈值', values: [50, 50, 50], color: '#ef4444', dashed: true, showPoints: false },
+      { label: 'Balance', values: [100, 80, 60], color: '#6366f1', fill: 'rgba(99,102,241,0.1)' },
+      { label: 'Alert threshold', values: [50, 50, 50], color: '#ef4444', dashed: true, showPoints: false },
     ],
     ...overrides,
   };
@@ -102,7 +102,7 @@ describe('LineChart', () => {
     assert.deepEqual(log.transform, [1, 0, 0, 1, 0, 0]);
   });
 
-  it('余额线每个点画一个圆，阈值线一个都不画', () => {
+  it('Balance线每个点画一个圆，阈值线一个都不画', () => {
     const { canvas, log } = stubCanvas();
     new LineChart(canvas, options());
 
@@ -110,27 +110,27 @@ describe('LineChart', () => {
     assert.equal(log.arcs, 5);
   });
 
-  it('阈值线用虚线，余额线是实线', () => {
+  it('阈值线用虚线，Balance线是实线', () => {
     const { canvas, log } = stubCanvas();
     new LineChart(canvas, options());
 
     assert.ok(log.dashes.some((d) => d.length === 2 && d[0] === 5 && d[1] === 5), '阈值线应该是 5/5 虚线');
-    assert.ok(log.dashes.some((d) => d.length === 0), '余额线应该是实线');
+    assert.ok(log.dashes.some((d) => d.length === 0), 'Balance线应该是实线');
   });
 
   it('画出图例文字和 y 轴刻度', () => {
     const { canvas, log } = stubCanvas();
     new LineChart(canvas, options());
 
-    assert.ok(log.texts.includes('余额'));
-    assert.ok(log.texts.includes('告警阈值'));
+    assert.ok(log.texts.includes('Balance'));
+    assert.ok(log.texts.includes('Alert threshold'));
     assert.ok(log.texts.includes('09-08'));
     assert.ok(log.texts.length > 5, 'y 轴刻度也要画出来');
   });
 
-  it('余额一直没变也不会除零，仍然画出线', () => {
+  it('Balance一直没变也不会除零，仍然画出线', () => {
     const { canvas, log } = stubCanvas();
-    new LineChart(canvas, options({ series: [{ label: '余额', values: [100, 100, 100], color: '#000' }] }));
+    new LineChart(canvas, options({ series: [{ label: 'Balance', values: [100, 100, 100], color: '#000' }] }));
 
     assert.ok(log.strokes > 0);
     assert.ok(log.texts.every((t) => t !== 'NaN' && !t.includes('NaN')), '刻度不能出现 NaN');
@@ -138,14 +138,14 @@ describe('LineChart', () => {
 
   it('只有一个数据点时画在正中间，不崩', () => {
     const { canvas, log } = stubCanvas();
-    new LineChart(canvas, options({ labels: ['09-08'], series: [{ label: '余额', values: [42], color: '#000' }] }));
+    new LineChart(canvas, options({ labels: ['09-08'], series: [{ label: 'Balance', values: [42], color: '#000' }] }));
 
     assert.ok(log.arcs >= 1);
   });
 
   it('没有数据时直接返回，不画任何东西', () => {
     const { canvas, log } = stubCanvas();
-    new LineChart(canvas, options({ labels: [], series: [{ label: '余额', values: [], color: '#000' }] }));
+    new LineChart(canvas, options({ labels: [], series: [{ label: 'Balance', values: [], color: '#000' }] }));
 
     assert.equal(log.strokes, 0);
     assert.equal(log.texts.length, 0);
@@ -153,7 +153,7 @@ describe('LineChart', () => {
 
   it('values 里的 null 被跳过，不会画成 0', () => {
     const { canvas, log } = stubCanvas();
-    new LineChart(canvas, options({ series: [{ label: '余额', values: [100, null, 60], color: '#000' }] }));
+    new LineChart(canvas, options({ series: [{ label: 'Balance', values: [100, null, 60], color: '#000' }] }));
 
     // 2 个有效点 + 1 个图例点
     assert.equal(log.arcs, 3);
@@ -164,7 +164,7 @@ describe('LineChart', () => {
     const chart = new LineChart(canvas, options());
     const before = log.arcs;
 
-    chart.update(options({ labels: ['09-08'], series: [{ label: '余额', values: [1], color: '#000' }] }));
+    chart.update(options({ labels: ['09-08'], series: [{ label: 'Balance', values: [1], color: '#000' }] }));
     assert.ok(log.arcs > before);
 
     chart.destroy(); // 不抛即可

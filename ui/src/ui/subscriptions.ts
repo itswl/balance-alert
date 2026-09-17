@@ -1,4 +1,4 @@
-/** 订阅提醒区：一行一条，右侧是剩余天数。 */
+/** Subscription提醒区：一行一条，右侧是剩余 days数。 */
 
 import { requireById } from '../dom.js';
 import { cycleLabel, escapeAttr, escapeHTML, formatCurrency, renewalUrgency } from '../format.js';
@@ -9,19 +9,19 @@ import { ICON_CHECK, ICON_DELETE, ICON_EDIT, ICON_UNDO } from './icons.js';
 export function renderSubscriptionCard(sub: SubscriptionResult): string {
   const daysClass = renewalUrgency(sub.days_until_renewal);
   const amount = Number(sub.amount) || 0;
-  const ownerProject = sub.owner_project || '未关联项目';
-  const subName = sub.name || '未知订阅';
+  const ownerProject = sub.owner_project || 'No owner project';
+  const subName = sub.name || 'Unknown subscription';
   const subNameAttr = escapeAttr(subName);
 
-  // 已续费的给「取消标记」，没续费的给「标记已续费」，两者互斥
+  // Renewed的给「Cancel标记」，没续费的给「Mark renewed」，两者互斥
   const renewalAction = sub.already_renewed
     ? `
-                        <button class="action-icon-btn js-clear-renewed" data-name="${subNameAttr}" title="取消续费标记">
+                        <button class="action-icon-btn js-clear-renewed" data-name="${subNameAttr}" title="Clear renewal mark">
                             ${ICON_UNDO}
                         </button>
                         `
     : `
-                        <button class="action-icon-btn success js-mark-renewed" data-name="${subNameAttr}" title="标记已续费">
+                        <button class="action-icon-btn success js-mark-renewed" data-name="${subNameAttr}" title="Mark renewed">
                             ${ICON_CHECK}
                         </button>
                         `;
@@ -32,23 +32,23 @@ export function renderSubscriptionCard(sub: SubscriptionResult): string {
                     <h3>${escapeHTML(subName)}</h3>
                     <div class="subscription-meta">
                         <span class="meta-item project-meta">${escapeHTML(ownerProject)}</span>
-                        <span class="meta-item"><span class="k">金额</span>${formatCurrency(amount)}</span>
+                        <span class="meta-item"><span class="k">Amount</span>${formatCurrency(amount)}</span>
                         <span class="meta-item">${cycleLabel(sub.cycle_type)}</span>
-                        ${sub.next_renewal_date ? `<span class="meta-item"><span class="k">下次续费</span>${escapeHTML(sub.next_renewal_date)}</span>` : ''}
-                        ${sub.already_renewed ? '<span class="meta-item status-badge success">已续费</span>' : ''}
+                        ${sub.next_renewal_date ? `<span class="meta-item"><span class="k">Next renewal</span>${escapeHTML(sub.next_renewal_date)}</span>` : ''}
+                        ${sub.already_renewed ? '<span class="meta-item status-badge success">Renewed</span>' : ''}
                     </div>
                 </div>
                 <div class="subscription-status">
                     <div class="subscription-actions">
                         ${renewalAction}
-                        <button class="action-icon-btn js-edit-subscription" data-name="${subNameAttr}" title="编辑">
+                        <button class="action-icon-btn js-edit-subscription" data-name="${subNameAttr}" title="Edit">
                             ${ICON_EDIT}
                         </button>
-                        <button class="action-icon-btn danger js-delete-subscription" data-name="${subNameAttr}" title="删除">
+                        <button class="action-icon-btn danger js-delete-subscription" data-name="${subNameAttr}" title="Delete">
                             ${ICON_DELETE}
                         </button>
                     </div>
-                    <div class="days-remaining ${daysClass}">${sub.days_until_renewal}<span class="unit">天</span></div>
+                    <div class="days-remaining ${daysClass}">${sub.days_until_renewal}<span class="unit"> days</span></div>
                 </div>
             </div>
         `;
@@ -60,6 +60,6 @@ export function renderSubscriptions(data: SubscriptionsResponse): void {
 
   container.innerHTML =
     subscriptions.length === 0
-      ? emptyState('暂无订阅', '还没有添加任何订阅提醒', 'calendar')
+      ? emptyState('No subscriptions', 'No subscription reminders yet', 'calendar')
       : subscriptions.map((s) => renderSubscriptionCard(s)).join('');
 }

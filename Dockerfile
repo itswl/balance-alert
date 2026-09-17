@@ -1,24 +1,23 @@
 # syntax=docker/dockerfile:1
 #
-# 三段构建：前端 → 二进制 → 运行镜像。
-# 运行镜像是 scratch，里面只有一个静态二进制和 CA 证书：
-#   - 时区数据由 time/tzdata 编进二进制，不必装 tzdata
-#   - SQLite 用纯 Go 实现（modernc.org/sqlite），不必开 CGO，也就不必带 libc
-#   - 健康检查由二进制自己的 -healthcheck 承担，不必带 curl
+# Three-stage build: frontend → binary → runtime image.
+# The runtime image is scratch and contains only the static binary and CA certificates:
+#   - time-zone data is compiled in with time/tzdata
+#   - SQLite uses the pure-Go modernc.org/sqlite driver, so CGO and libc are unnecessary
+#   - the binary's -healthcheck command provides the container health check
 #
-# 多架构：不锁 --platform，由 buildx 的目标平台决定。
+# Multi-architecture builds: buildx selects the target platform.
 #   docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
-# 国内环境可换源：
+# Optional mirrors for restricted network environments:
 #   docker build --build-arg GOPROXY=https://goproxy.cn,direct \
 #                --build-arg NPM_REGISTRY=https://registry.npmmirror.com .
 
-# 版本要跟得上 go.mod 的 go 指令，否则 go mod download 会直接拒绝
+# Keep the Go image version compatible with the go directive in go.mod.
 ARG GO_IMAGE=golang:1.27-alpine
 ARG NODE_IMAGE=node:22-alpine
 
-# ---------- 前端 ----------
-# 钉在构建机架构上：打包出来的是静态文件，与目标架构无关。
-# 不加 --platform 的话，构建 arm64 镜像时整个 node 会被 QEMU 模拟，慢得离谱。
+# ---------- Frontend ----------
+# Build on the builder architecture: the output is platform-independent static files.
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS ui
 ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /ui
@@ -27,44 +26,43 @@ RUN npm config set registry "${NPM_REGISTRY}" && npm install --no-audit --no-fun
 COPY ui/ ./
 RUN npm run build
 
-# ---------- 二进制 ----------
+# ---------- Binary ----------
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG TARGETOS
 ARG TARGETARCH
-# 版本号由流水线传进来（git tag）。不传时程序里是 dev，
-# 一眼就能看出跑的是不是正式构建。
+# The release pipeline passes the version from the git tag. Without it, the binary reports dev.
 ARG VERSION=dev
 ENV GOPROXY=${GOPROXY} CGO_ENABLED=0
 WORKDIR /src
 
-# 依赖单独一层，改代码不用重新下载
+# Keep dependencies in a separate layer so code changes do not redownload them.
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# 前端产物覆盖掉仓库里提交的那份，保证镜像里是这次构建出来的
+# Replace the checked-in frontend with the output from this build.
 COPY --from=ui /ui/dist ./ui/dist
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath \
       -ldflags="-s -w -X github.com/itswl/balance-alert/internal/config.Version=${VERSION}" \
       -o /out/balance-alert ./cmd/balance-alert
 
-# 运行时要写的两个目录，在这里建好再整个拷过去：scratch 里没有 mkdir
+# Create writable runtime directories before copying them; scratch has no mkdir.
 RUN mkdir -p /out/data /out/logs
 
-# ---------- 运行镜像 ----------
+# ---------- Runtime image ----------
 FROM scratch
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 
-# 访问各平台的 HTTPS 接口需要根证书
+# Provider HTTPS requests need root certificates.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /out/balance-alert /app/balance-alert
 COPY --from=build --chown=65532:65532 /out/data /app/data
 COPY --from=build --chown=65532:65532 /out/logs /app/logs
 
-# 非 root 运行。scratch 没有 /etc/passwd，用数字 UID
+# Run as a non-root numeric UID; scratch has no /etc/passwd.
 USER 65532:65532
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

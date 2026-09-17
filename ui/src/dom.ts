@@ -14,7 +14,7 @@ export function byId<T extends HTMLElement = HTMLElement>(id: string): T | null 
 /** index.html 骨架里保证存在的元素；缺了说明模板被改坏，早失败好过静默错渲染 */
 export function requireById<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
-  if (!node) throw new Error(`页面缺少元素 #${id}`);
+  if (!node) throw new Error(`Page is missing element #${id}`);
   return node as T;
 }
 

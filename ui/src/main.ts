@@ -72,7 +72,7 @@ function bindEvents(): void {
   onClick('view-alerts-btn', () => switchView('alerts'));
   onClick('view-subscriptions-btn', () => {
     if (!AppState.features.subscriptions) {
-      showToast('订阅功能未启用', 'info');
+      showToast('Subscriptions are disabled', 'info');
       return;
     }
     switchView('subscriptions');

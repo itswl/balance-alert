@@ -2,19 +2,19 @@
  * HTTP 契约的类型定义。
  *
  * 字段逐个对照 docs/API.md 与 internal/model/model.go —— 后端把「没查到」序列化成 null
- * 而不是 0，所以这里也一律用 `| null` 而不是可选属性：漏判 null 会让失败的项目
- * 在看板上显示成「余额 0，状态正常」。
+ * 而不是 0，所以这里也一律用 `| null` 而不是可选属性：漏判 null 会让失败的Project
+ * 在看板上显示成「Balance 0，StatusHealthy」。
  */
 
 // ==================== 枚举 ====================
 
-/** 余额类型，对应 model.TypeBalance / TypeCredits / TypeQuota */
+/** Balance类型，对应 model.TypeBalance / TypeCredits / TypeQuota */
 export type BalanceType = 'balance' | 'credits' | 'quota';
 
-/** 跑道置信度，对应 model.Confidence*；none 时其余估算字段为空，low 不用于告警 */
+/** 跑道置信度，对应 model.Confidence*；none 时其余估算字段为空，low 不用于Alert */
 export type Confidence = 'none' | 'low' | 'medium' | 'high';
 
-/** 订阅周期，对应 model.Cycle* */
+/** Subscription周期，对应 model.Cycle* */
 export type CycleType = 'weekly' | 'monthly' | 'yearly';
 
 // ==================== 通用信封 ====================
@@ -37,7 +37,7 @@ export type ApiPayload<T> = T | ErrorResponse | null;
 
 // ==================== /api/features ====================
 
-/** 可选能力开关；后端新增开关时这里补字段，未知字段被忽略不会报错 */
+/** 可选能力开关；后端新增开关时这里补字段，Unknown字段被忽略不会报错 */
 export interface Features {
   subscriptions: boolean;
   dynamic_config: boolean;
@@ -80,7 +80,7 @@ export interface Runway {
 }
 
 /**
- * 一次余额检查的结果，对应 model.CheckResult。
+ * 一次Balance检查的结果，对应 model.CheckResult。
  * runway 带 omitempty：没开数据库或攒够历史之前整个字段不出现。
  */
 export interface CheckResult {
@@ -125,7 +125,7 @@ export interface RefreshResponse {
 
 // ==================== /api/subscriptions ====================
 
-/** 一条订阅的检查结果，对应 model.SubscriptionResult */
+/** 一条Subscription的检查结果，对应 model.SubscriptionResult */
 export interface SubscriptionResult {
   name: string;
   owner_project: string | null;
@@ -148,12 +148,12 @@ export interface SubscriptionsResponse {
 
 // ==================== /api/config/subscriptions ====================
 
-/** 订阅配置（含 alert_days_before 等运行状态里没有的字段），对应 model.Subscription */
+/** Subscription配置（含 alert_days_before 等运行Status里没有的字段），对应 model.Subscription */
 export interface SubscriptionConfig {
   name: string;
   owner_project: string | null;
   cycle_type: CycleType;
-  renewal_day: number; // 周付 1-7，月付 1-31，年付 MMDD
+  renewal_day: number; // Weekly 1-7，Monthly 1-31，Yearly MMDD
   alert_days_before: number;
   amount: number;
   enabled: boolean;
@@ -193,7 +193,7 @@ export interface ProvidersResponse {
 
 // ==================== /api/config/projects ====================
 
-/** 项目配置，对应 model.Project；api_key 已脱敏，from_env 的项目不可删 */
+/** Project配置，对应 model.Project；api_key 已脱敏，from_env 的Project不可删 */
 export interface ProjectConfig {
   name: string;
   provider: string;
@@ -210,7 +210,7 @@ export interface ProjectsConfigResponse {
   projects: ProjectConfig[];
 }
 
-/** POST /api/config/project 的载荷：新增需 provider + api_key，更新时密钥留空不改 */
+/** POST /api/config/project 的载荷：新增需 provider + api_key，更新时密钥Leave empty不改 */
 export interface ProjectPayload {
   name: string;
   provider: string;
@@ -223,7 +223,7 @@ export interface ProjectPayload {
 
 // ==================== /api/config/emails ====================
 
-/** 邮箱配置，对应 model.Mailbox；password 已脱敏成 '***' 或 '' */
+/** Mailbox配置，对应 model.Mailbox；password 已脱敏成 '***' 或 '' */
 export interface MailboxConfig {
   name: string;
   host: string;
@@ -240,7 +240,7 @@ export interface EmailsConfigResponse {
   emails: MailboxConfig[];
 }
 
-/** POST /api/config/email 的载荷：新增需 host / username / password，更新时密码留空不改 */
+/** POST /api/config/email 的载荷：新增需 host / username / password，更新时密码Leave empty不改 */
 export interface MailboxPayload {
   name: string;
   host: string;
@@ -253,7 +253,7 @@ export interface MailboxPayload {
 
 // ==================== /api/email/scan ====================
 
-/** 一个邮箱本次扫描的连接与统计情况，对应 model.MailboxResult */
+/** 一个Mailbox本次扫描的连接与统计情况，对应 model.MailboxResult */
 export interface MailboxResult {
   name: string;
   host: string;
@@ -311,7 +311,7 @@ export interface HistoryListResponse<T> {
   data: T[];
 }
 
-/** 数据库里的一条余额快照 */
+/** 数据库里的一条Balance快照 */
 export interface BalanceHistoryRecord {
   id: number;
   project_id: string;
@@ -324,7 +324,7 @@ export interface BalanceHistoryRecord {
   timestamp: string;
 }
 
-/** 历史告警邮件；入库列名是 matched_keywords，与实时扫描的 keywords 不同名 */
+/** 历史Alert邮件；入库列名是 matched_keywords，与实时扫描的 keywords 不同名 */
 export interface EmailAlertRecord {
   id: number;
   mailbox: string;

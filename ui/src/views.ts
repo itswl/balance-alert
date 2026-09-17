@@ -39,7 +39,7 @@ export function switchView(view: ViewName): void {
   document.querySelectorAll('.action-btn').forEach((btn) => btn.classList.remove('active'));
   byId(VIEW_BUTTONS[view])?.classList.add('active');
 
-  // 三块内容区互斥显示：项目余额（all / alerts）、订阅、邮箱扫描
+  // 三块内容区互斥显示：ProjectBalance（all / alerts）、Subscription、Mailbox scanning
   const visible = view === 'subscriptions' || view === 'email' ? view : 'projects';
   for (const [name, id] of [
     ['projects', 'projects-section'],

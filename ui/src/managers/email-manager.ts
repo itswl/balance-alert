@@ -1,7 +1,7 @@
 /**
- * 邮箱扫描页：扫描概览、邮箱账号、本次告警邮件、历史告警邮件，外加邮箱配置的增删改。
+ * Mailbox scanning页：扫描概览、Mailbox账号、本次Alert邮件、历史Alert邮件，外加Mailbox配置的增删改。
  *
- * 扫描结果存在后端进程内存里，重启就没了，所以「尚未扫描」和「扫了但没命中」
+ * 扫描结果存在后端进程内存里，重启就没了，所以「尚Not scanned」和「扫了但没命中」
  * 要用不同文案区分 —— 都显示成 0 会让人以为扫描没生效。
  */
 
@@ -53,8 +53,8 @@ export const EmailManager = {
       await this.fetchAll();
       this.renderAll();
     } catch (error) {
-      console.error('加载邮箱扫描数据失败:', error);
-      showToast(error instanceof Error && error.message ? error.message : '加载邮箱扫描数据失败', 'error');
+      console.error('Failed to load mailbox scanning data:', error);
+      showToast(error instanceof Error && error.message ? error.message : 'Failed to load mailbox scanning data', 'error');
     } finally {
       setLoading(false);
     }
@@ -73,8 +73,8 @@ export const EmailManager = {
       const result = await getEmailHistory(30, 100);
       return result.data || [];
     } catch (error) {
-      // 数据库未启用等情况下历史接口返回 503，页面照常显示其它内容
-      console.warn('邮件告警历史不可用:', error);
+      // 数据库Disabled等情况下历史接口返回 503，页面照常显示其它内容
+      console.warn('Email alert history unavailable:', error);
       return [];
     }
   },
@@ -99,26 +99,26 @@ export const EmailManager = {
     const enabledCount = this.state.mailboxes.filter((m) => m.enabled !== false).length;
 
     const chips: Array<{ label: string; value: string | number; cls?: string }> = [
-      { label: '启用邮箱', value: enabledCount },
-      { label: '扫描邮件', value: scanned ? summary.total_emails ?? 0 : '-' },
+      { label: 'Enabled mailboxes', value: enabledCount },
+      { label: 'Scanned emails', value: scanned ? summary.total_emails ?? 0 : '-' },
       {
-        label: '告警邮件',
+        label: 'Alert emails',
         value: scanned ? summary.total_alerts ?? 0 : '-',
         cls: (summary.total_alerts ?? 0) > 0 ? 'warning' : '',
       },
-      { label: '已发通知', value: scanned ? summary.alerts_sent ?? 0 : '-' },
-      { label: '上次扫描', value: scanned ? getRelativeTime(scan?.last_update) : '尚未扫描' },
+      { label: 'Notifications sent', value: scanned ? summary.alerts_sent ?? 0 : '-' },
+      { label: 'Last scan', value: scanned ? getRelativeTime(scan?.last_update) : 'Not scanned yet' },
     ];
 
     if (scanned && scan) {
-      chips.push({ label: '扫描范围', value: `最近 ${scan.days ?? '-'} 天` });
+      chips.push({ label: 'Scan range', value: `Last ${scan.days ?? '-'} days` });
       chips.push({
-        label: '告警模式',
-        value: scan.dry_run ? '仅查询，不发通知' : '发送真实通知',
+        label: 'Alert mode',
+        value: scan.dry_run ? 'Dry run; no notifications' : 'Send real notifications',
         cls: scan.dry_run ? '' : 'danger',
       });
       if ((summary.failed_mailboxes ?? 0) > 0) {
-        chips.push({ label: '连接失败', value: summary.failed_mailboxes ?? 0, cls: 'danger' });
+        chips.push({ label: 'Connection failed', value: summary.failed_mailboxes ?? 0, cls: 'danger' });
       }
     }
 
@@ -141,10 +141,10 @@ export const EmailManager = {
     const mailboxes = this.state.mailboxes;
     if (mailboxes.length === 0) {
       container.innerHTML = emptyState(
-        '暂无邮箱',
+        'No mailboxes yet',
         AppState.features.dynamic_config
-          ? '点击右上角「添加邮箱」配置要扫描的 IMAP 邮箱'
-          : '用 EMAIL_HOST / EMAIL_USERNAME / EMAIL_PASSWORD 配置邮箱；开启 ENABLE_DYNAMIC_CONFIG 后可在这里直接添加',
+          ? 'Click "Add mailbox" to configure an IMAP mailbox'
+          : 'Set EMAIL_HOST / EMAIL_USERNAME / EMAIL_PASSWORD, or enable ENABLE_DYNAMIC_CONFIG to add one here',
         'mail',
         true,
       );
@@ -161,15 +161,15 @@ export const EmailManager = {
 
     const scan = this.state.scan;
     if (!scan?.last_update) {
-      container.innerHTML = emptyState('尚未扫描', '选择时间范围后点击「立即扫描」，结果会显示在这里', 'mail', true);
+      container.innerHTML = emptyState('Not scanned yet', 'Choose a date range and click "Scan now" to see results here', 'mail', true);
       return;
     }
 
     const alerts = scan.alerts || [];
     if (alerts.length === 0) {
       container.innerHTML = emptyState(
-        '没有告警邮件',
-        `最近 ${scan.days} 天的邮件里没有匹配到欠费 / 续费类关键词`,
+        'No alert emails',
+        `No billing or renewal keywords matched in the last ${scan.days} days`,
         'mail',
         true,
       );
@@ -193,7 +193,7 @@ export const EmailManager = {
     const history = this.state.history;
     container.innerHTML =
       history.length === 0
-        ? emptyState('暂无历史记录', '定时任务或 Web 扫描发出过告警的邮件会记录在数据库里', 'mail', true)
+        ? emptyState('No history yet', 'Emails alerted by scheduled or Web scans are stored in the database', 'mail', true)
         : history.map((record) => renderAlertCard(record, { history: true })).join('');
   },
 
@@ -204,13 +204,13 @@ export const EmailManager = {
     const days = Number.parseInt(byId<HTMLSelectElement>('email-scan-days')?.value ?? '', 10) || 1;
 
     if (!this.state.mailboxes.some((m) => m.enabled !== false)) {
-      showToast('还没有可用的邮箱，先配置邮箱再扫描', 'warning');
+      showToast('No mailboxes available; configure one before scanning', 'warning');
       return;
     }
 
     try {
       if (btn) btn.disabled = true;
-      showToast(`正在扫描最近 ${days} 天的邮件，连接邮箱可能需要几十秒...`, 'info');
+      showToast(`Scanning the last ${days} days; connecting to mailboxes may take a few seconds...`, 'info');
 
       const result = await runEmailScan(days);
       await this.fetchAll();
@@ -219,12 +219,12 @@ export const EmailManager = {
       const summary = result.summary ?? {};
       const alerts = summary.total_alerts ?? 0;
       showToast(
-        `扫描完成：${summary.total_emails ?? 0} 封邮件，${alerts} 封告警${result.dry_run ? '（仅查询，未发通知）' : ''}`,
+        `Scan complete: ${summary.total_emails ?? 0} emails, ${alerts} alerts${result.dry_run ? ' (dry run; no notifications)' : ''}`,
         alerts > 0 ? 'warning' : 'success',
       );
     } catch (error) {
-      console.error('邮箱扫描失败:', error);
-      showToast(error instanceof Error && error.message ? error.message : '扫描失败，请稍后重试', 'error');
+      console.error('Mailbox scan failed:', error);
+      showToast(error instanceof Error && error.message ? error.message : 'Scan failed; please try again', 'error');
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -234,38 +234,38 @@ export const EmailManager = {
 // ---------- 卡片 ----------
 
 export function renderMailboxCard(mailbox: MailboxConfig, stat: MailboxResult | undefined): string {
-  const name = mailbox.name || mailbox.username || '未命名';
+  const name = mailbox.name || mailbox.username || 'Unnamed';
   const nameAttr = escapeAttr(name);
   const port = mailbox.port || DEFAULT_PORT;
   const enabled = mailbox.enabled !== false;
 
   let statusHtml: string;
   if (!enabled) {
-    statusHtml = '<span class="status-badge muted">已停用</span>';
+    statusHtml = '<span class="status-badge muted">Disabled</span>';
   } else if (!stat) {
-    statusHtml = '<span class="status-badge muted">未扫描</span>';
+    statusHtml = '<span class="status-badge muted">Not scanned</span>';
   } else if (stat.error) {
-    statusHtml = `<span class="status-badge danger" title="${escapeAttr(stat.error)}">连接失败</span>`;
+    statusHtml = `<span class="status-badge danger" title="${escapeAttr(stat.error)}">Connection failed</span>`;
   } else if (stat.alert_count > 0) {
-    statusHtml = `<span class="status-badge warning">${escapeHTML(stat.alert_count)} 封告警</span>`;
+    statusHtml = `<span class="status-badge warning">${escapeHTML(stat.alert_count)}  alerts</span>`;
   } else {
-    statusHtml = '<span class="status-badge success">正常</span>';
+    statusHtml = '<span class="status-badge success">Healthy</span>';
   }
 
   const actions = AppState.features.dynamic_config
     ? `
             <div class="subscription-actions">
-                <button class="action-icon-btn js-edit-email" data-name="${nameAttr}" title="编辑">
+                <button class="action-icon-btn js-edit-email" data-name="${nameAttr}" title="Edit">
                     ${ICON_EDIT}
                 </button>
-                <button class="action-icon-btn danger js-delete-email" data-name="${nameAttr}" title="删除">
+                <button class="action-icon-btn danger js-delete-email" data-name="${nameAttr}" title="Delete">
                     ${ICON_DELETE}
                 </button>
             </div>`
     : '';
 
   const scannedMeta =
-    stat && !stat.error ? `<span class="meta-item"><span class="k">上次扫描</span>${escapeHTML(stat.total_emails)} 封</span>` : '';
+    stat && !stat.error ? `<span class="meta-item"><span class="k">Last scan</span>${escapeHTML(stat.total_emails)} emails</span>` : '';
   const errorMeta = stat && stat.error ? `<span class="meta-item error-text">${escapeHTML(stat.error)}</span>` : '';
 
   return `
@@ -275,7 +275,7 @@ export function renderMailboxCard(mailbox: MailboxConfig, stat: MailboxResult | 
                     <div class="subscription-meta">
                         <span class="meta-item">${escapeHTML(mailbox.username || '-')}</span>
                         <span class="meta-item">${escapeHTML(mailbox.host || '-')}:${escapeHTML(port)}</span>
-                        <span class="meta-item">${mailbox.use_ssl === false ? '明文' : 'SSL'}</span>
+                        <span class="meta-item">${mailbox.use_ssl === false ? 'Plaintext' : 'SSL'}</span>
                         ${scannedMeta}
                         ${errorMeta}
                     </div>
@@ -291,13 +291,13 @@ export function renderMailboxCard(mailbox: MailboxConfig, stat: MailboxResult | 
 export function renderAlertCard(alert: AnyAlert, options: AlertCardOptions = {}): string {
   let badge: string;
   if ('duplicate' in alert && alert.duplicate) {
-    badge = '<span class="status-badge muted">已通知过，跳过</span>';
+    badge = '<span class="status-badge muted">Already notified; skipped</span>';
   } else if (alert.alert_sent) {
     badge = '<span class="status-badge success">已发送通知</span>';
   } else if (options.dryRun) {
-    badge = '<span class="status-badge info">仅查询</span>';
+    badge = '<span class="status-badge info">Dry run</span>';
   } else {
-    badge = '<span class="status-badge danger">通知未发出</span>';
+    badge = '<span class="status-badge danger">Notification not sent</span>';
   }
 
   // 实时扫描给 keywords，数据库历史给 matched_keywords
@@ -307,30 +307,30 @@ export function renderAlertCard(alert: AnyAlert, options: AlertCardOptions = {})
     .join('');
 
   const hasAmount = alert.amount !== null && alert.amount !== undefined;
-  const serviceName = alert.service_name && alert.service_name !== '未知服务' ? alert.service_name : '';
+  const serviceName = alert.service_name && alert.service_name !== 'Unknown service' ? alert.service_name : '';
 
   return `
             <div class="email-alert-card ${options.history ? 'history' : ''}">
                 <div class="email-alert-main">
-                    <div class="email-alert-subject">${escapeHTML(alert.subject || '(无主题)')}</div>
+                    <div class="email-alert-subject">${escapeHTML(alert.subject || '(No subject)')}</div>
                     <div class="subscription-meta">
                         <span class="meta-item project-meta">${escapeHTML(alert.mailbox || '-')}</span>
-                        <span class="meta-item"><span class="k">发件人</span>${escapeHTML(alert.sender || '-')}</span>
+                        <span class="meta-item"><span class="k">Sender</span>${escapeHTML(alert.sender || '-')}</span>
                         <span class="meta-item">${escapeHTML(alert.date || '-')}</span>
-                        ${serviceName ? `<span class="meta-item"><span class="k">服务</span>${escapeHTML(serviceName)}</span>` : ''}
-                        ${hasAmount ? `<span class="meta-item"><span class="k">金额</span>${formatCurrency(alert.amount)}</span>` : ''}
+                        ${serviceName ? `<span class="meta-item"><span class="k">Service</span>${escapeHTML(serviceName)}</span>` : ''}
+                        ${hasAmount ? `<span class="meta-item"><span class="k">Amount</span>${formatCurrency(alert.amount)}</span>` : ''}
                     </div>
                     ${keywordTags ? `<div class="keyword-tags">${keywordTags}</div>` : ''}
                 </div>
                 <div class="email-alert-side">
                     ${badge}
-                    ${options.history && alert.timestamp ? `<span>记录于 ${escapeHTML(formatDate(alert.timestamp))}</span>` : ''}
+                    ${options.history && alert.timestamp ? `<span>Recorded ${escapeHTML(formatDate(alert.timestamp))}</span>` : ''}
                 </div>
             </div>
         `;
 }
 
-// ---------- 邮箱配置增删改（需 ENABLE_DYNAMIC_CONFIG） ----------
+// ---------- Mailbox配置增删改（需 ENABLE_DYNAMIC_CONFIG） ----------
 
 export function openEmailModal(mailbox: MailboxConfig | null = null): void {
   byId<HTMLFormElement>('email-form')?.reset();
@@ -343,7 +343,7 @@ export function openEmailModal(mailbox: MailboxConfig | null = null): void {
   const passwordHint = byId('email-password-hint');
 
   if (mailbox) {
-    if (title) title.textContent = '编辑邮箱';
+    if (title) title.textContent = 'Edit mailbox';
     setInputValue('email-edit-mode', 'true');
     nameInput.value = mailbox.name || '';
     nameInput.readOnly = true; // 名称是唯一键，改名请删掉重建
@@ -352,9 +352,9 @@ export function openEmailModal(mailbox: MailboxConfig | null = null): void {
     setInputValue('email-username', mailbox.username || '');
     setChecked('email-use-ssl', mailbox.use_ssl !== false);
     setChecked('email-enabled', mailbox.enabled !== false);
-    if (passwordHint) passwordHint.textContent = '留空则保持原密码不变';
+    if (passwordHint) passwordHint.textContent = 'Leave empty to keep the existing password';
   } else {
-    if (title) title.textContent = '添加邮箱';
+    if (title) title.textContent = 'Add mailbox';
     setInputValue('email-edit-mode', 'false');
     nameInput.readOnly = false;
     if (passwordHint) passwordHint.textContent = '';
@@ -379,20 +379,20 @@ async function saveEmail(event: Event): Promise<void> {
     use_ssl: isChecked('email-use-ssl'),
     enabled: isChecked('email-enabled'),
   };
-  // 密码留空表示不改，不能传空串覆盖掉原值
+  // An empty password preserves the existing value.
   const password = inputById('email-password').value;
   if (password) data.password = password;
 
   if (!data.name || !data.host || !data.username) {
-    showToast('显示名称、IMAP 服务器、邮箱账号都要填', 'warning');
+    showToast('Display name, IMAP server, and mailbox account are required', 'warning');
     return;
   }
   if (!isEdit && !password) {
-    showToast('新邮箱需要填写密码 / 授权码', 'warning');
+    showToast('A password or app password is required for a new mailbox', 'warning');
     return;
   }
 
-  const result = await mutate(ENDPOINTS.saveEmail, data, { success: isEdit ? '邮箱已更新' : '邮箱已添加', fail: '保存失败' });
+  const result = await mutate(ENDPOINTS.saveEmail, data, { success: isEdit ? 'Mailbox updated' : 'Mailbox added', fail: 'Save failed' });
   if (result) {
     closeEmailModal();
     await EmailManager.load(true);
@@ -402,15 +402,15 @@ async function saveEmail(event: Event): Promise<void> {
 export function editEmail(name: string): void {
   const mailbox = EmailManager.state.mailboxes.find((m) => m.name === name);
   if (!mailbox) {
-    showToast('未找到该邮箱', 'error');
+    showToast('Mailbox not found', 'error');
     return;
   }
   openEmailModal(mailbox);
 }
 
 export async function deleteEmail(name: string): Promise<void> {
-  if (!confirm(`确定要删除邮箱"${name}"吗？\n\n此操作不可恢复。`)) return;
-  if (await mutate(ENDPOINTS.deleteEmail, { name }, { success: '邮箱已删除', fail: '删除失败' })) {
+  if (!confirm(`Delete mailbox "${name}"?\n\nThis action cannot be undone.`)) return;
+  if (await mutate(ENDPOINTS.deleteEmail, { name }, { success: 'Mailbox deleted', fail: 'Delete failed' })) {
     await EmailManager.load(true);
   }
 }

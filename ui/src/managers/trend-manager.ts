@@ -1,4 +1,4 @@
-/** 余额趋势弹窗：统计卡片 + 折线图，需 ENABLE_HISTORY_API。 */
+/** Balance趋势弹窗：统计卡片 + 折线图，需 ENABLE_HISTORY_API。 */
 
 import { getTrend } from '../api/endpoints.js';
 import type { TrendData, TrendResponse } from '../api/types.js';
@@ -21,7 +21,7 @@ function destroyChart(): void {
 export async function showProjectTrend(projectName: string, provider: string): Promise<void> {
   const title = byId('trend-modal-title');
   const statsContainer = byId('trend-stats-container');
-  if (title) title.textContent = `余额趋势 - ${projectName}`;
+  if (title) title.textContent = `Balance trend - ${projectName}`;
 
   setLoading(true);
   openModal(MODAL_ID);
@@ -29,11 +29,11 @@ export async function showProjectTrend(projectName: string, provider: string): P
   try {
     const { response, data } = await getTrend(provider, projectName, TREND_DAYS);
 
-    // 数据库没开或这个项目还没历史，后端返回 404；这里不当异常，给一段说明
+    // 数据库没开或这个Project还没历史，后端返回 404；这里不当异常，给一段说明
     if (!response.ok || !data || data.status !== 'success') {
       destroyChart();
       if (statsContainer) {
-        const message = data && 'message' in data && data.message ? data.message : '暂无历史数据';
+        const message = data && 'message' in data && data.message ? data.message : 'No historical data yet';
         statsContainer.innerHTML = `
                 <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--text-secondary);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 48px; height: 48px; margin: 0 auto 1rem;">
@@ -43,8 +43,8 @@ export async function showProjectTrend(projectName: string, provider: string): P
                     </svg>
                     <p>${escapeHTML(message)}</p>
                     <p style="font-size: 0.875rem; margin-top: 0.5rem;">
-                        提示：需要启用数据库功能才能查看趋势图表<br>
-                        请设置环境变量 ENABLE_DATABASE=true 并重启服务
+                        Hint: enable the database to view trend charts<br>
+                        Set ENABLE_DATABASE=true in Settings and restart the service
                     </p>
                 </div>
             `;
@@ -62,7 +62,7 @@ export async function showProjectTrend(projectName: string, provider: string): P
       const message = error instanceof Error ? error.message : String(error);
       statsContainer.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--danger);">
-                <p>加载失败：${escapeHTML(message)}</p>
+                <p>Load failed：${escapeHTML(message)}</p>
             </div>
         `;
     }
@@ -81,13 +81,13 @@ export function trendDirection(change: number | undefined): 'up' | 'down' | 'sta
 export function renderTrendStats(trendData: TrendData): string {
   const direction = trendDirection(trendData.change);
   const stats = [
-    { label: '当前余额', value: formatCurrency(trendData.current_balance), cls: '' },
-    { label: '平均余额', value: formatCurrency(trendData.avg_balance), cls: '' },
-    { label: '最高余额', value: formatCurrency(trendData.max_balance), cls: '' },
-    { label: '最低余额', value: formatCurrency(trendData.min_balance), cls: '' },
+    { label: 'Current balance', value: formatCurrency(trendData.current_balance), cls: '' },
+    { label: 'Average balance', value: formatCurrency(trendData.avg_balance), cls: '' },
+    { label: 'Maximum balance', value: formatCurrency(trendData.max_balance), cls: '' },
+    { label: 'Minimum balance', value: formatCurrency(trendData.min_balance), cls: '' },
     {
-      label: '变化趋势',
-      value: direction === 'up' ? '↑ 上升' : direction === 'down' ? '↓ 下降' : '→ 稳定',
+      label: 'Trend',
+      value: direction === 'up' ? '↑ Up' : direction === 'down' ? '↓ Down' : '→ Stable',
       cls: direction === 'up' ? 'positive' : direction === 'down' ? 'negative' : '',
     },
   ];
@@ -116,13 +116,13 @@ function renderTrendChart(trendData: TrendData): void {
     formatValue: (value: number): string => formatCurrency(value),
     series: [
       {
-        label: '余额',
+        label: 'Balance',
         values: history.map((h) => h.balance),
         color: '#6366f1',
         fill: 'rgba(99, 102, 241, 0.1)',
       },
       {
-        label: '告警阈值',
+        label: 'Alert threshold',
         values: labels.map(() => trendData.threshold),
         color: '#ef4444',
         dashed: true,

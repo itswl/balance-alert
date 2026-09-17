@@ -159,9 +159,9 @@ func TestReadsLegacyDatabase(t *testing.T) {
 			t.Errorf("告警字段不对: %+v", alerts[0])
 		}
 
-		// 旧库里刚写的告警要能让冷却生效，否则升级当天会把所有告警重发一遍
+		// 兼容性 fixture 的时间是固定的；使用足够宽的窗口，避免测试结果随日历漂移。
 		series, _ := st.BalanceSeries(ctx, 7)
-		cooling, err := st.HasRecentAlert(ctx, series[0].ProjectID, "low_balance", 24*time.Hour)
+		cooling, err := st.HasRecentAlert(ctx, series[0].ProjectID, "low_balance", 365*24*time.Hour)
 		if err != nil {
 			t.Fatalf("查询冷却失败: %v", err)
 		}

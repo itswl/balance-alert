@@ -47,8 +47,8 @@ function errorMessage(data: unknown, fallback: string): string {
 }
 
 /**
- * 弹窗问 API Key。没有取消按钮是刻意的：没有 key 时页面上什么都拿不到，
- * 留一个「取消」只会让用户面对一个空看板。
+ * 弹窗问 API Key。没有Cancel按钮是刻意的：没有 key 时页面上什么都拿不到，
+ * 留一个「Cancel」只会让用户面对一个空看板。
  */
 export function promptForApiKey(message = ''): Promise<string | null> {
   if (pendingPrompt) return pendingPrompt;
@@ -61,7 +61,7 @@ export function promptForApiKey(message = ''): Promise<string | null> {
 
     // 模板被裁剪过时退回浏览器原生输入框，至少还能用
     if (!modal || !form || !input) {
-      const value = window.prompt(message || '请输入 API Key', getApiKey());
+      const value = window.prompt(message || 'Enter API key', getApiKey());
       if (value !== null) setApiKey(value);
       resolve(getApiKey() || null);
       return;
@@ -80,7 +80,7 @@ export function promptForApiKey(message = ''): Promise<string | null> {
       const value = input.value.trim();
       if (!value) {
         if (error) {
-          error.textContent = '请输入 API Key';
+          error.textContent = 'Enter API key';
           error.style.display = 'block';
         }
         return;
@@ -94,7 +94,7 @@ export function promptForApiKey(message = ''): Promise<string | null> {
     form.addEventListener('submit', onSubmit);
   });
 
-  // 无论成功失败都要把共享 Promise 清掉，否则后续请求会一直等这个已结束的弹窗
+  // None论成功失败都要把共享 Promise 清掉，否则后续请求会一直等这个已结束的弹窗
   return pendingPrompt.finally(() => {
     pendingPrompt = null;
   });
@@ -136,7 +136,7 @@ export async function fetchJson<T>(
   }
 
   if (response.status === 401 && isApi && !retried) {
-    const key = await promptForApiKey(errorMessage(data, 'API Key 无效，请更新后继续'));
+    const key = await promptForApiKey(errorMessage(data, 'Invalid API key; update it to continue'));
     if (key) return fetchJson<T>(endpoint, options, true);
   }
 
@@ -150,7 +150,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     throw new Error(errorMessage(data, response.statusText || `HTTP ${response.status}`));
   }
   if (data === null) {
-    throw new Error('服务端返回的不是合法 JSON');
+    throw new Error('The server returned invalid JSON');
   }
   return data as T;
 }
@@ -167,7 +167,7 @@ export interface MutateOptions {
 export async function mutate(
   endpoint: string,
   body: unknown,
-  { success = '', fail = '操作失败' }: MutateOptions = {},
+  { success = '', fail = 'Operation failed' }: MutateOptions = {},
 ): Promise<MutationResponse | null> {
   setLoading(true);
   try {
@@ -183,7 +183,7 @@ export async function mutate(
     return null;
   } catch (error) {
     console.error(`${fail}:`, error);
-    showToast(`${fail}，请稍后重试`, 'error');
+    showToast(`${fail}; please try again`, 'error');
     return null;
   } finally {
     setLoading(false);

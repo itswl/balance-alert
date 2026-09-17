@@ -1,8 +1,8 @@
-# Prometheus + Grafana，按需叠加在核心服务之上：
+# Prometheus + Grafana, layered on top of the core service when needed:
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #
-# 为什么单独一个文件而不是用 profiles：compose 会先把整个文件插值一遍再判断 profile，
-# 下面的 GRAFANA_ADMIN_PASSWORD:? 会连带把只跑核心服务的命令一起卡住。
+# This is a separate file because Compose interpolates the whole file before evaluating
+# profiles; the required Grafana password would otherwise block core-only commands.
 services:
   prometheus:
     image: prom/prometheus:latest
@@ -34,8 +34,8 @@ services:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      # 不给默认口令：面板能看到所有账户余额，密码必须显式设
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?请在 .env 里设置 GRAFANA_ADMIN_PASSWORD}
+      # No default password: Grafana can display every account balance.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/balance-alert-dashboard.json
       - TZ=Asia/Shanghai
