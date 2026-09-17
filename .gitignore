@@ -20,6 +20,11 @@ logs/
 *.sqlite
 *.sqlite3
 
+# 但测试夹具要进仓库：legacy_python.db 是用旧版 Python 实现真实写出来的库，
+# 验证 Go 版能不能直接接上现有生产数据。被 *.db 挡掉的话这条测试在 CI 里根本不会跑。
+# 里面全是造的假数据（AK:SK / sk-old / pw），没有真实密钥。
+!**/testdata/*.db
+
 # 旧版遗留的配置文件，已经不再读取，留一条防止历史文件被误提交
 config.json
 
