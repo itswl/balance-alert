@@ -119,6 +119,7 @@ func TestRegistry(t *testing.T) {
 		{Key: "uniapi", Name: "UniAPI", DefaultType: "credits"},
 		{Key: "volc", Name: "火山云", DefaultType: "balance"},
 		{Key: "wxrank", Name: "WxRank", DefaultType: "credits"},
+		{Key: "xai", Name: "xAI", DefaultType: "quota"},
 	}
 	got := All()
 	if len(got) != len(want) {

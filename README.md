@@ -73,6 +73,9 @@ go build -o balance-alert ./cmd/balance-alert
 接一个新平台：大多数平台是「GET 一次、从 JSON 里取个数」，在 `internal/provider/` 下新建一个文件，
 用 `provider.RegisterSpec` 声明几行就够了，参考 `deepseek.go`。需要签名的（火山、阿里云）自己实现 `Provider` 接口。
 
+xAI 是例外：`XAI_API_KEY` 使用 GrokBuild OAuth token，查询的是 GrokBuild 配额接口，返回剩余百分比，
+不是普通 `api.x.ai` 推理 API 的余额。该接口属于非公开实现，可能随 xAI 控制台变更。
+
 ### 订阅与邮箱字段
 
 订阅 `cycle_type` 为 `weekly` / `monthly` / `yearly`：周付 `renewal_day` 写 1-7，月付写 1-31，年付直接写 `"03-15"`。`alert_days_before` 默认 3，续费当天也提醒，`amount` 与 `owner_project` 可选。
