@@ -25,8 +25,17 @@ const stateResourceTemplate = "balance-alert://state/{kind}"
 type emptyInput struct{}
 
 type historyInput struct {
-	Days  int `json:"days,omitempty" jsonschema:"number of days to search, between 1 and 365"`
-	Limit int `json:"limit,omitempty" jsonschema:"maximum number of rows, between 1 and 100"`
+	Days      int    `json:"days,omitempty" jsonschema:"number of days to search, between 1 and 365"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of rows, between 1 and 100"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional stable project ID filter"`
+	Provider  string `json:"provider,omitempty" jsonschema:"optional provider filter"`
+	AlertType string `json:"alert_type,omitempty" jsonschema:"optional alert type filter"`
+	Mailbox   string `json:"mailbox,omitempty" jsonschema:"optional mailbox filter"`
+}
+
+type trendInput struct {
+	ProjectID string `json:"project_id" jsonschema:"stable project ID from balance_status"`
+	Days      int    `json:"days,omitempty" jsonschema:"number of days to inspect, between 1 and 365"`
 }
 
 // NewHandler returns a stateless Streamable HTTP MCP handler. Authentication is
@@ -69,10 +78,45 @@ func addStateTools(server *sdkmcp.Server, runtime *state.Manager, history store.
 	})
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "balance_history",
+		Description: "Read persisted balance snapshots, optionally filtered by stable project ID or provider.",
+	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in historyInput) (*sdkmcp.CallToolResult, any, error) {
+		rows, err := history.BalanceHistory(ctx, store.BalanceQuery{
+			ProjectID: in.ProjectID,
+			Provider:  in.Provider,
+			Days:      bounded(in.Days, 30, 1, 365),
+			Limit:     bounded(in.Limit, 100, 1, 100),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(map[string]any{"count": len(rows), "data": rows})
+	})
+
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "balance_trend",
+		Description: "Read the persisted balance trend and runway inputs for one stable project ID.",
+	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in trendInput) (*sdkmcp.CallToolResult, any, error) {
+		if strings.TrimSpace(in.ProjectID) == "" {
+			return nil, nil, fmt.Errorf("project_id is required")
+		}
+		trend, err := history.BalanceTrend(ctx, in.ProjectID, bounded(in.Days, 30, 1, 365))
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(map[string]any{"project_id": in.ProjectID, "data": trend})
+	})
+
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "recent_alerts",
 		Description: "Read recent persisted balance, subscription, runway, and spend-spike alerts. Returns an empty list when database history is disabled.",
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in historyInput) (*sdkmcp.CallToolResult, any, error) {
-		q := store.AlertQuery{Days: bounded(in.Days, 30, 1, 365), Limit: bounded(in.Limit, 50, 1, 100)}
+		q := store.AlertQuery{
+			ProjectID: in.ProjectID,
+			AlertType: in.AlertType,
+			Days:      bounded(in.Days, 30, 1, 365),
+			Limit:     bounded(in.Limit, 50, 1, 100),
+		}
 		rows, err := history.RecentAlerts(ctx, q)
 		if err != nil {
 			return nil, nil, err
@@ -84,7 +128,7 @@ func addStateTools(server *sdkmcp.Server, runtime *state.Manager, history store.
 		Name:        "recent_email_alerts",
 		Description: "Read recent persisted email alert records. Returns an empty list when database history is disabled.",
 	}, func(ctx context.Context, _ *sdkmcp.CallToolRequest, in historyInput) (*sdkmcp.CallToolResult, any, error) {
-		q := store.EmailAlertQuery{Days: bounded(in.Days, 30, 1, 365), Limit: bounded(in.Limit, 50, 1, 100)}
+		q := store.EmailAlertQuery{Mailbox: in.Mailbox, Days: bounded(in.Days, 30, 1, 365), Limit: bounded(in.Limit, 50, 1, 100)}
 		rows, err := history.EmailAlerts(ctx, q)
 		if err != nil {
 			return nil, nil, err
