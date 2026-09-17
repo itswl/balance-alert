@@ -31,6 +31,7 @@ type Server struct {
 
 	// Assets 是打包好的前端产物，由 cmd 层用 embed.FS 传进来。
 	Assets fs.FS
+	MCP    http.Handler
 
 	// OnBalanceUpdated 等回调让指标跟着页面操作一起更新，
 	// 否则页面上改完配置，Grafana 要等到下一次定时任务才看得到。
@@ -95,6 +96,11 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/history/stats", s.handleAlertStats)
 		mux.HandleFunc("GET /api/history/email-alerts", s.handleEmailAlertHistory)
 	}
+	if s.Settings.EnableMCP && s.MCP != nil {
+		mux.Handle("POST /mcp", s.MCP)
+		mux.Handle("GET /mcp", s.MCP)
+		mux.Handle("DELETE /mcp", s.MCP)
+	}
 
 	// 看板静态资源，放最后兜底
 	mux.Handle("GET /", s.assetHandler())
@@ -106,7 +112,8 @@ func (s *Server) Handler() http.Handler {
 // 没配 WEB_API_KEY 时一律 503：这比默认放开安全得多，密钥都在这后面。
 func (s *Server) withAPIKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/") || r.Method == http.MethodOptions {
+		protected := strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp"
+		if !protected || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}

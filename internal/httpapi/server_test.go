@@ -121,6 +121,21 @@ func TestAuth(t *testing.T) {
 			t.Errorf("期望 503，实际 %d", got.Code)
 		}
 	})
+
+	t.Run("MCP 也复用 API 密钥", func(t *testing.T) {
+		s, _ := newServer(t, func(settings *config.Settings) { settings.EnableMCP = true })
+		s.MCP = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
+		handler := s.Handler()
+		if got := request(t, handler, "POST", "/mcp", "{}", false); got.Code != http.StatusUnauthorized {
+			t.Errorf("MCP 无密钥应回 401，实际 %d", got.Code)
+		}
+		if got := request(t, handler, "POST", "/mcp", "{}", true); got.Code != http.StatusOK {
+			t.Errorf("MCP 带密钥应通过，实际 %d", got.Code)
+		}
+	})
 }
 
 func TestLiveAndHealth(t *testing.T) {

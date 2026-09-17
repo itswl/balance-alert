@@ -15,6 +15,12 @@ go build -o balance-alert ./cmd/balance-alert
 
 或者直接跑容器：`docker compose up -d`。
 
+## MCP
+
+设置 `ENABLE_MCP=true` 后，服务会在 `/mcp` 暴露只读 Streamable HTTP MCP
+端点，并复用 `WEB_API_KEY` 鉴权。它提供当前余额、订阅、邮箱扫描、定时任务、
+健康状态和历史告警查询，不提供配置写入、立即刷新或立即扫描。
+
 **没有配置文件**：环境变量里有 `DEEPSEEK_API_KEY` 就会自动监控 DeepSeek，阈值取 `DEEPSEEK_THRESHOLD`。
 要一次管很多账户、想在页面上增删改，打开数据库动态配置。
 
@@ -78,6 +84,7 @@ go build -o balance-alert ./cmd/balance-alert
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `WEB_API_KEY` | 无 | `/api/*` 的访问密钥；未设置时接口一律 503 |
+| `ENABLE_MCP` | `false` | 是否在 `/mcp` 开启只读 MCP；复用 `WEB_API_KEY` 鉴权 |
 | `WEBHOOK_URL` / `WEBHOOK_TYPE` / `WEBHOOK_SOURCE` | 无 / `custom` / `credit-monitor` | 告警机器人；类型 `feishu` `dingtalk` `wecom` `custom` |
 | `{PROVIDER}_API_KEY` | 无 | 各平台密钥，见上表 |
 | `BALANCE_REFRESH_INTERVAL_SECONDS` | `3600` | 看板刷新间隔 |

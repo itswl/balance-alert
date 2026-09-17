@@ -31,6 +31,7 @@ type Settings struct {
 	EnableSubscriptions bool
 	EnablePrometheus    bool
 	EnableWebAlarm      bool
+	EnableMCP           bool
 
 	// 调度与并发
 	BalanceRefreshIntervalSeconds   *int
@@ -117,6 +118,7 @@ func Load() (*Settings, error) {
 		EnableSubscriptions: e.boolean("ENABLE_SUBSCRIPTIONS", false),
 		EnablePrometheus:    e.boolean("ENABLE_PROMETHEUS", false),
 		EnableWebAlarm:      e.boolean("ENABLE_WEB_ALARM", false),
+		EnableMCP:           e.boolean("ENABLE_MCP", false),
 
 		BalanceRefreshIntervalSeconds:   e.optionalInt("BALANCE_REFRESH_INTERVAL_SECONDS"),
 		MaxConcurrentChecks:             e.optionalInt("MAX_CONCURRENT_CHECKS"),

@@ -14,6 +14,7 @@ import (
 	"github.com/itswl/balance-alert/internal/config"
 	"github.com/itswl/balance-alert/internal/httpapi"
 	"github.com/itswl/balance-alert/internal/mailscan"
+	"github.com/itswl/balance-alert/internal/mcpserver"
 	"github.com/itswl/balance-alert/internal/metrics"
 	"github.com/itswl/balance-alert/internal/model"
 	"github.com/itswl/balance-alert/internal/monitor"
@@ -105,6 +106,9 @@ func New(settings *config.Settings, log *slog.Logger, assets fs.FS) (*App, error
 		OnBalanceUpdated:      app.Metrics.UpdateBalance,
 		OnSubscriptionUpdated: app.Metrics.UpdateSubscriptions,
 		OnEmailScanned:        app.Metrics.UpdateEmailScan,
+	}
+	if settings.EnableMCP {
+		app.Server.MCP = mcpserver.NewHandler(settings, app.State, st, log)
 	}
 	return app, nil
 }
