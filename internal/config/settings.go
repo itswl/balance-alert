@@ -91,6 +91,14 @@ type Settings struct {
 	WeeklyReportWeekdays map[int]bool
 }
 
+// Version 是构建时注入的版本号：
+//
+//	go build -ldflags "-X github.com/itswl/balance-alert/internal/config.Version=v1.2.3"
+//
+// 没注入时是 dev。/health 与 /live 都会报这个值，线上一眼能看出跑的是哪个构建，
+// 而不是所有版本都显示同一个写死的数字。APP_VERSION 环境变量仍可覆盖它。
+var Version = "dev"
+
 // 默认值集中在这里，取值方法引用它们。
 const (
 	DefaultRefreshInterval = 3600
@@ -146,7 +154,7 @@ func Load() (*Settings, error) {
 
 		WebPort:       e.integer("WEB_PORT", 8080),
 		MetricsPort:   e.integer("METRICS_PORT", 9100),
-		AppVersion:    e.text("APP_VERSION", "1.0.0"),
+		AppVersion:    e.text("APP_VERSION", Version),
 		WebEnableCORS: e.boolean("WEB_ENABLE_CORS", false),
 		CORSOrigins:   e.text("CORS_ORIGINS", ""),
 		WebAPIKey:     strings.TrimSpace(e.text("WEB_API_KEY", "")),

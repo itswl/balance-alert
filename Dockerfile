@@ -17,7 +17,9 @@ ARG GO_IMAGE=golang:1.27-alpine
 ARG NODE_IMAGE=node:22-alpine
 
 # ---------- 前端 ----------
-FROM ${NODE_IMAGE} AS ui
+# 钉在构建机架构上：打包出来的是静态文件，与目标架构无关。
+# 不加 --platform 的话，构建 arm64 镜像时整个 node 会被 QEMU 模拟，慢得离谱。
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS ui
 ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /ui
 COPY ui/package.json ui/package-lock.json* ./
@@ -30,6 +32,9 @@ FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG TARGETOS
 ARG TARGETARCH
+# 版本号由流水线传进来（git tag）。不传时程序里是 dev，
+# 一眼就能看出跑的是不是正式构建。
+ARG VERSION=dev
 ENV GOPROXY=${GOPROXY} CGO_ENABLED=0
 WORKDIR /src
 
@@ -41,7 +46,9 @@ COPY . .
 # 前端产物覆盖掉仓库里提交的那份，保证镜像里是这次构建出来的
 COPY --from=ui /ui/dist ./ui/dist
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/balance-alert ./cmd/balance-alert
+    go build -trimpath \
+      -ldflags="-s -w -X github.com/itswl/balance-alert/internal/config.Version=${VERSION}" \
+      -o /out/balance-alert ./cmd/balance-alert
 
 # 运行时要写的两个目录，在这里建好再整个拷过去：scratch 里没有 mkdir
 RUN mkdir -p /out/data /out/logs
