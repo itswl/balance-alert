@@ -52,6 +52,12 @@ func Compute(records []model.BalancePoint, windowDays int, now time.Time) model.
 	if len(points) > 0 {
 		result.CurrentBalance = model.Ptr(points[len(points)-1].balance)
 	}
+	// Quota percentages reset with the provider's rolling window. Treating
+	// their fluctuations as spending produces a meaningless daily burn rate
+	// and runway, so quota projects use threshold alerts only.
+	if result.BalanceType == model.TypeQuota {
+		return result
+	}
 	if len(points) < 2 {
 		return result
 	}
@@ -175,9 +181,21 @@ func ComputeAll(series []model.BalancePoint, windowDays int, now time.Time) map[
 	}
 	out := make(map[string]model.Runway, len(byProject))
 	for id, records := range byProject {
+		if containsQuota(records) {
+			continue
+		}
 		out[id] = Compute(records, windowDays, now)
 	}
 	return out
+}
+
+func containsQuota(records []model.BalancePoint) bool {
+	for _, record := range records {
+		if record.BalanceType == model.TypeQuota {
+			return true
+		}
+	}
+	return false
 }
 
 // Implementation note.

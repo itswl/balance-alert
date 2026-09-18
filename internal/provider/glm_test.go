@@ -8,12 +8,12 @@ import (
 func TestGLMFetch(t *testing.T) {
 	runSpecCases(t, glmSpec, []specCase{
 		{
-			// Implementation note.
-			name: "多窗口取最紧的那个",
+			// The longer window has less quota left, but the five-hour window is authoritative.
+			name: "多窗口固定取五小时窗口",
 			body: `{"code":200,"msg":"操作成功","success":true,"data":{"level":"pro","limits":[
 				{"type":"TIME_LIMIT","unit":5,"number":1,"usage":1000,"currentValue":13,
 				 "remaining":987,"percentage":1,"nextResetTime":1790409645998},
-				{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":0}]}}`,
+				{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":90}]}}`,
 			want: 98.7,
 		},
 		{
@@ -21,6 +21,8 @@ func TestGLMFetch(t *testing.T) {
 			body: `{"code":200,"msg":"Operation successful","success":true,"data":{"level":"lite","limits":[
 				{"type":"CREDIT_LIMIT","unit":3,"number":5,"usage":2000,"currentValue":402,
 				 "remaining":1597,"percentage":20},
+				{"type":"CREDIT_LIMIT","unit":5,"number":1,"usage":10000,"currentValue":5208,
+				 "remaining":4792,"percentage":48},
 				{"type":"CREDIT_LIMIT","unit":6,"number":1,"usage":10000,"currentValue":5207,
 				 "remaining":4792,"percentage":52}]}}`,
 			want: 47.92,
@@ -40,8 +42,8 @@ func TestGLMFetch(t *testing.T) {
 		{
 			name: "异常数据钳制在 0-100",
 			body: `{"code":200,"success":true,"data":{"limits":[
-				{"type":"CREDIT_LIMIT","usage":100,"remaining":150},
-				{"type":"TOKENS_LIMIT","percentage":130}]}}`,
+				{"type":"CREDIT_LIMIT","unit":3,"number":5,"usage":100,"remaining":150},
+				{"type":"TOKENS_LIMIT","unit":5,"number":1,"percentage":130}]}}`,
 			want: 0,
 		},
 		{
@@ -72,12 +74,17 @@ func TestGLMFetch(t *testing.T) {
 		{
 			name:   "limits 里没有能算的窗口",
 			body:   `{"code":200,"success":true,"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"number":5}]}}`,
-			errMsg: "data.limits contains no parseable quota window",
+			errMsg: "data.limits contains no five-hour quota window",
 		},
 		{
 			name:   "limits 是空列表",
 			body:   `{"code":200,"success":true,"data":{"limits":[]}}`,
-			errMsg: "data.limits contains no parseable quota window",
+			errMsg: "data.limits contains no five-hour quota window",
+		},
+		{
+			name:   "没有五小时窗口时不猜测其他窗口",
+			body:   `{"code":200,"success":true,"data":{"limits":[{"type":"CREDIT_LIMIT","unit":3,"number":5,"percentage":20},{"type":"CREDIT_LIMIT","unit":6,"number":1,"percentage":30}]}}`,
+			errMsg: "data.limits contains no five-hour quota window",
 		},
 	})
 }

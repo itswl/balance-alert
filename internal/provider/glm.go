@@ -6,12 +6,9 @@ import (
 	"math"
 )
 
-// Implementation note.
-// Implementation note.
-// Implementation note.
-// Implementation note.
-//
-// Implementation note.
+// GLM Coding Plan exposes several quota windows. The dashboard value is the
+// remaining percentage of the rolling five-hour window; longer windows reset
+// on a different schedule and must not be used as the account balance.
 var glmSpec = Spec{
 	Key:         "glm",
 	Name:        "GLM",
@@ -30,27 +27,57 @@ var glmSpec = Spec{
 			return 0, errors.New("Could not parse data.limits field")
 		}
 
-		// Implementation note.
-		lowest := math.Inf(1)
+		var fiveHour []float64
+		var legacy []float64
 		for _, item := range limits {
 			limit := Object(item)
 			if limit == nil {
 				continue
 			}
-			if percent, ok := glmRemainingPercent(limit); ok && percent < lowest {
-				lowest = percent
+			percent, ok := glmRemainingPercent(limit)
+			if !ok {
+				continue
+			}
+			if glmIsFiveHourWindow(limit) {
+				fiveHour = append(fiveHour, percent)
+			} else if !glmHasWindowMetadata(limit) {
+				legacy = append(legacy, percent)
 			}
 		}
-		if math.IsInf(lowest, 1) {
-			return 0, errors.New("data.limits contains no parseable quota window")
+		if len(fiveHour) > 0 {
+			return round2(minFloat(fiveHour)), nil
 		}
-		return round2(lowest), nil
+		// Preserve compatibility with older responses that returned one
+		// unlabelled limit, but never guess when several labelled windows exist.
+		if len(legacy) == 1 && len(limits) == 1 {
+			return round2(legacy[0]), nil
+		}
+		return 0, errors.New("data.limits contains no five-hour quota window")
 	},
 }
 
-// Implementation note.
-// Implementation note.
-// Implementation note.
+func glmIsFiveHourWindow(limit map[string]any) bool {
+	unit, hasUnit := jsonNum(limit["unit"])
+	number, hasNumber := jsonNum(limit["number"])
+	return hasUnit && hasNumber && unit == 5 && number == 1
+}
+
+func glmHasWindowMetadata(limit map[string]any) bool {
+	_, hasUnit := jsonNum(limit["unit"])
+	_, hasNumber := jsonNum(limit["number"])
+	return hasUnit || hasNumber
+}
+
+func minFloat(values []float64) float64 {
+	minimum := math.Inf(1)
+	for _, value := range values {
+		if value < minimum {
+			minimum = value
+		}
+	}
+	return minimum
+}
+
 func glmCodeOK(code any) bool {
 	if code == nil {
 		return true

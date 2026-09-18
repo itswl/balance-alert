@@ -143,6 +143,32 @@ func TestZeroBurnHasNoRunway(t *testing.T) {
 	}
 }
 
+func TestQuotaDoesNotProduceRunway(t *testing.T) {
+	points := buildPoints([][]float64{{-72, 100}, {-48, 90}, {-24, 80}, {0, 70}})
+	for i := range points {
+		points[i].BalanceType = model.TypeQuota
+	}
+
+	got := Compute(points, 7, baselineNow)
+	if got.CurrentBalance == nil || *got.CurrentBalance != 70 {
+		t.Fatalf("quota should retain its current value, got %v", got.CurrentBalance)
+	}
+	if got.Confidence != model.ConfidenceNone || got.BurnPerDay != nil || got.RunwayDays != nil {
+		t.Fatalf("quota should not have a runway estimate: %+v", got)
+	}
+}
+
+func TestComputeAllSkipsQuotaProjects(t *testing.T) {
+	points := buildPoints([][]float64{{-72, 100}, {-48, 90}, {-24, 80}, {0, 70}})
+	for i := range points {
+		points[i].BalanceType = model.TypeQuota
+	}
+
+	if got := ComputeAll(points, 7, baselineNow); len(got) != 0 {
+		t.Fatalf("quota projects should not enter runway results: %+v", got)
+	}
+}
+
 func assertEqual(t *testing.T, field string, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-6 {
