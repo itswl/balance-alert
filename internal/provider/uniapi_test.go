@@ -15,28 +15,28 @@ func TestUniAPIFetch(t *testing.T) {
 		{
 			name:   "业务失败",
 			body:   `{"success":false,"data":{}}`,
-			errMsg: "API 返回 success=false",
+			errMsg: "API returned success=false",
 		},
 		{
-			name:   "没有 success 字段也算失败",
+			name:   "没有 success field也算失败",
 			body:   `{"data":{"balance":1}}`,
-			errMsg: "API 返回 success=false",
+			errMsg: "API returned success=false",
 		},
 		{
-			name:   "缺少 balance",
+			name:   "Missing balance",
 			body:   `{"success":true,"data":{"used":100}}`,
-			errMsg: "无法从响应中解析 balance 字段",
+			errMsg: "Could not parse balance field",
 		},
 		{
 			name:   "data 是 null",
 			body:   `{"success":true,"data":null}`,
-			errMsg: "无法从响应中解析 balance 字段",
+			errMsg: "Could not parse balance field",
 		},
 	})
 }
 
 func TestUniAPISendsUnitParam(t *testing.T) {
-	// unit=usd 是接口要求的，漏了会拿到另一种单位的数
+	// Implementation note.
 	srv, rec := serveJSON(t, 200, `{"success":true,"data":{"balance":1}}`)
 	if _, err := specProviderAt(uniapiSpec, srv.URL, "test-key").Fetch(context.Background()); err != nil {
 		t.Fatal(err)

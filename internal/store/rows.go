@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// 这一组类型是三个 sqlc 生成包的公约数。
+// Implementation note.
 //
-// sqlc.yaml 刻意让 sqlite / postgres / mysql 三个包生成字段布局完全一致的结构体，
-// 所以适配层能用一次结构体转换（balanceHistoryRow(row)）把生成类型搬过来，
-// 不必逐字段赋值。哪天某个引擎的列类型被改歪了，转换会直接编译不过——这就是我们要的护栏。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 //
-// 参数则不强求一致：MySQL 的 LIMIT 不接受具名参数，生成出来的字段名和宽度注定不同，
-// 所以 querier 的入参用普通标量，由各引擎自己拼 Params。
+// Implementation note.
+// Implementation note.
 
 type projectConfigRow struct {
 	ID           int64
@@ -102,7 +102,7 @@ type projectCountRow struct {
 	Count       int64
 }
 
-// ---------- 写入参数 ----------
+// Implementation note.
 
 type upsertProjectParams struct {
 	Name         string
@@ -175,10 +175,10 @@ type insertEmailAlertParams struct {
 	Timestamp       sql.NullTime
 }
 
-// querier 是 sqlStore 唯一依赖的数据库能力，三种引擎各实现一份。
+// Implementation note.
 //
-// 业务语义（过滤、聚合、解密、时间格式）全部留在 sql.go 里只写一遍，
-// 这里只负责把参数递进生成代码、把行搬回来。
+// Implementation note.
+// Implementation note.
 type querier interface {
 	listProjectConfigs(ctx context.Context) ([]projectConfigRow, error)
 	upsertProjectConfig(ctx context.Context, arg upsertProjectParams) error
@@ -211,7 +211,7 @@ type querier interface {
 	listEmailAlertHistory(ctx context.Context, since time.Time, mailbox string, limit int64) ([]emailAlertHistoryRow, error)
 }
 
-// mapRows 把生成包的行切片转成规范行切片。conv 一律是一次结构体转换。
+// Implementation note.
 func mapRows[S, D any](src []S, conv func(S) D) []D {
 	out := make([]D, len(src))
 	for i := range src {
@@ -220,7 +220,7 @@ func mapRows[S, D any](src []S, conv func(S) D) []D {
 	return out
 }
 
-// nullTime 把一个时刻包成查询参数。时间列在建表时是可空的，生成代码因此要 sql.NullTime。
+// Implementation note.
 func nullTime(t time.Time) sql.NullTime {
 	return sql.NullTime{Time: t.UTC(), Valid: true}
 }

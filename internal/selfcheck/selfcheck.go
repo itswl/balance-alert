@@ -1,8 +1,8 @@
-// Package selfcheck 一条命令看清「配了什么、从哪来、哪里不对」。
+// Package selfcheck provides the package implementation.
 //
-//	balance-alert -show-config
+//	quotapulse -show-config
 //
-// 有问题时返回非零退出码，可以直接用于部署前校验。
+// Implementation note.
 package selfcheck
 
 import (
@@ -11,22 +11,22 @@ import (
 	"io"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/app"
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/provider"
-	"github.com/itswl/balance-alert/internal/timeutil"
+	"github.com/itswl/quotapulse/internal/app"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/provider"
+	"github.com/itswl/quotapulse/internal/timeutil"
 )
 
-// 标记符号：✓ 没问题，! 能跑但不对劲，✗ 一定有问题。
+// Implementation note.
 const (
 	markOK   = "✓"
 	markWarn = "!"
 	markBad  = "✗"
 )
 
-// Run 打印自检报告，返回发现的问题数量。
+// Implementation note.
 func Run(ctx context.Context, instance *app.App, out io.Writer) int {
 	settings := instance.Settings
 	cfg := instance.Resolver.Load(ctx)
@@ -34,15 +34,15 @@ func Run(ctx context.Context, instance *app.App, out io.Writer) int {
 	var lines []string
 	problems := 0
 
-	lines = append(lines, "配置自检", "  数据库: "+databaseLabel(settings))
-	lines = append(lines, "  业务清单来源: "+sources(cfg, settings))
-	lines = append(lines, "  可选能力: "+features(settings))
-	lines = append(lines, "  定时任务: "+schedules(settings))
+	lines = append(lines, "Configuration self-check", "  operation: "+databaseLabel(settings))
+	lines = append(lines, "  operation: "+sources(cfg, settings))
+	lines = append(lines, "  operation: "+features(settings))
+	lines = append(lines, "  operation: "+schedules(settings))
 	if !settings.EnableDatabase {
-		lines = append(lines, "  "+markWarn+" 消耗分析与跑道估算需要 ENABLE_DATABASE=true 攒历史，当前未启用")
+		lines = append(lines, "  "+markWarn+" operation ENABLE_DATABASE=true operation,operationDisabled")
 	}
 	if settings.EnableSubscriptions && !settings.EnableDynamicConfig {
-		lines = append(lines, "  "+markWarn+" 订阅提醒已开启，但订阅清单只能存在数据库里，还需要 ENABLE_DYNAMIC_CONFIG=true")
+		lines = append(lines, "  "+markWarn+" operation,operation,operation ENABLE_DYNAMIC_CONFIG=true")
 		problems++
 	}
 
@@ -63,9 +63,9 @@ func Run(ctx context.Context, instance *app.App, out io.Writer) int {
 	problems += channelProblems
 
 	if problems > 0 {
-		lines = append(lines, "", fmt.Sprintf("发现 %d 个问题（上面标 %s / %s 的条目）", problems, markBad, markWarn))
+		lines = append(lines, "", fmt.Sprintf("operation %d operation(operation %s / %s operation)", problems, markBad, markWarn))
 	} else {
-		lines = append(lines, "", "配置看起来没问题")
+		lines = append(lines, "", "operation")
 	}
 
 	fmt.Fprintln(out, strings.Join(lines, "\n"))
@@ -74,28 +74,28 @@ func Run(ctx context.Context, instance *app.App, out io.Writer) int {
 
 func databaseLabel(settings *config.Settings) string {
 	if !settings.EnableDatabase {
-		return "未启用"
+		return "Disabled"
 	}
 	scheme, _, _ := strings.Cut(settings.DatabaseURL, "://")
 	return scheme
 }
 
-// sources 说明三段清单各自来自哪：数据库、环境变量，或两者都有。
+// Implementation note.
 func sources(cfg model.Config, settings *config.Settings) string {
 	label := func(total, fromEnv int) string {
 		if total == 0 {
-			return "(空)"
+			return "(operation)"
 		}
 		var parts []string
 		if total-fromEnv > 0 {
 			if settings.EnableDynamicConfig {
-				parts = append(parts, "数据库")
+				parts = append(parts, "operation")
 			} else {
-				parts = append(parts, "未知来源")
+				parts = append(parts, "operation")
 			}
 		}
 		if fromEnv > 0 {
-			parts = append(parts, "环境变量")
+			parts = append(parts, "environment variable")
 		}
 		return strings.Join(parts, " + ")
 	}
@@ -112,7 +112,7 @@ func sources(cfg model.Config, settings *config.Settings) string {
 			mailboxesFromEnv++
 		}
 	}
-	return fmt.Sprintf("项目=%s  订阅=%s  邮箱=%s",
+	return fmt.Sprintf("operation=%s  operation=%s  operation=%s",
 		label(len(cfg.Projects), projectsFromEnv),
 		label(len(cfg.Subscriptions), 0),
 		label(len(cfg.Mailboxes), mailboxesFromEnv))
@@ -123,12 +123,12 @@ func features(settings *config.Settings) string {
 		name string
 		on   bool
 	}{
-		{"数据库", settings.EnableDatabase},
-		{"动态配置", settings.EnableDynamicConfig},
-		{"历史 API", settings.EnableHistoryAPI},
-		{"订阅提醒", settings.EnableSubscriptions},
+		{"operation", settings.EnableDatabase},
+		{"operation", settings.EnableDynamicConfig},
+		{"operation API", settings.EnableHistoryAPI},
+		{"operation", settings.EnableSubscriptions},
 		{"Prometheus", settings.EnablePrometheus},
-		{"Web 告警", settings.EnableWebAlarm},
+		{"Web operation", settings.EnableWebAlarm},
 	}
 	parts := make([]string, 0, len(toggles))
 	for _, t := range toggles {
@@ -142,7 +142,7 @@ func features(settings *config.Settings) string {
 }
 
 func schedules(settings *config.Settings) string {
-	return fmt.Sprintf("看板刷新 每 %d 秒  告警检查 %s  邮箱扫描 %s（最近 %d 天）  周报 %s",
+	return fmt.Sprintf("operation operation %d operation  operation %s  operation %s(operation %d operation)  operation %s",
 		settings.RefreshInterval(),
 		timeutil.Describe(settings.AlertTimes, nil),
 		timeutil.Describe(settings.EmailScanTimes, nil),
@@ -151,21 +151,21 @@ func schedules(settings *config.Settings) string {
 }
 
 func checkProjects(projects []model.Project) ([]string, int) {
-	lines := []string{"", fmt.Sprintf("项目 (%d)", len(projects))}
+	lines := []string{"", fmt.Sprintf("operation (%d)", len(projects))}
 	if len(projects) == 0 {
-		return append(lines, "  "+markBad+" 没有任何项目，余额检查不会执行"), 1
+		return append(lines, "  "+markBad+" operation,operation"), 1
 	}
 
 	problems := 0
 	ordinals := make(map[string]int)
 	for _, p := range projects {
 		if p.Provider == "" {
-			lines = append(lines, "  "+markBad+" "+displayName(p.Name)+": 缺少 provider 字段")
+			lines = append(lines, "  "+markBad+" "+displayName(p.Name)+": operation provider operation")
 			problems++
 			continue
 		}
 		if _, known := provider.Lookup(p.Provider); !known {
-			lines = append(lines, fmt.Sprintf("  %s %s: 未知的服务商 %q，支持 %s",
+			lines = append(lines, fmt.Sprintf("  %s %s: Unknown provider %q,operation %s",
 				markBad, displayName(p.Name), p.Provider, strings.Join(provider.Keys(), " ")))
 			problems++
 			continue
@@ -176,9 +176,9 @@ func checkProjects(projects []model.Project) ([]string, int) {
 		if source == "" {
 			hint := "?"
 			if len(candidates) > 0 {
-				hint = strings.Join(candidates, " 或 ")
+				hint = strings.Join(candidates, " operation ")
 			}
-			lines = append(lines, fmt.Sprintf("  %s %s [%s]: 缺少 API Key，请设置 %s",
+			lines = append(lines, fmt.Sprintf("  %s %s [%s]: Missing API key; set  %s",
 				markBad, displayName(p.Name), p.Provider, hint))
 			problems++
 			continue
@@ -186,16 +186,16 @@ func checkProjects(projects []model.Project) ([]string, int) {
 
 		origin := ""
 		if p.FromEnv {
-			origin = "（环境变量自动发现）"
+			origin = "(environment variableauto-discovered)"
 		}
-		detail := fmt.Sprintf("%s [%s/%s] 阈值 %g — Key 来自 %s%s",
+		detail := fmt.Sprintf("%s [%s/%s] operation %g — Key operation %s%s",
 			displayName(p.Name), p.Provider, p.Type, p.Threshold, source, origin)
 		if p.Threshold == 0 {
-			hint := "页面上填写阈值"
+			hint := "operation"
 			if p.FromEnv {
 				hint = strings.ToUpper(p.Provider) + "_THRESHOLD"
 			}
-			lines = append(lines, fmt.Sprintf("  %s %s（阈值 0，不会触发告警，设 %s）", markWarn, detail, hint))
+			lines = append(lines, fmt.Sprintf("  %s %s(operation 0,operation,operation %s)", markWarn, detail, hint))
 			problems++
 			continue
 		}
@@ -205,30 +205,30 @@ func checkProjects(projects []model.Project) ([]string, int) {
 }
 
 func checkSubscriptions(subs []model.Subscription) ([]string, int) {
-	lines := []string{"", fmt.Sprintf("订阅 (%d)", len(subs))}
+	lines := []string{"", fmt.Sprintf("operation (%d)", len(subs))}
 	if len(subs) == 0 {
-		return append(lines, "  — 未配置"), 0
+		return append(lines, "  — operation"), 0
 	}
 
 	problems := 0
 	for _, s := range subs {
 		readable := notify.FormatSubscriptionCycle(s.CycleType, s.RenewalDay)
-		if readable == "未知周期" {
-			lines = append(lines, fmt.Sprintf("  %s %s: 周期类型 %q 不支持（weekly/monthly/yearly）",
+		if readable == "Unknown cycle" {
+			lines = append(lines, fmt.Sprintf("  %s %s: operation %q operation(weekly/monthly/yearly)",
 				markBad, displayName(s.Name), s.CycleType))
 			problems++
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("  %s %s: %s，提前 %d 天提醒，金额 %g",
+		lines = append(lines, fmt.Sprintf("  %s %s: %s,operation %d operation,Amount %g",
 			markOK, displayName(s.Name), readable, s.AlertDaysBefore, s.Amount))
 	}
 	return lines, problems
 }
 
 func checkMailboxes(mailboxes []model.Mailbox) ([]string, int) {
-	lines := []string{"", fmt.Sprintf("邮箱 (%d)", len(mailboxes))}
+	lines := []string{"", fmt.Sprintf("operation (%d)", len(mailboxes))}
 	if len(mailboxes) == 0 {
-		return append(lines, "  — 未配置"), 0
+		return append(lines, "  — operation"), 0
 	}
 
 	problems := 0
@@ -244,27 +244,27 @@ func checkMailboxes(mailboxes []model.Mailbox) ([]string, int) {
 			missing = append(missing, "password")
 		}
 		if len(missing) > 0 {
-			lines = append(lines, fmt.Sprintf("  %s %s: 缺少 %s",
+			lines = append(lines, fmt.Sprintf("  %s %s: operation %s",
 				markBad, displayName(m.Name), strings.Join(missing, ", ")))
 			problems++
 			continue
 		}
-		transport := "明文"
+		transport := "operation"
 		if m.UseSSL {
 			transport = "SSL"
 		}
-		lines = append(lines, fmt.Sprintf("  %s %s: %s:%d %s，账号 %s",
+		lines = append(lines, fmt.Sprintf("  %s %s: %s:%d %s,operation %s",
 			markOK, displayName(m.Name), m.Host, m.Port, transport, m.Username))
 	}
 	return lines, problems
 }
 
 func checkChannel(settings *config.Settings) ([]string, int) {
-	lines := []string{"", "告警与访问"}
+	lines := []string{"", "operation"}
 	problems := 0
 
 	if settings.WebhookURL == "" {
-		lines = append(lines, "  "+markBad+" 未设置 WEBHOOK_URL，余额不足时无法发出告警")
+		lines = append(lines, "  "+markBad+" WEBHOOK_URL is not set,Low balanceoperation")
 		problems++
 	} else {
 		webhookType := settings.WebhookType
@@ -272,7 +272,7 @@ func checkChannel(settings *config.Settings) ([]string, int) {
 			webhookType = "custom"
 		}
 		if _, err := notify.New(settings.WebhookURL, webhookType, settings.WebhookSource, nil); err != nil {
-			lines = append(lines, fmt.Sprintf("  %s Webhook [%s]: %s（可选 %s）",
+			lines = append(lines, fmt.Sprintf("  %s Webhook [%s]: %s(operation %s)",
 				markBad, webhookType, err, strings.Join(notify.SupportedTypes(), "/")))
 			problems++
 		} else {
@@ -282,21 +282,21 @@ func checkChannel(settings *config.Settings) ([]string, int) {
 	}
 
 	if settings.WebAPIKey == "" {
-		lines = append(lines, "  "+markBad+" 未设置 WEB_API_KEY，所有 /api/* 请求会返回 503")
+		lines = append(lines, "  "+markBad+" WEB_API_KEY is not set,operation /api/* operation 503")
 		problems++
 	} else {
-		lines = append(lines, fmt.Sprintf("  %s WEB_API_KEY 已设置（%s）", markOK, mask(settings.WebAPIKey)))
+		lines = append(lines, fmt.Sprintf("  %s WEB_API_KEY operation(%s)", markOK, mask(settings.WebAPIKey)))
 	}
 
 	if settings.EnableDynamicConfig && settings.ConfigEncryptionKey == "" {
-		lines = append(lines, "  "+markWarn+" 数据库动态配置已开启但未设置 CONFIG_ENCRYPTION_KEY，密钥将明文入库")
+		lines = append(lines, "  "+markWarn+" database dynamic configurationoperation CONFIG_ENCRYPTION_KEY,operation")
 	}
 	return lines, problems
 }
 
 func displayName(name string) string {
 	if name == "" {
-		return "(未命名)"
+		return "(operation)"
 	}
 	return name
 }

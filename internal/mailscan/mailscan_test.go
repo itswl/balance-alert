@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// ---------- 测试替身 ----------
+// Implementation note.
 
-// fakeStore 只关心邮件告警这两个方法，其余方法走 Null 实现。
+// Implementation note.
 type fakeStore struct {
 	store.Store
 	mu      sync.Mutex
@@ -70,7 +70,7 @@ func (f *fakeNotifier) messages() []notify.Message {
 	return append([]notify.Message(nil), f.sent...)
 }
 
-// fakeConn 冒充一个已经登录好的邮箱，IMAP 协议细节不进测试。
+// Implementation note.
 type fakeConn struct {
 	mu        sync.Mutex
 	order     []uint32
@@ -135,7 +135,7 @@ func (c *fakeConn) fetchedNums() []uint32 {
 	return all
 }
 
-// harness 把扫描器和它的全部依赖装在一起，按邮箱名分发连接。
+// Implementation note.
 type harness struct {
 	scanner  *Scanner
 	store    *fakeStore
@@ -158,7 +158,7 @@ func newHarness(conns map[string]*fakeConn) *harness {
 		Store:    h.store,
 		Notifier: h.notifier,
 		Log:      slog.New(slog.DiscardHandler),
-		// 重试等待压到最短，否则一个连不上的邮箱要让测试等 8 秒
+		// Implementation note.
 		retryWait: time.Microsecond,
 		dial:      h.dial,
 	}
@@ -187,10 +187,10 @@ func (h *harness) dialCount() int {
 	return len(h.dialed)
 }
 
-// ---------- 邮件样例 ----------
+// Implementation note.
 
-// alertMail 是一封典型的欠费提醒，主题和正文按真实账单邮件的样子写：
-// 主题 =【阿里云】余额不足提醒，正文 = 您的账户余额不足，请及时充值。余额：12.50元
+// Implementation note.
+// Implementation note.
 func alertMail(messageID string) []byte {
 	return rawMessage([]string{
 		"Subject: =?utf-8?B?44CQ6Zi/6YeM5LqR44CR5L2Z6aKd5LiN6Laz5o+Q6YaS?=",
@@ -219,7 +219,7 @@ func mailbox(name, host string) model.Mailbox {
 	}
 }
 
-// ---------- 用例 ----------
+// Implementation note.
 
 func TestScanWithoutMailboxes(t *testing.T) {
 	h := newHarness(nil)
@@ -231,7 +231,7 @@ func TestScanWithoutMailboxes(t *testing.T) {
 	if len(result.Mailboxes) != 0 || len(result.Alerts) != 0 {
 		t.Errorf("结果 = %+v, 期望空", result)
 	}
-	// 序列化成 JSON 要是 []，前端拿到 null 会炸
+	// Implementation note.
 	if result.Mailboxes == nil || result.Alerts == nil {
 		t.Error("空结果也要是空切片，不能是 nil")
 	}
@@ -274,7 +274,7 @@ func TestScanDryRunFindsAlertWithoutSending(t *testing.T) {
 		t.Error("测试模式不该发通知")
 	}
 
-	// 测试模式既不查去重也不留痕：试跑一次不该把这封邮件记成"已处理"
+	// Implementation note.
 	if len(h.store.queries) != 0 || len(h.store.saved) != 0 {
 		t.Errorf("测试模式动了数据库: queries=%d saved=%d", len(h.store.queries), len(h.store.saved))
 	}
@@ -321,7 +321,7 @@ func TestScanSendsAlertAndRecordsIt(t *testing.T) {
 	}
 }
 
-// 发失败也要留痕：下次才知道这封邮件已经处理过、当时没发出去。
+// Implementation note.
 func TestScanRecordsFailedNotification(t *testing.T) {
 	h := newHarness(map[string]*fakeConn{"A": newFakeConn(alertMail("<alert-1@aliyun.com>"))})
 	h.notifier.err = errors.New("webhook 挂了")
@@ -368,7 +368,7 @@ func TestScanSkipsRecentDuplicate(t *testing.T) {
 	}
 }
 
-// 数据库抽风时宁可多发一条，也不能把欠费提醒吞掉。
+// Implementation note.
 func TestScanSendsWhenDedupeQueryFails(t *testing.T) {
 	h := newHarness(map[string]*fakeConn{"A": newFakeConn(alertMail("<alert-1@aliyun.com>"))})
 	h.store.err = errors.New("数据库连不上")
@@ -380,7 +380,7 @@ func TestScanSendsWhenDedupeQueryFails(t *testing.T) {
 	}
 }
 
-// 同一封通知常常抄送到好几个被扫的邮箱，一次扫描里只该告警一次。
+// Implementation note.
 func TestScanDedupesSameMessageAcrossMailboxes(t *testing.T) {
 	h := newHarness(map[string]*fakeConn{
 		"A": newFakeConn(alertMail("<alert-1@aliyun.com>")),
@@ -403,7 +403,7 @@ func TestScanDedupesSameMessageAcrossMailboxes(t *testing.T) {
 	}
 }
 
-// 每次扫描重新开始记，上一轮处理过的邮件这一轮还要能再命中。
+// Implementation note.
 func TestScanResetsSeenBetweenScans(t *testing.T) {
 	h := newHarness(map[string]*fakeConn{"A": newFakeConn(alertMail("<alert-1@aliyun.com>"))})
 	boxes := []model.Mailbox{mailbox("A", "imap.a.com")}
@@ -423,13 +423,13 @@ func TestScanIncompleteMailboxConfig(t *testing.T) {
 	result := h.scanner.Scan(context.Background(), []model.Mailbox{broken}, 1, false)
 
 	box := result.Mailboxes[0]
-	if box.Success || box.Error == nil || !strings.Contains(*box.Error, "配置不完整") {
+	if box.Success || box.Error == nil || !strings.Contains(*box.Error, "Incomplete configuration") {
 		t.Errorf("邮箱结果 = %+v, 期望记下配置不完整", box)
 	}
 	if h.dialCount() != 0 {
 		t.Error("配置不完整不该去连服务器")
 	}
-	// 配置错误不是故障告警，只在结果里记一笔，不打扰群里的人
+	// Implementation note.
 	if len(h.notifier.messages()) != 0 {
 		t.Error("配置不完整不该发系统告警")
 	}
@@ -446,7 +446,7 @@ func TestScanConnectionFailure(t *testing.T) {
 	if box.Success || box.Error == nil || !strings.Contains(*box.Error, "login failed") {
 		t.Errorf("邮箱结果 = %+v, 期望记下连接错误", box)
 	}
-	// 连不上要按 connectAttempts 重试满，不能试一次就放弃
+	// Implementation note.
 	if got := h.dialCount(); got != connectAttempts {
 		t.Errorf("连接尝试 = %d 次, 期望 %d 次", got, connectAttempts)
 	}
@@ -455,7 +455,7 @@ func TestScanConnectionFailure(t *testing.T) {
 		t.Fatalf("通知 = %+v, 期望一条 mailbox_error", msgs)
 	}
 
-	// 测试模式下同样的失败不打扰值班群
+	// Implementation note.
 	h2 := newHarness(map[string]*fakeConn{})
 	h2.dialErrs["A"] = errors.New("login failed")
 	h2.scanner.Scan(context.Background(), boxes, 1, true)
@@ -464,7 +464,7 @@ func TestScanConnectionFailure(t *testing.T) {
 	}
 }
 
-// 一个邮箱连不上，其它邮箱照扫——这是并发扫描最主要的理由。
+// Implementation note.
 func TestScanIsolatesFailingMailbox(t *testing.T) {
 	h := newHarness(map[string]*fakeConn{"B": newFakeConn(alertMail("<alert-2@aliyun.com>"))})
 	h.dialErrs["A"] = errors.New("connection refused")
@@ -496,7 +496,7 @@ func TestScanSearchFailure(t *testing.T) {
 	}
 }
 
-// 整批 FETCH 失败时降级为逐封获取：一封坏邮件不该让同批的另外 99 封陪葬。
+// Implementation note.
 func TestScanFallsBackToSequentialFetch(t *testing.T) {
 	conn := newFakeConn(normalMail("<weekly-1@example.com>"), alertMail("<alert-1@aliyun.com>"))
 	conn.failBatch = true
@@ -525,7 +525,7 @@ func TestScanRespectsMaxEmails(t *testing.T) {
 	if result.Mailboxes[0].TotalEmails != 2 {
 		t.Errorf("扫描邮件数 = %d, 期望被上限截到 2", result.Mailboxes[0].TotalEmails)
 	}
-	// 截的是最新的两封（序号最大的），最后那封告警邮件要还在
+	// Implementation note.
 	if want := []uint32{3, 4}; fmt.Sprint(conn.fetchedNums()) != fmt.Sprint(want) {
 		t.Errorf("取回的序号 = %v, 期望最新的 %v", conn.fetchedNums(), want)
 	}
@@ -534,7 +534,7 @@ func TestScanRespectsMaxEmails(t *testing.T) {
 	}
 }
 
-// 邮箱数超过并发上限时，结果顺序仍要跟输入一致，页面上的卡片才不会乱跳。
+// Implementation note.
 func TestScanKeepsMailboxOrder(t *testing.T) {
 	const count = 8
 	conns := map[string]*fakeConn{}
@@ -621,7 +621,7 @@ func TestDisplayName(t *testing.T) {
 	}{
 		{model.Mailbox{Name: "工作邮箱", Username: "u@x.com"}, "工作邮箱"},
 		{model.Mailbox{Username: "u@x.com"}, "u@x.com"},
-		{model.Mailbox{}, "(未命名)"},
+		{model.Mailbox{}, "(Unnamed)"},
 	}
 	for _, tt := range tests {
 		if got := displayName(tt.mailbox); got != tt.want {

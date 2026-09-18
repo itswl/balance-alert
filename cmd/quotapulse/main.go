@@ -1,6 +1,6 @@
-// balance-alert 监控多个平台的余额或配额，算出还能用几天，快见底或消耗突然放大时发 Webhook。
+// Implementation note.
 //
-// 默认起 Web 服务与进程内定时任务；带上 -check 之类的开关则跑一次就退出，供命令行排障用。
+// Implementation note.
 package main
 
 import (
@@ -17,22 +17,22 @@ import (
 	"syscall"
 	"time"
 
-	// 把时区数据库编进二进制：定时任务的时刻按 TZ 解释，运行镜像因此不必安装 tzdata，
-	// 可以直接跑在 scratch 上。系统装了 tzdata 时优先用系统的。
+	// Implementation note.
+	// Implementation note.
 	_ "time/tzdata"
 
-	"github.com/itswl/balance-alert/internal/app"
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/selfcheck"
-	"github.com/itswl/balance-alert/ui"
+	"github.com/itswl/quotapulse/internal/app"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/selfcheck"
+	"github.com/itswl/quotapulse/ui"
 )
 
 func main() {
 	opts := parseFlags()
 
-	// .env 先进环境变量，后面所有配置都只读 os.Environ
+	// Implementation note.
 	if err := config.LoadEnvFile(".env"); err != nil {
-		fmt.Fprintln(os.Stderr, "加载 .env 失败:", err)
+		fmt.Fprintln(os.Stderr, "Failed to load .env:", err)
 		os.Exit(1)
 	}
 	settings, err := config.Load()
@@ -41,22 +41,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 健康检查只发一个 HTTP 请求，不需要数据库、通知这些依赖，在装配之前就返回。
-	// 镜像基于 scratch，没有 curl 可用，所以由程序自己承担这件事。
+	// Implementation note.
+	// Implementation note.
 	if opts.healthcheck {
 		os.Exit(probe(settings.WebPort))
 	}
 
 	log, closeLog, err := newLogger(settings)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "初始化日志失败:", err)
+		fmt.Fprintln(os.Stderr, "Failed to initialize logger:", err)
 		os.Exit(1)
 	}
 	defer closeLog()
 
 	instance, err := app.New(settings, log, assets(log))
 	if err != nil {
-		log.Error("启动失败", "error", err)
+		log.Error("Startup failed", "error", err)
 		os.Exit(1)
 	}
 	defer instance.Close()
@@ -81,20 +81,20 @@ type options struct {
 
 func parseFlags() options {
 	var opts options
-	flag.BoolVar(&opts.showConfig, "show-config", false, "自检配置：显示每项配置来自哪里、缺什么，有问题时退出码非零")
-	flag.BoolVar(&opts.healthcheck, "healthcheck", false, "探测本机 /live，供容器健康检查使用")
-	flag.BoolVar(&opts.checkBalance, "check", false, "跑一次余额检查后退出")
-	flag.BoolVar(&opts.checkSubscription, "check-subscriptions", false, "跑一次订阅检查后退出")
-	flag.BoolVar(&opts.checkEmail, "check-email", false, "跑一次邮箱扫描后退出")
-	flag.IntVar(&opts.emailDays, "email-days", 1, "邮箱扫描覆盖最近几天")
-	flag.StringVar(&opts.project, "project", "", "只检查指定项目")
-	flag.StringVar(&opts.importConfig, "import-config", "", "把旧版的 config.json 一次性导入数据库动态配置，导完即可删除该文件")
-	flag.BoolVar(&opts.dryRun, "dry-run", false, "测试模式，只查不发告警")
+	flag.BoolVar(&opts.showConfig, "show-config", false, "Check configuration sources and missing values; exit nonzero on errors")
+	flag.BoolVar(&opts.healthcheck, "healthcheck", false, "Probe local /live for the container health check")
+	flag.BoolVar(&opts.checkBalance, "check", false, "Run one balance check and exit")
+	flag.BoolVar(&opts.checkSubscription, "check-subscriptions", false, "Run one subscription check and exit")
+	flag.BoolVar(&opts.checkEmail, "check-email", false, "Run one mailbox scan and exit")
+	flag.IntVar(&opts.emailDays, "email-days", 1, "Number of recent days to scan")
+	flag.StringVar(&opts.project, "project", "", "Check only the selected project")
+	flag.StringVar(&opts.importConfig, "import-config", "", "operation config.json operationdatabase dynamic configuration,operation")
+	flag.BoolVar(&opts.dryRun, "dry-run", false, "operation,Check only; no alerts")
 	flag.Parse()
 	return opts
 }
 
-// run 返回进程退出码。
+// Implementation note.
 func run(ctx context.Context, instance *app.App, opts options) int {
 	switch {
 	case opts.showConfig:
@@ -113,7 +113,7 @@ func run(ctx context.Context, instance *app.App, opts options) int {
 
 	case opts.checkBalance || opts.project != "":
 		if _, err := instance.Monitor.Run(ctx, opts.project, opts.dryRun); err != nil {
-			instance.Log.Error("余额检查失败", "error", err)
+			instance.Log.Error("operationCheck failed", "error", err)
 			return 1
 		}
 		return 0
@@ -125,7 +125,7 @@ func run(ctx context.Context, instance *app.App, opts options) int {
 
 	case opts.checkEmail:
 		if _, err := instance.ScanMailboxes(ctx, opts.emailDays, opts.dryRun); err != nil {
-			instance.Log.Error("邮箱扫描失败", "error", err)
+			instance.Log.Error("operation", "error", err)
 			return 1
 		}
 		return 0
@@ -142,50 +142,50 @@ func serve(ctx context.Context, instance *app.App) int {
 	instance.ServeMetrics(ctx)
 
 	if settings.EnableWebAlarm {
-		instance.Log.Warn("看板刷新会发送真实告警（ENABLE_WEB_ALARM=true）")
+		instance.Log.Warn("Dashboard refresh sends real alerts (ENABLE_WEB_ALARM=true)")
 	} else {
-		instance.Log.Info("看板刷新只查不发告警，真实告警由 alert_check / email_scan 定时任务发送")
+		instance.Log.Info("Dashboard refresh checks only; scheduled alert_check / email_scan jobs send real alerts")
 	}
 
 	addr := fmt.Sprintf(":%d", settings.WebPort)
 	if err := instance.Server.ListenAndServe(ctx, addr); err != nil {
-		instance.Log.Error("Web 服务异常退出", "error", err)
+		instance.Log.Error("Web service exited unexpectedly", "error", err)
 		return 1
 	}
-	instance.Log.Info("服务已关闭")
+	instance.Log.Info("Service stopped")
 	return 0
 }
 
-// probe 探测本机的存活接口，返回进程退出码。
+// Implementation note.
 func probe(port int) int {
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("http://127.0.0.1:%d/live", port)
 
 	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "健康检查失败:", err)
+		fmt.Fprintln(os.Stderr, "Health check failed:", err)
 		return 1
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "健康检查失败: HTTP %d\n", resp.StatusCode)
+		fmt.Fprintf(os.Stderr, "Health check failed: HTTP %d\n", resp.StatusCode)
 		return 1
 	}
 	return 0
 }
 
-// assets 取嵌入的前端产物；没构建过就返回 nil，页面会给出提示而不是 500。
+// Implementation note.
 func assets(log *slog.Logger) fs.FS {
 	dist, err := ui.Assets()
 	if err != nil {
-		log.Warn("未嵌入前端产物，看板页面不可用", "error", err)
+		log.Warn("Frontend assets are not embedded; the dashboard is unavailable", "error", err)
 		return nil
 	}
 	return dist
 }
 
-// newLogger 按 LOG_FORMAT / LOG_LEVEL / LOG_FILE 建日志器。
-// 写文件时同时输出到标准输出，容器日志和文件都能看到。
+// Implementation note.
+// Implementation note.
 func newLogger(settings *config.Settings) (*slog.Logger, func(), error) {
 	level := slog.LevelInfo
 	switch strings.ToUpper(settings.LogLevel) {

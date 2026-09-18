@@ -1,8 +1,8 @@
 /**
- * 折线图的冒烟测试。
+ * Implementation note.
  *
- * 这张图是本次唯一新写的渲染代码（替掉了 CDN 上的 Chart.js），所以要盯住几条：
- * 画布尺寸、数据点个数、阈值线不画点、以及Balance一直不变 / 只有一个点这类会除零的边界。
+ * Implementation note.
+ * Implementation note.
  */
 
 import './stub-dom.js';
@@ -21,7 +21,7 @@ interface DrawLog {
   transform: number[] | null;
 }
 
-/** 记录型 2d 上下文：不真画，只记下被调用了什么 */
+/* Implementation note. */
 function stubCanvas(width = 800, height = 360): { canvas: HTMLCanvasElement; log: DrawLog } {
   const log: DrawLog = { arcs: 0, strokes: 0, fills: 0, texts: [], dashes: [], transform: null };
 
@@ -106,7 +106,7 @@ describe('LineChart', () => {
     const { canvas, log } = stubCanvas();
     new LineChart(canvas, options());
 
-    // 3 个数据点 + 2 个图例圆点
+    // Implementation note.
     assert.equal(log.arcs, 5);
   });
 
@@ -155,7 +155,7 @@ describe('LineChart', () => {
     const { canvas, log } = stubCanvas();
     new LineChart(canvas, options({ series: [{ label: 'Balance', values: [100, null, 60], color: '#000' }] }));
 
-    // 2 个有效点 + 1 个图例点
+    // Implementation note.
     assert.equal(log.arcs, 3);
   });
 

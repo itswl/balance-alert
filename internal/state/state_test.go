@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
 func result(name string, success bool, needAlarm bool) model.CheckResult {
@@ -29,7 +29,7 @@ func TestBalanceSummary(t *testing.T) {
 	}
 }
 
-// TestMergeKeepsOrder 单项目刷新不能打乱看板上的卡片顺序，否则用户每次刷新都要重新找。
+// Implementation note.
 func TestMergeKeepsOrder(t *testing.T) {
 	m := New()
 	m.SetBalance([]model.CheckResult{result("a", true, false), result("b", true, false), result("c", true, false)})
@@ -50,7 +50,7 @@ func TestMergeKeepsOrder(t *testing.T) {
 	}
 }
 
-// TestMergeAddsUnknownProject 新加的项目刷新后要出现在看板上。
+// Implementation note.
 func TestMergeAddsUnknownProject(t *testing.T) {
 	m := New()
 	m.SetBalance([]model.CheckResult{result("a", true, false)})
@@ -71,7 +71,7 @@ func TestRemoveBalanceProject(t *testing.T) {
 		t.Errorf("删除后应只剩 b，实际 %v", projects)
 	}
 
-	// 删不存在的项目不该有副作用
+	// Implementation note.
 	before := m.Balance().LastUpdate
 	m.RemoveBalanceProject("不存在")
 	if m.Balance().LastUpdate != before {
@@ -79,7 +79,7 @@ func TestRemoveBalanceProject(t *testing.T) {
 	}
 }
 
-// TestReturnedStateIsACopy 调用方拿到的是副本，改它不能影响内部状态。
+// Implementation note.
 func TestReturnedStateIsACopy(t *testing.T) {
 	m := New()
 	m.SetBalance([]model.CheckResult{result("a", true, false)})
@@ -124,7 +124,7 @@ func TestJobHealth(t *testing.T) {
 	}
 }
 
-// TestDisabledJobNeverBlocksHealth 关掉的任务永远不影响健康判断。
+// Implementation note.
 func TestDisabledJobNeverBlocksHealth(t *testing.T) {
 	m := New()
 	m.RegisterJob("weekly_report", "周报", "已关闭", false, time.Time{})
@@ -138,7 +138,7 @@ func TestDisabledJobNeverBlocksHealth(t *testing.T) {
 	}
 }
 
-// TestConcurrentAccess 后台调度写、HTTP 读，真并发。开 -race 跑这个用例才有意义。
+// Implementation note.
 func TestConcurrentAccess(t *testing.T) {
 	m := New()
 	var wg sync.WaitGroup

@@ -1,13 +1,13 @@
 /**
- * 看板的全局Status。
+ * Implementation note.
  *
- * 刻意保持成一个可变对象而不是引入Status库：这个看板的数据流只有
- * 「拉接口 → 写进来 → 重绘」一条，多一层抽象只会让排查变难。
+ * Implementation note.
+ * Implementation note.
  */
 
 import type { CreditsResponse, Features, SubscriptionsResponse } from './api/types.js';
 
-/** 四个视图；alerts 与 all 共用Project区，只是多一层筛选 */
+/* Implementation note. */
 export type ViewName = 'all' | 'alerts' | 'subscriptions' | 'email';
 
 export const VIEW_NAMES: readonly ViewName[] = ['all', 'alerts', 'subscriptions', 'email'];
@@ -19,7 +19,7 @@ export interface AppStateShape {
   currentTheme: Theme;
   currentView: ViewName;
   projectViewStyle: ProjectViewStyle;
-  /** Provider筛选，'all' 表示不筛 */
+  /* Implementation note. */
   currentFilter: string;
   searchQuery: string;
   balanceData: CreditsResponse | null;
@@ -29,7 +29,7 @@ export interface AppStateShape {
   autoRefreshTimer: ReturnType<typeof setInterval> | null;
 }
 
-/** localStorage 在隐私模式下会直接抛异常，读写都不能让它拖垮整个页面 */
+/* Implementation note. */
 export function readStorage(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -43,7 +43,7 @@ export function writeStorage(key: string, value: string | null): void {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    /* 存不下就算了，只影响下次打开的默认值 */
+    /* Implementation note. */
   }
 }
 
@@ -55,7 +55,7 @@ export const AppState: AppStateShape = {
   searchQuery: '',
   balanceData: null,
   subscriptionData: null,
-  // 拿不到 /api/features 时按核心版降级：高级入口一律不显示
+  // Implementation note.
   features: { subscriptions: false, dynamic_config: false, history: false },
   lastUpdate: null,
   autoRefreshTimer: null,

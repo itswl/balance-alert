@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// 历史查询的参数默认值与范围，与旧版一致。
+// Implementation note.
 func (s *Server) handleBalanceHistory(w http.ResponseWriter, r *http.Request) {
 	days, err := intParam(r, "days", 7, 1, 365)
 	if err != nil {
@@ -28,7 +28,7 @@ func (s *Server) handleBalanceHistory(w http.ResponseWriter, r *http.Request) {
 		Days:      days, Limit: limit,
 	})
 	if err != nil {
-		s.log().Error("查询余额历史失败", "error", err)
+		s.log().Error("operation", "error", err)
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -38,8 +38,8 @@ func (s *Server) handleBalanceHistory(w http.ResponseWriter, r *http.Request) {
 	ok(w, map[string]any{"count": len(rows), "data": rows})
 }
 
-// handleBalanceTrend 取一个账户的余额趋势。
-// 前端可能直接传 "provider:name" 原文，这里换算成入库时的项目 ID。
+// Implementation note.
+// Implementation note.
 func (s *Server) handleBalanceTrend(w http.ResponseWriter, r *http.Request) {
 	days, err := intParam(r, "days", 30, 1, 365)
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *Server) handleBalanceTrend(w http.ResponseWriter, r *http.Request) {
 
 	trend, err := s.Store.BalanceTrend(r.Context(), projectID, days)
 	if err != nil {
-		s.log().Error("获取余额趋势失败", "error", err)
+		s.log().Error("operation", "error", err)
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Server) handleAlertHistory(w http.ResponseWriter, r *http.Request) {
 		Days:      days, Limit: limit,
 	})
 	if err != nil {
-		s.log().Error("查询告警历史失败", "error", err)
+		s.log().Error("operation", "error", err)
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -101,12 +101,12 @@ func (s *Server) handleAlertStats(w http.ResponseWriter, r *http.Request) {
 	}
 	stats, err := s.Store.AlertStats(r.Context(), days)
 	if err != nil {
-		s.log().Error("获取告警统计失败", "error", err)
+		s.log().Error("operation", "error", err)
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if stats == nil {
-		fail(w, http.StatusInternalServerError, "数据库未启用")
+		fail(w, http.StatusInternalServerError, "Database is not enabled")
 		return
 	}
 	ok(w, map[string]any{"data": stats})
@@ -129,7 +129,7 @@ func (s *Server) handleEmailAlertHistory(w http.ResponseWriter, r *http.Request)
 		Days:    days, Limit: limit,
 	})
 	if err != nil {
-		s.log().Error("查询邮件告警历史失败", "error", err)
+		s.log().Error("operationEmail alertoperation", "error", err)
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}

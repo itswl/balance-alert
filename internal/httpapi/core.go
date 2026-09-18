@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// stalenessMultiplier 余额数据超过多少个刷新周期没更新就算过期。
-// 给三个周期的余量：偶尔一次刷新失败不该让就绪探针把容器摘掉。
+// Implementation note.
+// Implementation note.
 const stalenessMultiplier = 3
 
 type liveBody struct {
@@ -35,7 +35,7 @@ type healthBody struct {
 	Version       string   `json:"version"`
 }
 
-// handleHealth 是就绪探针：有数据、数据没过期、定时任务上次都成功才 200。
+// Implementation note.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	balance := s.State.Balance()
 	jobs := s.State.Jobs()
@@ -85,7 +85,7 @@ type featureToggles struct {
 	History       bool `json:"history"`
 }
 
-// handleFeatures 告诉前端哪些高级入口该显示。
+// Implementation note.
 func (s *Server) handleFeatures(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, featuresBody{
 		Status: "success",
@@ -100,7 +100,7 @@ func (s *Server) handleFeatures(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleCredits(w http.ResponseWriter, r *http.Request) {
 	balance := s.State.Balance()
 	if len(balance.Projects) == 0 {
-		fail(w, http.StatusServiceUnavailable, "余额数据未初始化，请稍后重试")
+		fail(w, http.StatusServiceUnavailable, "Balance data is not initialized; please try again")
 		return
 	}
 	etagJSON(w, r, balance)
@@ -118,7 +118,7 @@ type refreshRequest struct {
 	ProjectName *string `json:"project_name"`
 }
 
-// handleRefresh 立即检查余额；带 project_name 时只刷新那一个并合并进现有状态。
+// Implementation note.
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	projectName := ""
 	if r.Method == http.MethodPost && r.ContentLength > 0 {
@@ -132,18 +132,18 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if busy := s.refreshGuard.acquire(); busy != "" {
-		fail(w, http.StatusTooManyRequests, "刷新"+busy)
+		fail(w, http.StatusTooManyRequests, "Refresh "+busy)
 		return
 	}
 	defer s.refreshGuard.release()
 
 	started := time.Now()
-	// 页面触发的刷新默认不发真实告警，除非显式打开 ENABLE_WEB_ALARM
+	// Implementation note.
 	dryRun := !s.Settings.EnableWebAlarm
 
 	outcome, err := s.Monitor.Run(r.Context(), projectName, dryRun)
 	if err != nil {
-		fail(w, http.StatusInternalServerError, "刷新失败: "+err.Error())
+		fail(w, http.StatusInternalServerError, "Refresh failed: "+err.Error())
 		return
 	}
 
@@ -156,9 +156,9 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		s.OnBalanceUpdated(s.State.Balance().Projects)
 	}
 
-	message := "刷新完成"
+	message := "Refresh complete"
 	if projectName != "" {
-		message += "（项目: " + projectName + "）"
+		message += " (project: " + projectName + ")"
 	}
 	ok(w, map[string]any{
 		"message":                message,
@@ -168,7 +168,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// round2 保留两位小数，用银行家舍入，与项目里其它地方的取整口径统一。
+// Implementation note.
 func round2(value float64) float64 {
 	return math.RoundToEven(value*100) / 100
 }

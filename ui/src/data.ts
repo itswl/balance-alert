@@ -1,8 +1,8 @@
 /**
- * 数据加载与重绘。
+ * Implementation note.
  *
- * 单独成一个模块是为了打破循环依赖：视图切换和各个 manager 改完数据都要重拉，
- * 如果这些函数挂在「应用入口」上，入口就会被所有 manager 反向依赖。
+ * Implementation note.
+ * Implementation note.
  */
 
 import { byId, toggleDisplay } from './dom.js';
@@ -16,7 +16,7 @@ import { showToast } from './ui/toast.js';
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
-/** 拉功能开关并按开关隐藏高级入口；拿不到就按核心版降级，页面照常可用 */
+/* Implementation note. */
 export async function loadFeatures(): Promise<void> {
   try {
     const result = await getFeatures();
@@ -29,11 +29,11 @@ export async function loadFeatures(): Promise<void> {
     toggleDisplay('view-subscriptions-btn', false);
     toggleDisplay('add-subscription-btn', false);
   }
-  // Project的增删改依赖数据库动态配置
+  // Implementation note.
   toggleDisplay('add-project-btn', AppState.features.dynamic_config);
 }
 
-/** 拉Balance与Subscription并重绘当前视图；rebuildFilter=true 时同时重建Provider筛选项（会重置已选Provider） */
+/* Implementation note. */
 export async function fetchAndRender(rebuildFilter = false): Promise<void> {
   const balanceData = await getCredits();
   const subscriptionData = AppState.features.subscriptions
@@ -55,7 +55,7 @@ export async function fetchAndRender(rebuildFilter = false): Promise<void> {
   }
 }
 
-/** 只重拉Balance并重绘Project区（Project增删改后用） */
+/* Implementation note. */
 export async function reloadProjects(): Promise<void> {
   const balanceData = await getCredits();
   AppState.balanceData = balanceData;
@@ -63,7 +63,7 @@ export async function reloadProjects(): Promise<void> {
   renderProjects(balanceData);
 }
 
-/** 只重拉Subscription并重绘Subscription区（Subscription增删改后用），绕开 ETag 缓存 */
+/* Implementation note. */
 export async function reloadSubscriptions(): Promise<void> {
   const subscriptionData = await getSubscriptions(true);
   AppState.subscriptionData = subscriptionData;
@@ -82,7 +82,7 @@ export async function loadData(): Promise<void> {
   }
 }
 
-/** 顶栏刷新按钮：先让后端真去查一遍Balance，再重拉看板 */
+/* Implementation note. */
 export async function refreshNow(): Promise<void> {
   const btn = byId('refresh-btn');
   try {
@@ -99,7 +99,7 @@ export async function refreshNow(): Promise<void> {
   }
 }
 
-/** 每 5 分钟重拉一次（不触发后端刷新，也不重置Provider筛选） */
+/* Implementation note. */
 export function startAutoRefresh(): void {
   if (AppState.autoRefreshTimer) return;
   AppState.autoRefreshTimer = setInterval(() => {

@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Balance Alert：项目余额、订阅续费、邮箱扫描、定时任务与通知",
+  "description": "QuotaPulse：Project balances、Subscription renewal、Mailbox scanning、Scheduled jobs and notifications",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -75,14 +75,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_balance) or vector(0)",
-          "legendFormat": "项目总数",
+          "expr": "count(quotapulse_balance) or vector(0)",
+          "legendFormat": "Project count",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "监控项目总数",
+      "title": "MonitoringProject count",
       "type": "stat"
     },
     {
@@ -137,14 +137,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_status == 1) or vector(0)",
-          "legendFormat": "正常项目",
+          "expr": "count(quotapulse_status == 1) or vector(0)",
+          "legendFormat": "Healthy projects",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "正常项目数",
+      "title": "Healthy project count",
       "type": "stat"
     },
     {
@@ -203,14 +203,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_status == 0) or vector(0)",
-          "legendFormat": "告警项目",
+          "expr": "count(quotapulse_status == 0) or vector(0)",
+          "legendFormat": "AlertProject",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "告警项目数",
+      "title": "Alerting project count",
       "type": "stat"
     },
     {
@@ -269,16 +269,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_check_status == 0) or vector(0)",
-          "legendFormat": "检查失败",
+          "expr": "count(quotapulse_check_status == 0) or vector(0)",
+          "legendFormat": "Check failed",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "检查失败项目",
+      "title": "Check failedProject",
       "type": "stat",
-      "description": "上次余额检查失败（接口报错 / 网络问题）的项目数，失败时余额保留上次成功值"
+      "description": "Projects whose last balance check failed; the last successful balance is retained"
     },
     {
       "datasource": {
@@ -336,14 +336,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_subscription_days <= 7 and balance_alert_subscription_status == 0) or vector(0)",
-          "legendFormat": "即将到期",
+          "expr": "count(quotapulse_subscription_days <= 7 and quotapulse_subscription_status == 0) or vector(0)",
+          "legendFormat": "Due soon",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "7天内到期订阅",
+      "title": "Subscriptions due within 7 days",
       "type": "stat"
     },
     {
@@ -399,14 +399,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_last_check_timestamp{check_type=\"balance\"} * 1000",
-          "legendFormat": "上次余额检查",
+          "expr": "quotapulse_last_check_timestamp{check_type=\"balance\"} * 1000",
+          "legendFormat": "Last balance check",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "上次余额检查",
+      "title": "Last balance check",
       "type": "stat"
     },
     {
@@ -419,7 +419,7 @@
       },
       "id": 7,
       "panels": [],
-      "title": "余额",
+      "title": "Balance",
       "type": "row"
     },
     {
@@ -483,16 +483,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_ratio{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "{{project}}",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "余额比例（余额/阈值）",
+      "title": "Balance ratio (balance/threshold)",
       "type": "gauge",
-      "description": "余额 ÷ 阈值，跨币种、跨类型可比；低于 20% 红，20-50% 黄"
+      "description": "Balance-to-threshold ratio; comparable across currencies and types; red below 20%, yellow from 20% to 50%"
     },
     {
       "datasource": {
@@ -580,16 +580,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_ratio{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "{{project}} ({{provider}})",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "余额比例趋势",
+      "title": "Balance ratio trend",
       "type": "timeseries",
-      "description": "各项目余额相对阈值的比例走势，掉到 100% 以下就是触发告警的点"
+      "description": "Balance-to-threshold ratio by project; below 100% triggers an alert"
     },
     {
       "datasource": {
@@ -676,16 +676,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(balance_alert_balance{project=~\"$project\", type=~\"$type\"})",
+          "expr": "sort_desc(quotapulse_balance{project=~\"$project\", type=~\"$type\"})",
           "legendFormat": "{{project}} ({{provider}}, {{type}})",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "项目余额对比",
+      "title": "Project balance comparison",
       "type": "timeseries",
-      "description": "原始余额，不同类型单位不同（人民币 / 美元 credits / 配额百分比），用顶部「类型」筛选器分开看"
+      "description": "Raw balances use different units by type; use the Type filter to compare like with like"
     },
     {
       "datasource": {
@@ -773,16 +773,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_balance{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_balance{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "{{project}} ({{type}})",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "余额趋势图",
+      "title": "Balance trend",
       "type": "timeseries",
-      "description": "原始余额走势，建议按类型筛选"
+      "description": "Raw balance trend; filter by type"
     },
     {
       "datasource": {
@@ -816,7 +816,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "类型"
+              "options": "Type"
             },
             "properties": [
               {
@@ -826,15 +826,15 @@
                     "type": "value",
                     "options": {
                       "credits": {
-                        "text": "积分 / Credits",
+                        "text": "Credits / Credits",
                         "index": 0
                       },
                       "balance": {
-                        "text": "余额",
+                        "text": "Balance",
                         "index": 1
                       },
                       "quota": {
-                        "text": "配额 %",
+                        "text": "Quota %",
                         "index": 2
                       }
                     }
@@ -846,7 +846,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "余额"
+              "options": "Balance"
             },
             "properties": [
               {
@@ -858,7 +858,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "阈值"
+              "options": "threshold"
             },
             "properties": [
               {
@@ -870,7 +870,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "余额比例"
+              "options": "BalanceRatio"
             },
             "properties": [
               {
@@ -908,7 +908,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "状态"
+              "options": "Status"
             },
             "properties": [
               {
@@ -918,12 +918,12 @@
                     "type": "value",
                     "options": {
                       "0": {
-                        "text": "❌ 告警",
+                        "text": "❌ Alert",
                         "index": 0,
                         "color": "red"
                       },
                       "1": {
-                        "text": "✅ 正常",
+                        "text": "✅ Healthy",
                         "index": 1,
                         "color": "green"
                       }
@@ -942,7 +942,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "检查"
+              "options": "Check"
             },
             "properties": [
               {
@@ -952,12 +952,12 @@
                     "type": "value",
                     "options": {
                       "0": {
-                        "text": "❌ 失败",
+                        "text": "❌ Failed",
                         "index": 0,
                         "color": "red"
                       },
                       "1": {
-                        "text": "✅ 成功",
+                        "text": "✅ Successful",
                         "index": 1,
                         "color": "green"
                       }
@@ -996,7 +996,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "余额比例"
+            "displayName": "BalanceRatio"
           }
         ]
       },
@@ -1008,7 +1008,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_balance{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_balance{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
           "refId": "A",
           "range": false,
@@ -1022,7 +1022,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_threshold{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_threshold{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
           "refId": "B",
           "range": false,
@@ -1036,7 +1036,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_ratio{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_ratio{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
           "refId": "C",
           "range": false,
@@ -1050,7 +1050,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_status{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_status{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
           "refId": "D",
           "range": false,
@@ -1064,7 +1064,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_check_status{project=~\"$project\", type=~\"$type\"}",
+          "expr": "quotapulse_check_status{project=~\"$project\", type=~\"$type\"}",
           "legendFormat": "__auto",
           "refId": "E",
           "range": false,
@@ -1073,7 +1073,7 @@
           "exemplar": false
         }
       ],
-      "title": "项目余额详情表",
+      "title": "Project balancesdetails table",
       "transformations": [
         {
           "id": "merge",
@@ -1101,20 +1101,20 @@
               "Value #E": 7
             },
             "renameByName": {
-              "project": "项目",
-              "provider": "服务商",
-              "type": "类型",
-              "Value #A": "余额",
-              "Value #B": "阈值",
-              "Value #C": "余额比例",
-              "Value #D": "状态",
-              "Value #E": "检查"
+              "project": "Project",
+              "provider": "Provider",
+              "type": "Type",
+              "Value #A": "Balance",
+              "Value #B": "threshold",
+              "Value #C": "BalanceRatio",
+              "Value #D": "Status",
+              "Value #E": "Check"
             }
           }
         }
       ],
       "type": "table",
-      "description": "余额比例按低到高排序；余额列是原始数值，单位随类型不同"
+      "description": "Balance ratio sorted low to high; raw balance units vary by type"
     },
     {
       "collapsed": false,
@@ -1126,7 +1126,7 @@
       },
       "id": 13,
       "panels": [],
-      "title": "订阅续费",
+      "title": "Subscription renewal",
       "type": "row"
     },
     {
@@ -1190,13 +1190,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sort(balance_alert_subscription_days{name=~\"$subscription\"})",
+          "expr": "sort(quotapulse_subscription_days{name=~\"$subscription\"})",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "订阅续费倒计时（天）",
+      "title": "Subscription renewal countdown (days)",
       "type": "stat"
     },
     {
@@ -1222,17 +1222,17 @@
                 "-1": {
                   "color": "blue",
                   "index": 2,
-                  "text": "🔵 已续费"
+                  "text": "🔵 Already renewal"
                 },
                 "0": {
                   "color": "red",
                   "index": 0,
-                  "text": "🔴 需续费"
+                  "text": "🔴 Renewal due"
                 },
                 "1": {
                   "color": "green",
                   "index": 1,
-                  "text": "🟢 正常"
+                  "text": "🟢 Healthy"
                 }
               },
               "type": "value"
@@ -1252,7 +1252,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "剩余天数"
+              "options": "Days remaining"
             },
             "properties": [
               {
@@ -1290,7 +1290,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "续费金额"
+              "options": "Renewal amount"
             },
             "properties": [
               {
@@ -1324,7 +1324,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "剩余天数"
+            "displayName": "Days remaining"
           }
         ]
       },
@@ -1337,7 +1337,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "balance_alert_subscription_days{name=~\"$subscription\"}",
+          "expr": "quotapulse_subscription_days{name=~\"$subscription\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1351,7 +1351,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "balance_alert_subscription_amount{name=~\"$subscription\"}",
+          "expr": "quotapulse_subscription_amount{name=~\"$subscription\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1366,7 +1366,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "balance_alert_subscription_status{name=~\"$subscription\"}",
+          "expr": "quotapulse_subscription_status{name=~\"$subscription\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1375,7 +1375,7 @@
           "refId": "C"
         }
       ],
-      "title": "订阅状态详情表",
+      "title": "Subscription statusdetails table",
       "transformations": [
         {
           "id": "merge",
@@ -1401,12 +1401,12 @@
               "name": 0
             },
             "renameByName": {
-              "Value #A": "剩余天数",
-              "Value #B": "续费金额",
-              "Value #C": "状态",
-              "currency": "货币",
-              "cycle_type": "周期",
-              "name": "订阅名称"
+              "Value #A": "Days remaining",
+              "Value #B": "Renewal amount",
+              "Value #C": "Status",
+              "currency": "Currency",
+              "cycle_type": "Cycle",
+              "name": "Subscriptionname"
             }
           }
         }
@@ -1423,7 +1423,7 @@
       },
       "id": 16,
       "panels": [],
-      "title": "邮箱扫描",
+      "title": "Mailbox scanning",
       "type": "row"
     },
     {
@@ -1478,14 +1478,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_email_mailbox_status) or vector(0)",
-          "legendFormat": "邮箱数",
+          "expr": "count(quotapulse_email_mailbox_status) or vector(0)",
+          "legendFormat": "Mailbox count",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "邮箱数",
+      "title": "Mailbox count",
       "type": "stat"
     },
     {
@@ -1544,16 +1544,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_email_mailbox_status == 0) or vector(0)",
-          "legendFormat": "连接失败",
+          "expr": "count(quotapulse_email_mailbox_status == 0) or vector(0)",
+          "legendFormat": "Connection failed",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "连接失败邮箱",
+      "title": "Connection failedMailbox",
       "type": "stat",
-      "description": "上次扫描时 IMAP 登录或读取失败的邮箱数"
+      "description": "Mailboxes whose IMAP login or read failed during the last scan"
     },
     {
       "datasource": {
@@ -1611,14 +1611,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(balance_alert_email_last_scan_alerts) or vector(0)",
-          "legendFormat": "命中",
+          "expr": "sum(quotapulse_email_last_scan_alerts) or vector(0)",
+          "legendFormat": "Matches",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "上次扫描命中告警邮件",
+      "title": "Alert emails matched in the last scan",
       "type": "stat"
     },
     {
@@ -1674,14 +1674,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_last_check_timestamp{check_type=\"email\"} * 1000",
-          "legendFormat": "上次邮箱扫描",
+          "expr": "quotapulse_last_check_timestamp{check_type=\"email\"} * 1000",
+          "legendFormat": "LastMailbox scanning",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "上次邮箱扫描",
+      "title": "LastMailbox scanning",
       "type": "stat"
     },
     {
@@ -1716,7 +1716,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "状态"
+              "options": "Status"
             },
             "properties": [
               {
@@ -1726,12 +1726,12 @@
                     "type": "value",
                     "options": {
                       "0": {
-                        "text": "❌ 连接失败",
+                        "text": "❌ Connection failed",
                         "index": 0,
                         "color": "red"
                       },
                       "1": {
-                        "text": "✅ 正常",
+                        "text": "✅ Healthy",
                         "index": 1,
                         "color": "green"
                       }
@@ -1750,7 +1750,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "上次命中"
+              "options": "Matches in last scan"
             },
             "properties": [
               {
@@ -1800,7 +1800,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "状态"
+            "displayName": "Status"
           }
         ]
       },
@@ -1812,7 +1812,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_email_mailbox_status{mailbox=~\"$mailbox\"}",
+          "expr": "quotapulse_email_mailbox_status{mailbox=~\"$mailbox\"}",
           "legendFormat": "__auto",
           "refId": "A",
           "range": false,
@@ -1826,7 +1826,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_email_last_scan_emails{mailbox=~\"$mailbox\"}",
+          "expr": "quotapulse_email_last_scan_emails{mailbox=~\"$mailbox\"}",
           "legendFormat": "__auto",
           "refId": "B",
           "range": false,
@@ -1840,7 +1840,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_email_last_scan_alerts{mailbox=~\"$mailbox\"}",
+          "expr": "quotapulse_email_last_scan_alerts{mailbox=~\"$mailbox\"}",
           "legendFormat": "__auto",
           "refId": "C",
           "range": false,
@@ -1854,7 +1854,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_email_alerts_total{mailbox=~\"$mailbox\"}",
+          "expr": "quotapulse_email_alerts_total{mailbox=~\"$mailbox\"}",
           "legendFormat": "__auto",
           "refId": "D",
           "range": false,
@@ -1863,7 +1863,7 @@
           "exemplar": false
         }
       ],
-      "title": "邮箱扫描明细",
+      "title": "Mailbox scan details",
       "transformations": [
         {
           "id": "merge",
@@ -1888,17 +1888,17 @@
               "Value #D": 4
             },
             "renameByName": {
-              "mailbox": "邮箱",
-              "Value #A": "状态",
-              "Value #B": "上次扫描邮件数",
-              "Value #C": "上次命中",
-              "Value #D": "累计命中"
+              "mailbox": "Mailbox",
+              "Value #A": "Status",
+              "Value #B": "Emails in last scan",
+              "Value #C": "Matches in last scan",
+              "Value #D": "Cumulative matches"
             }
           }
         }
       ],
       "type": "table",
-      "description": "累计命中是进程启动以来的计数，服务重启会归零"
+      "description": "Cumulative matches since process start; reset on service restart"
     },
     {
       "datasource": {
@@ -1985,16 +1985,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(balance_alert_email_alerts_total{mailbox=~\"$mailbox\"}[1d])",
+          "expr": "increase(quotapulse_email_alerts_total{mailbox=~\"$mailbox\"}[1d])",
           "legendFormat": "{{mailbox}}",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "每日命中的告警邮件",
+      "title": "Daily alert emails matched",
       "type": "timeseries",
-      "description": "按邮箱统计每天新发现的欠费 / 续费类邮件数"
+      "description": "New billing or renewal emails found per mailbox each day"
     },
     {
       "collapsed": false,
@@ -2006,7 +2006,7 @@
       },
       "id": 23,
       "panels": [],
-      "title": "定时任务与通知",
+      "title": "Scheduled jobs and notifications",
       "type": "row"
     },
     {
@@ -2065,16 +2065,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(balance_alert_job_last_status == 0) or vector(0)",
-          "legendFormat": "失败任务",
+          "expr": "count(quotapulse_job_last_status == 0) or vector(0)",
+          "legendFormat": "FailedTask",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "上次运行失败的任务",
+      "title": "Jobs that failed on their last run",
       "type": "stat",
-      "description": "dashboard_refresh / alert_check / email_scan 里上次运行失败的个数，非 0 时 /health 返回 503"
+      "description": "Failed last runs across dashboard_refresh, alert_check, and email_scan; /health returns 503 when nonzero"
     },
     {
       "datasource": {
@@ -2128,16 +2128,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(balance_alert_notifications_total{status=\"success\"}[24h])) or vector(0)",
-          "legendFormat": "已发送",
+          "expr": "sum(increase(quotapulse_notifications_total{status=\"success\"}[24h])) or vector(0)",
+          "legendFormat": "Already Send",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "24h 通知发送",
+      "title": "Notifications sent in the last 24 hours",
       "type": "stat",
-      "description": "最近 24 小时成功发出的 Webhook 通知数（余额 / 订阅 / 邮件）"
+      "description": "Successful Webhook notifications in the last 24 hours"
     },
     {
       "datasource": {
@@ -2195,14 +2195,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(balance_alert_notifications_total{status=\"failed\"}[24h])) or vector(0)",
-          "legendFormat": "发送失败",
+          "expr": "sum(increase(quotapulse_notifications_total{status=\"failed\"}[24h])) or vector(0)",
+          "legendFormat": "SendFailed",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "24h 通知失败",
+      "title": "Notifications failed in the last 24 hours",
       "type": "stat"
     },
     {
@@ -2258,16 +2258,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_job_last_success_timestamp{task=\"alert_check\"} * 1000",
+          "expr": "quotapulse_job_last_success_timestamp{task=\"alert_check\"} * 1000",
           "legendFormat": "alert_check",
           "refId": "A",
           "range": true,
           "instant": false
         }
       ],
-      "title": "上次告警检查成功",
+      "title": "Last successful alert check",
       "type": "stat",
-      "description": "alert_check 任务最近一次成功运行的时间，默认每天 09:00 / 15:00"
+      "description": "Last successful alert_check run; defaults to 09:00 / 15:00 daily"
     },
     {
       "datasource": {
@@ -2301,7 +2301,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "状态"
+              "options": "Status"
             },
             "properties": [
               {
@@ -2311,12 +2311,12 @@
                     "type": "value",
                     "options": {
                       "0": {
-                        "text": "❌ 失败",
+                        "text": "❌ Failed",
                         "index": 0,
                         "color": "red"
                       },
                       "1": {
-                        "text": "✅ 成功",
+                        "text": "✅ Successful",
                         "index": 1,
                         "color": "green"
                       }
@@ -2335,7 +2335,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "上次运行"
+              "options": "Last run"
             },
             "properties": [
               {
@@ -2347,7 +2347,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "上次成功"
+              "options": "Last successful"
             },
             "properties": [
               {
@@ -2359,7 +2359,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "耗时"
+              "options": "Duration"
             },
             "properties": [
               {
@@ -2375,7 +2375,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "累计失败"
+              "options": "Cumulative failures"
             },
             "properties": [
               {
@@ -2425,7 +2425,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "任务"
+            "displayName": "Task"
           }
         ]
       },
@@ -2437,7 +2437,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_job_last_status",
+          "expr": "quotapulse_job_last_status",
           "legendFormat": "__auto",
           "refId": "A",
           "range": false,
@@ -2451,7 +2451,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_job_last_run_timestamp * 1000",
+          "expr": "quotapulse_job_last_run_timestamp * 1000",
           "legendFormat": "__auto",
           "refId": "B",
           "range": false,
@@ -2465,7 +2465,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_job_last_success_timestamp * 1000",
+          "expr": "quotapulse_job_last_success_timestamp * 1000",
           "legendFormat": "__auto",
           "refId": "C",
           "range": false,
@@ -2479,7 +2479,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "balance_alert_job_last_duration_seconds",
+          "expr": "quotapulse_job_last_duration_seconds",
           "legendFormat": "__auto",
           "refId": "D",
           "range": false,
@@ -2493,7 +2493,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (task) (balance_alert_job_runs_total{status=\"failed\"})",
+          "expr": "sum by (task) (quotapulse_job_runs_total{status=\"failed\"})",
           "legendFormat": "__auto",
           "refId": "E",
           "range": false,
@@ -2502,7 +2502,7 @@
           "exemplar": false
         }
       ],
-      "title": "定时任务状态",
+      "title": "Scheduled job status",
       "transformations": [
         {
           "id": "merge",
@@ -2528,18 +2528,18 @@
               "Value #E": 5
             },
             "renameByName": {
-              "task": "任务",
-              "Value #A": "状态",
-              "Value #B": "上次运行",
-              "Value #C": "上次成功",
-              "Value #D": "耗时",
-              "Value #E": "累计失败"
+              "task": "Task",
+              "Value #A": "Status",
+              "Value #B": "Last run",
+              "Value #C": "Last successful",
+              "Value #D": "Duration",
+              "Value #E": "Cumulative failures"
             }
           }
         }
       ],
       "type": "table",
-      "description": "三个进程内定时任务的运行情况；累计失败为进程启动以来的次数"
+      "description": "Run status for the three in-process scheduled jobs; cumulative failures since process start"
     },
     {
       "datasource": {
@@ -2625,8 +2625,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (kind) (increase(balance_alert_notifications_total{status=\"success\"}[1h]))",
-          "legendFormat": "{{kind}} 成功",
+          "expr": "sum by (kind) (increase(quotapulse_notifications_total{status=\"success\"}[1h]))",
+          "legendFormat": "{{kind}} Successful",
           "refId": "A",
           "range": true,
           "instant": false
@@ -2637,16 +2637,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (kind) (increase(balance_alert_notifications_total{status=\"failed\"}[1h]))",
-          "legendFormat": "{{kind}} 失败",
+          "expr": "sum by (kind) (increase(quotapulse_notifications_total{status=\"failed\"}[1h]))",
+          "legendFormat": "{{kind}} Failed",
           "refId": "B",
           "range": true,
           "instant": false
         }
       ],
-      "title": "通知发送（按类型，每小时）",
+      "title": "Notifications by type (hourly)",
       "type": "timeseries",
-      "description": "kind：balance 余额 / subscription 订阅 / email 告警邮件 / mailbox_error 邮箱连接失败"
+      "description": "Kinds: balance alert / subscription renewal / email alert / mailbox connection failure"
     }
   ],
   "refresh": "1m",
@@ -2675,15 +2675,15 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(balance_alert_balance, project)",
+        "definition": "label_values(quotapulse_balance, project)",
         "hide": 0,
         "includeAll": true,
-        "label": "项目",
+        "label": "Project",
         "multi": true,
         "name": "project",
         "options": [],
         "query": {
-          "query": "label_values(balance_alert_balance, project)",
+          "query": "label_values(quotapulse_balance, project)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2706,15 +2706,15 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(balance_alert_balance, type)",
+        "definition": "label_values(quotapulse_balance, type)",
         "hide": 0,
         "includeAll": true,
-        "label": "类型",
+        "label": "Type",
         "multi": true,
         "name": "type",
         "options": [],
         "query": {
-          "query": "label_values(balance_alert_balance, type)",
+          "query": "label_values(quotapulse_balance, type)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2737,15 +2737,15 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(balance_alert_subscription_days, name)",
+        "definition": "label_values(quotapulse_subscription_days, name)",
         "hide": 0,
         "includeAll": true,
-        "label": "订阅",
+        "label": "Subscription",
         "multi": true,
         "name": "subscription",
         "options": [],
         "query": {
-          "query": "label_values(balance_alert_subscription_days, name)",
+          "query": "label_values(quotapulse_subscription_days, name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2768,15 +2768,15 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(balance_alert_email_mailbox_status, mailbox)",
+        "definition": "label_values(quotapulse_email_mailbox_status, mailbox)",
         "hide": 0,
         "includeAll": true,
-        "label": "邮箱",
+        "label": "Mailbox",
         "multi": true,
         "name": "mailbox",
         "options": [],
         "query": {
-          "query": "label_values(balance_alert_email_mailbox_status, mailbox)",
+          "query": "label_values(quotapulse_email_mailbox_status, mailbox)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2793,8 +2793,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "余额监控 Dashboard",
-  "uid": "balance-alert",
+  "title": "QuotaPulse monitoring dashboard",
+  "uid": "quotapulse",
   "version": 3,
   "weekStart": ""
 }

@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-// 下面每一段期望报文都是飞书 / 自定义 / 钉钉 / 企业微信这四个平台的对外契约，
-// 按各平台文档规定的报文格式逐字节钉死。改动本包时它们只有一个作用：
-// 拦住"顺手优化"的格式改动——报文错了的表现是群里干脆收不到，或者收到一段没人看得懂的东西。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 
-// 自定义报文里带时间戳，钉死时钟才能逐字节比对。
+// Implementation note.
 var pinnedNow = time.Date(2026, 9, 16, 23, 50, 26, 26504000, time.Local)
 
 type payloadCase struct {
@@ -28,62 +28,62 @@ func payloadCases() []payloadCase {
 	owner := "核心业务"
 	rich := []string{
 		"**账户**: TestProject",
-		"**所属项目**: 核心业务",
-		"**服务商**: OpenRouter",
-		"**当前余额**: 1,234.50",
+		"**Owner project**: 核心业务",
+		"**Provider**: OpenRouter",
+		"**Current balance**: 1,234.50",
 		"**日均消耗**: 120.00（最近 7 天）",
 	}
 
 	return []payloadCase{
 		{
-			name: "余额告警_带所属项目与货币符号",
-			msg:  balanceAlert("TestProject", &owner, "OpenRouter", "余额", 1234.5, 10000.0, "¥"),
+			name: "Balance alert_带Owner project与货币符号",
+			msg:  balanceAlert("TestProject", &owner, "OpenRouter", "balance", 1234.5, 10000.0, "¥"),
 			want: map[string]string{
-				TypeFeishu:   `{"msg_type":"text","content":{"text":"【余额告警】\n\nAPI 调用: TestProject\n所属项目: 核心业务\n服务商: OpenRouter\n当前余额: ¥1,234.50\n告警阈值: ¥10,000.00\n状态: ⚠️ 余额不足\n来源: credit-monitor"}}`,
-				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"余额告警","text":"## 余额告警\n\n- **API 调用**: TestProject\n- **所属项目**: 核心业务\n- **服务商**: OpenRouter\n- **当前余额**: ¥1,234.50\n- **告警阈值**: ¥10,000.00\n- **状态**: ⚠️ 余额不足"}}`,
-				TypeWeCom:    `{"msgtype":"text","text":{"content":"【余额告警】\nAPI 调用: TestProject\n所属项目: 核心业务\n服务商: OpenRouter\n当前余额: ¥1,234.50\n告警阈值: ¥10,000.00\n状态: ⚠️ 余额不足"}}`,
-				TypeCustom:   `{"Type":"AlarmNotification","RuleName":"TestProject余额告警","Level":"critical","Resources":[{"ProjectName":"TestProject","OwnerProject":"核心业务","Provider":"OpenRouter","BalanceType":"余额","CurrentValue":1234.5,"Threshold":10000.0,"Unit":"¥","Message":"项目 [TestProject] 余额不足，当前: ¥1,234.50，阈值: ¥10,000.00"}]}`,
+				TypeFeishu:   `{"msg_type":"text","content":{"text":"[Balance alert]\n\nAPI call: TestProject\nOwner project: 核心业务\nProvider: OpenRouter\nCurrent balance: ¥1,234.50\nAlert threshold: ¥10,000.00\nStatus: ⚠️ balance insufficient\nSource: credit-monitor"}}`,
+				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"Balance alert","text":"## Balance alert\n\n- **API call**: TestProject\n- **Owner project**: 核心业务\n- **Provider**: OpenRouter\n- **Current balance**: ¥1,234.50\n- **Alert threshold**: ¥10,000.00\n- **Status**: ⚠️ balance insufficient"}}`,
+				TypeWeCom:    `{"msgtype":"text","text":{"content":"[Balance alert]\nAPI call: TestProject\nOwner project: 核心业务\nProvider: OpenRouter\nCurrent balance: ¥1,234.50\nAlert threshold: ¥10,000.00\nStatus: ⚠️ balance insufficient"}}`,
+				TypeCustom:   `{"Type":"AlarmNotification","RuleName":"TestProject balance alert","Level":"critical","Resources":[{"ProjectName":"TestProject","OwnerProject":"核心业务","Provider":"OpenRouter","BalanceType":"balance","CurrentValue":1234.5,"Threshold":10000.0,"Unit":"¥","Message":"Project [TestProject] has insufficient balance; current: ¥1,234.50, threshold: ¥10,000.00"}]}`,
 			},
 		},
 		{
-			name: "余额告警_无所属项目且余额类型是点数",
-			msg:  balanceAlert("P", nil, "OpenRouter", "点数", 5.0, 10.0, ""),
+			name: "Balance alert_无Owner project且balance类型是credits",
+			msg:  balanceAlert("P", nil, "OpenRouter", "credits", 5.0, 10.0, ""),
 			want: map[string]string{
-				TypeFeishu:   `{"msg_type":"text","content":{"text":"【余额告警】\n\nAPI 调用: P\n服务商: OpenRouter\n当前点数: 5.00\n告警阈值: 10.00\n状态: ⚠️ 点数不足\n来源: credit-monitor"}}`,
-				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"余额告警","text":"## 余额告警\n\n- **API 调用**: P\n- **服务商**: OpenRouter\n- **当前点数**: 5.00\n- **告警阈值**: 10.00\n- **状态**: ⚠️ 点数不足"}}`,
-				TypeWeCom:    `{"msgtype":"text","text":{"content":"【余额告警】\nAPI 调用: P\n服务商: OpenRouter\n当前点数: 5.00\n告警阈值: 10.00\n状态: ⚠️ 点数不足"}}`,
-				TypeCustom:   `{"Type":"AlarmNotification","RuleName":"P点数告警","Level":"critical","Resources":[{"ProjectName":"P","OwnerProject":null,"Provider":"OpenRouter","BalanceType":"点数","CurrentValue":5.0,"Threshold":10.0,"Unit":"","Message":"项目 [P] 点数不足，当前: 5.00，阈值: 10.00"}]}`,
+				TypeFeishu:   `{"msg_type":"text","content":{"text":"[Balance alert]\n\nAPI call: P\nProvider: OpenRouter\nCurrent credits: 5.00\nAlert threshold: 10.00\nStatus: ⚠️ credits insufficient\nSource: credit-monitor"}}`,
+				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"Balance alert","text":"## Balance alert\n\n- **API call**: P\n- **Provider**: OpenRouter\n- **Current credits**: 5.00\n- **Alert threshold**: 10.00\n- **Status**: ⚠️ credits insufficient"}}`,
+				TypeWeCom:    `{"msgtype":"text","text":{"content":"[Balance alert]\nAPI call: P\nProvider: OpenRouter\nCurrent credits: 5.00\nAlert threshold: 10.00\nStatus: ⚠️ credits insufficient"}}`,
+				TypeCustom:   `{"Type":"AlarmNotification","RuleName":"P balance alert","Level":"critical","Resources":[{"ProjectName":"P","OwnerProject":null,"Provider":"OpenRouter","BalanceType":"credits","CurrentValue":5.0,"Threshold":10.0,"Unit":"","Message":"Project [P] has insufficient credits; current: 5.00, threshold: 10.00"}]}`,
 			},
 		},
 		{
-			name: "订阅提醒_月付还有三天",
+			name: "Subscription提醒_月付还有三天",
 			msg:  SubscriptionAlert("Netflix", &owner, "monthly", 15, 3, 15.99),
 			want: map[string]string{
-				TypeFeishu:   `{"msg_type":"text","content":{"text":"【订阅续费提醒】\n\n订阅: Netflix\n所属项目: 核心业务\n续费周期: 每月 15 号\n距离续费: 3 天后\n续费金额: 15.99\n来源: credit-monitor"}}`,
-				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"订阅续费提醒","text":"## 订阅续费提醒\n\n- **订阅**: Netflix\n- **所属项目**: 核心业务\n- **续费周期**: 每月 15 号\n- **距离续费**: 3 天后\n- **续费金额**: 15.99"}}`,
-				TypeWeCom:    `{"msgtype":"text","text":{"content":"【订阅续费提醒】\n订阅: Netflix\n所属项目: 核心业务\n续费周期: 每月 15 号\n距离续费: 3 天后\n续费金额: 15.99"}}`,
-				TypeCustom:   `{"Type":"SubscriptionReminder","RuleName":"Netflix续费提醒","Level":"warning","Resources":[{"SubscriptionName":"Netflix","OwnerProject":"核心业务","RenewalDay":15,"CycleType":"monthly","DaysUntilRenewal":3,"Amount":15.99,"Message":"订阅 [Netflix] 将在 3 天后（每月 15 号）续费，金额: 15.99"}]}`,
+				TypeFeishu:   `{"msg_type":"text","content":{"text":"[Subscription renewal reminder]\n\nSubscription: Netflix\nOwner project: 核心业务\nRenewal cycle: Monthly on day 15\nTime until renewal: In 3 days\nRenewal amount: 15.99\nSource: credit-monitor"}}`,
+				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"Subscription renewal reminder","text":"## Subscription renewal reminder\n\n- **Subscription**: Netflix\n- **Owner project**: 核心业务\n- **Renewal cycle**: Monthly on day 15\n- **Time until renewal**: In 3 days\n- **Renewal amount**: 15.99"}}`,
+				TypeWeCom:    `{"msgtype":"text","text":{"content":"[Subscription renewal reminder]\nSubscription: Netflix\nOwner project: 核心业务\nRenewal cycle: Monthly on day 15\nTime until renewal: In 3 days\nRenewal amount: 15.99"}}`,
+				TypeCustom:   `{"Type":"SubscriptionReminder","RuleName":"Netflix renewal reminder","Level":"warning","Resources":[{"SubscriptionName":"Netflix","OwnerProject":"核心业务","RenewalDay":15,"CycleType":"monthly","DaysUntilRenewal":3,"Amount":15.99,"Message":"Subscription [Netflix] renews in 3 days (Monthly on day 15), amount: 15.99"}]}`,
 			},
 		},
 		{
-			name: "订阅提醒_年付今天到期",
+			name: "Subscription提醒_年付Today到期",
 			msg:  SubscriptionAlert("ChatGPT", nil, "yearly", 315, 0, 20.0),
 			want: map[string]string{
-				TypeFeishu:   `{"msg_type":"text","content":{"text":"【订阅续费提醒】\n\n订阅: ChatGPT\n续费周期: 每年 3月15日\n距离续费: 今天\n续费金额: 20.0\n来源: credit-monitor"}}`,
-				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"订阅续费提醒","text":"## 订阅续费提醒\n\n- **订阅**: ChatGPT\n- **续费周期**: 每年 3月15日\n- **距离续费**: 今天\n- **续费金额**: 20.0"}}`,
-				TypeWeCom:    `{"msgtype":"text","text":{"content":"【订阅续费提醒】\n订阅: ChatGPT\n续费周期: 每年 3月15日\n距离续费: 今天\n续费金额: 20.0"}}`,
-				TypeCustom:   `{"Type":"SubscriptionReminder","RuleName":"ChatGPT续费提醒","Level":"critical","Resources":[{"SubscriptionName":"ChatGPT","OwnerProject":null,"RenewalDay":315,"CycleType":"yearly","DaysUntilRenewal":0,"Amount":20.0,"Message":"订阅 [ChatGPT] 将在 0 天后（每年 3月15日）续费，金额: 20.0"}]}`,
+				TypeFeishu:   `{"msg_type":"text","content":{"text":"[Subscription renewal reminder]\n\nSubscription: ChatGPT\nRenewal cycle: Annually on 03-15\nTime until renewal: Today\nRenewal amount: 20.0\nSource: credit-monitor"}}`,
+				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"Subscription renewal reminder","text":"## Subscription renewal reminder\n\n- **Subscription**: ChatGPT\n- **Renewal cycle**: Annually on 03-15\n- **Time until renewal**: Today\n- **Renewal amount**: 20.0"}}`,
+				TypeWeCom:    `{"msgtype":"text","text":{"content":"[Subscription renewal reminder]\nSubscription: ChatGPT\nRenewal cycle: Annually on 03-15\nTime until renewal: Today\nRenewal amount: 20.0"}}`,
+				TypeCustom:   `{"Type":"SubscriptionReminder","RuleName":"ChatGPT renewal reminder","Level":"critical","Resources":[{"SubscriptionName":"ChatGPT","OwnerProject":null,"RenewalDay":315,"CycleType":"yearly","DaysUntilRenewal":0,"Amount":20.0,"Message":"Subscription [ChatGPT] renews in 0 days (Annually on 03-15), amount: 20.0"}]}`,
 			},
 		},
 		{
 			name: "富文本告警_跑道见底",
-			msg:  Custom("余额跑道不足: TestProject", rich, KindRunway),
+			msg:  Custom("balance跑道不足: TestProject", rich, KindRunway),
 			want: map[string]string{
-				TypeFeishu:   `{"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":"余额跑道不足: TestProject"},"template":"orange"},"elements":[{"tag":"markdown","content":"**账户**: TestProject\n**所属项目**: 核心业务\n**服务商**: OpenRouter\n**当前余额**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}]}}`,
-				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"余额跑道不足: TestProject","text":"### 余额跑道不足: TestProject\n\n**账户**: TestProject\n**所属项目**: 核心业务\n**服务商**: OpenRouter\n**当前余额**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}}`,
-				TypeWeCom:    `{"msgtype":"markdown","markdown":{"content":"### 余额跑道不足: TestProject\n\n**账户**: TestProject\n**所属项目**: 核心业务\n**服务商**: OpenRouter\n**当前余额**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}}`,
-				// 时间戳是本地时间且无时区，取值由 pinnedNow 钉死
-				TypeCustom: `{"title":"余额跑道不足: TestProject","content":"**账户**: TestProject\n**所属项目**: 核心业务\n**服务商**: OpenRouter\n**当前余额**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）","source":"credit-monitor","timestamp":"2026-09-16T23:50:26.026504"}`,
+				TypeFeishu:   `{"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":"balance跑道不足: TestProject"},"template":"orange"},"elements":[{"tag":"markdown","content":"**账户**: TestProject\n**Owner project**: 核心业务\n**Provider**: OpenRouter\n**Current balance**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}]}}`,
+				TypeDingTalk: `{"msgtype":"markdown","markdown":{"title":"balance跑道不足: TestProject","text":"### balance跑道不足: TestProject\n\n**账户**: TestProject\n**Owner project**: 核心业务\n**Provider**: OpenRouter\n**Current balance**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}}`,
+				TypeWeCom:    `{"msgtype":"markdown","markdown":{"content":"### balance跑道不足: TestProject\n\n**账户**: TestProject\n**Owner project**: 核心业务\n**Provider**: OpenRouter\n**Current balance**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）"}}`,
+				// Implementation note.
+				TypeCustom: `{"title":"balance跑道不足: TestProject","content":"**账户**: TestProject\n**Owner project**: 核心业务\n**Provider**: OpenRouter\n**Current balance**: 1,234.50\n**日均消耗**: 120.00（最近 7 天）","source":"credit-monitor","timestamp":"2026-09-16T23:50:26.026504"}`,
 			},
 		},
 	}
@@ -97,8 +97,8 @@ func TestSendPayloadMatchesContract(t *testing.T) {
 				want := tc.want[typ]
 
 				if typ == TypeCustom && tc.msg.envelope != nil {
-					// 信封里有原始数值，10000 和 10000.0 是同一个数，逐字节比会误报；
-					// 改成按 token 流比——字段顺序变了照样能查出来。
+					// Implementation note.
+					// Implementation note.
 					assertSameJSON(t, want, got)
 					return
 				}
@@ -110,26 +110,26 @@ func TestSendPayloadMatchesContract(t *testing.T) {
 	}
 }
 
-// 邮件类告警走富文本那条路，这里只钉飞书卡片，其余平台由上面的用例覆盖。
+// Implementation note.
 func TestSendEmailPayload(t *testing.T) {
 	service := "OpenAI"
 	amount := 20.0
-	msg := EmailAlert("财务邮箱", "Your receipt from OpenAI", "billing@openai.com",
+	msg := EmailAlert("财务Mailbox", "Your receipt from OpenAI", "billing@openai.com",
 		"2026-09-16 10:00:00", []string{"invoice", "续费"}, &service, &amount)
 
 	got, _ := sendCaptured(t, TypeFeishu, msg)
-	want := `{"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":"📧 邮件告警: Your receipt from OpenAI"},"template":"orange"},"elements":[{"tag":"markdown","content":"**邮箱**: 财务邮箱\n**发件人**: billing@openai.com\n**日期**: 2026-09-16 10:00:00\n**服务**: OpenAI\n**金额**: 20.0\n**关键词**: invoice, 续费"}]}}`
+	want := `{"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":"📧 Email alert: Your receipt from OpenAI"},"template":"orange"},"elements":[{"tag":"markdown","content":"**Mailbox**: 财务Mailbox\n**Sender**: billing@openai.com\n**Date**: 2026-09-16 10:00:00\n**Service**: OpenAI\n**Amount**: 20.0\n**Keywords**: invoice, 续费"}]}}`
 	if got != want {
-		t.Errorf("邮件告警报文不一致\n期望: %s\n实际: %s", want, got)
+		t.Errorf("Email alert报文不一致\n期望: %s\n实际: %s", want, got)
 	}
 }
 
-// 自己拼的 Message 带不出结构化字段，custom 类型要能退回通用报文而不是发个空信封。
+// Implementation note.
 func TestSendCustomFallsBackWithoutEnvelope(t *testing.T) {
-	msg := Message{Title: "余额告警", Lines: []string{"API 调用: P"}, Kind: KindBalance}
+	msg := Message{Title: "Balance alert", Lines: []string{"API call: P"}, Kind: KindBalance}
 
 	got, _ := sendCaptured(t, TypeCustom, msg)
-	want := `{"title":"余额告警","content":"API 调用: P","source":"credit-monitor","timestamp":"2026-09-16T23:50:26.026504"}`
+	want := `{"title":"Balance alert","content":"API call: P","source":"credit-monitor","timestamp":"2026-09-16T23:50:26.026504"}`
 	if got != want {
 		t.Errorf("退化报文不一致\n期望: %s\n实际: %s", want, got)
 	}
@@ -138,11 +138,11 @@ func TestSendCustomFallsBackWithoutEnvelope(t *testing.T) {
 func TestSendSetsJSONContentType(t *testing.T) {
 	_, header := sendCaptured(t, TypeFeishu, Custom("标题", []string{"**字段**: 值"}, KindWeeklyReport))
 	if got := header.Get("Content-Type"); got != "application/json" {
-		t.Errorf("Content-Type = %q，期望 application/json", got)
+		t.Errorf("Content-Type = %q; 期望 application/json", got)
 	}
 }
 
-// sendCaptured 起一个假的机器人端点，返回实际发出的报文和请求头。
+// Implementation note.
 func sendCaptured(t *testing.T, webhookType string, msg Message) (string, http.Header) {
 	t.Helper()
 
@@ -167,8 +167,8 @@ func sendCaptured(t *testing.T, webhookType string, msg Message) (string, http.H
 	return string(body), header
 }
 
-// assertSameJSON 按 token 流比较两段 JSON：层级、字段顺序、取值都要一致，
-// 只有数字按数值比——10000 和 10000.0 是同一个数，不该算差异。
+// Implementation note.
+// Implementation note.
 func assertSameJSON(t *testing.T, want, got string) {
 	t.Helper()
 
@@ -178,7 +178,7 @@ func assertSameJSON(t *testing.T, want, got string) {
 	}
 	for i := range wantTokens {
 		if !sameToken(wantTokens[i], gotTokens[i]) {
-			t.Fatalf("第 %d 个 token 不一致: 期望 %v，实际 %v\n期望报文: %s\n实际报文: %s",
+			t.Fatalf("第 %d 个 token 不一致: 期望 %v; 实际 %v\n期望报文: %s\n实际报文: %s",
 				i, wantTokens[i], gotTokens[i], want, got)
 		}
 	}

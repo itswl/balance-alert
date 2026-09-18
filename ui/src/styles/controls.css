@@ -1,4 +1,4 @@
-/* ==================== 按钮 ==================== */
+/* ==================== layout ==================== */
 .btn-primary,
 .btn-secondary {
     display: inline-flex;
@@ -46,7 +46,7 @@
     background: var(--surface-muted);
 }
 
-/* ==================== 加载与提示 ==================== */
+/* ==================== layout ==================== */
 .loading-overlay {
     position: fixed;
     inset: 0;
@@ -122,7 +122,7 @@
 .toast.warning { border-left-color: var(--warning); }
 .toast.info { border-left-color: var(--info); }
 
-/* ==================== 空状态 ==================== */
+/* ==================== layout ==================== */
 .empty-state {
     text-align: center;
     padding: 48px 24px;

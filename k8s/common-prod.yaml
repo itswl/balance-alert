@@ -1,13 +1,13 @@
-# 生产部署清单（namespace: common-prod）
+# Implementation note.
 #
-# apply 前需替换两个占位符：
-#   YOUR_REGISTRY  镜像仓库地址，如 registry.<region>.aliyuncs.com/<namespace>
-#   YOUR_DOMAIN    对外域名，Ingress host 与 TLS Secret 名各出现一次
+# Implementation note.
+# Implementation note.
+# Implementation note.
 #
-# 并确认 .env 含 WEB_API_KEY、DATABASE_URL 以及数据库里 project_config
-# 各行用到的 provider 凭证，然后创建 Secret：
+# Implementation note.
+# Implementation note.
 #
-# kubectl create secret generic balance-alert-secret \
+# kubectl create secret generic quotapulse-secret \
 #   --from-env-file=.env \
 #   -n common-prod \
 #   --dry-run=client -o yaml | kubectl apply -f -
@@ -15,29 +15,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: balance-alert
+  name: quotapulse
   namespace: common-prod
   labels:
-    app: balance-alert
+    app: quotapulse
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: balance-alert
+      app: quotapulse
   template:
     metadata:
       labels:
-        app: balance-alert
+        app: quotapulse
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9100"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: balance-alert
-          image: YOUR_REGISTRY/balance-alert
+        - name: quotapulse
+          image: YOUR_REGISTRY/quotapulse
           imagePullPolicy: Always
           ports:
             - name: web
@@ -58,30 +58,30 @@ spec:
               value: "true"
             - name: BALANCE_REFRESH_INTERVAL_SECONDS
               value: "3600"
-            # 进程内定时任务（按 TZ 时区）：真实告警检查与邮箱扫描时刻
+            # Implementation note.
             - name: ALERT_SCHEDULE
               value: "09:00,15:00"
             - name: EMAIL_SCAN_SCHEDULE
               value: "10:00"
-            # 有 prometheus.io/scrape 注解就得把指标端口真正开起来
+            # Implementation note.
             - name: ENABLE_PROMETHEUS
               value: "true"
             - name: MAX_CONCURRENT_CHECKS
               value: "5"
-            # 收到 SIGTERM 后先继续服务 15 秒，等 endpoint 摘干净。
-            # 镜像基于 scratch，没有 shell 可以用 preStop sleep，这件事由程序自己做。
+            # Implementation note.
+            # Implementation note.
             - name: SHUTDOWN_DELAY_SECONDS
               value: "15"
             - name: WEB_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: balance-alert-secret
+                  name: quotapulse-secret
                   key: WEB_API_KEY
                   optional: false
 
           envFrom:
             - secretRef:
-                name: balance-alert-secret
+                name: quotapulse-secret
                 optional: false
 
           volumeMounts:
@@ -135,10 +135,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: balance-alert
+  name: quotapulse
   namespace: common-prod
   labels:
-    app: balance-alert
+    app: quotapulse
 spec:
   type: ClusterIP
   ports:
@@ -151,12 +151,12 @@ spec:
       targetPort: metrics
       protocol: TCP
   selector:
-    app: balance-alert
+    app: quotapulse
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: balance-alert
+  name: quotapulse
   namespace: common-prod
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
@@ -165,16 +165,16 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - balance-alert.YOUR_DOMAIN
-      secretName: tls-balance-alert-YOUR_DOMAIN
+        - quotapulse.YOUR_DOMAIN
+      secretName: tls-quotapulse-YOUR_DOMAIN
   rules:
-    - host: balance-alert.YOUR_DOMAIN
+    - host: quotapulse.YOUR_DOMAIN
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: balance-alert
+                name: quotapulse
                 port:
                   number: 8080

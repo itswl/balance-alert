@@ -5,11 +5,11 @@
 # This runs the full frontend → binary → scratch image pipeline and can take minutes
 # on a single-core machine, so deployment hosts use the published image by default.
 services:
-  balance-alert:
+  quotapulse:
     build:
       context: .
       args:
         # Mark local builds as local so /health distinguishes them from releases.
         VERSION: local
-    image: balance-alert:local
+    image: quotapulse:local
     pull_policy: build

@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"time"
 
-	gen "github.com/itswl/balance-alert/internal/store/sqlc/sqlite"
+	gen "github.com/itswl/quotapulse/internal/store/sqlc/sqlite"
 )
 
-// sqliteQuerier 把 sqlite 生成包接到 querier 上。
-// 三个引擎的适配文件是逐行对应的，改一个记得对着改另外两个。
+// Implementation note.
+// Implementation note.
 type sqliteQuerier struct{ q *gen.Queries }
 
 func newSQLiteQuerier(db *sql.DB) querier { return sqliteQuerier{q: gen.New(db)} }

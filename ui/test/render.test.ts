@@ -1,4 +1,4 @@
-/** 渲染函数的冒烟测试：卡片 HTML、筛选、顶部概览。跑在桩 DOM 上。 */
+/* Implementation note. */
 
 import './stub-dom.js';
 

@@ -6,11 +6,11 @@ global:
 
 scrape_configs:
   # Balance monitoring service
-  - job_name: 'balance-alert'
+  - job_name: 'quotapulse'
     static_configs:
-      - targets: ['balance-alert:9100']  # Docker Compose service and metrics port
+      - targets: ['quotapulse:9100']  # Docker Compose service and metrics port
         labels:
-          service: 'balance-alert'
+          service: 'quotapulse'
           environment: 'production'
     
     # For a local deployment, use:

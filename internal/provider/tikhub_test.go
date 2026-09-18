@@ -28,14 +28,14 @@ func TestTikHubFetch(t *testing.T) {
 			want: 1,
 		},
 		{
-			name:   "缺少 balance",
+			name:   "Missing balance",
 			body:   `{"user_data":{"name":"test"}}`,
-			errMsg: "无法从响应中解析 balance 字段",
+			errMsg: "Could not parse balance field",
 		},
 		{
 			name:   "user_data 是 null 就不再往下找",
 			body:   `{"user_data":null,"balance":20.0}`,
-			errMsg: "无法从响应中解析 balance 字段",
+			errMsg: "Could not parse balance field",
 		},
 		{
 			name:   "禁止访问",

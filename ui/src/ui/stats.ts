@@ -1,10 +1,10 @@
-/** 顶部概览数字：Total、Healthy、Alert、Shortest runway、Last update。 */
+/* Implementation note. */
 
 import { byId, setText } from '../dom.js';
 import { formatRunway, getRelativeTime } from '../format.js';
 import type { CheckResult, CreditsResponse } from '../api/types.js';
 
-/** 所有账户里最先见底的那个；没有可估算的就返回 null */
+/* Implementation note. */
 export function shortestRunway(projects: CheckResult[]): CheckResult | null {
   const ranked = projects
     .filter((p) => p.success && p.runway && p.runway.runway_days !== null && p.runway.runway_days !== undefined)
@@ -24,8 +24,8 @@ export function updateStats(data: CreditsResponse): void {
 }
 
 /**
- * 查询失败的Project既不算Healthy也不算Alert，Total对不上时得有个说法。
- * 挂在Alert卡片的标签上，不用为此多占一格。
+ * Implementation note.
+ * Implementation note.
  */
 export function updateFailedHint(projects: CheckResult[]): void {
   const label = byId('alert-projects-label');

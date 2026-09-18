@@ -3,8 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/itswl/balance-alert/internal/model"
-	_ "github.com/itswl/balance-alert/internal/provider" // 注册表要有内容，发现逻辑才有平台可枚举
+	"github.com/itswl/quotapulse/internal/model"
+	_ "github.com/itswl/quotapulse/internal/provider" // 注册表要有内容，发现逻辑才有平台可枚举
 )
 
 func TestDiscoverProjects(t *testing.T) {
@@ -159,7 +159,7 @@ func TestDiscoverMailboxes(t *testing.T) {
 		if got := DiscoverMailboxes([]model.Mailbox{{Name: "a@a.com"}}); len(got) != 0 {
 			t.Error("同名邮箱不该重复添加")
 		}
-		// 数据库里改过显示名的邮箱，靠账号也要能认出来，否则同一个收件箱会被扫两遍
+		// Implementation note.
 		if got := DiscoverMailboxes([]model.Mailbox{{Name: "别名", Username: "a@a.com"}}); len(got) != 0 {
 			t.Error("同账号不同显示名的邮箱不该重复添加")
 		}

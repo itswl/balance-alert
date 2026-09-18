@@ -1,10 +1,10 @@
-// Package runway 从余额快照里还原消耗速率，算出"还能用几天"。
+// Package runway provides the package implementation.
 //
-// 余额历史是一串快照，相邻两点之间余额下降就是消耗，上升就是充值。据此能算出日均消耗、
-// 跑道（按当前速率还能用几天），以及今天的消耗是不是比平时突然放大了。这两件事比静态阈值
-// 更早也更准：同样是 430 元，日烧 5 元和日烧 200 元完全是两回事。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 //
-// 没有数据库就没有历史，所有结果为空，调用方自然退回到纯阈值告警。
+// Implementation note.
 package runway
 
 import (
@@ -12,14 +12,14 @@ import (
 	"sort"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// 少于这些数据就不下结论：算出来的速率没有意义。
+// Implementation note.
 const (
 	MinPoints      = 4
 	MinSpanHours   = 6.0
-	MinBaselineDay = 3 // 突增判断至少要有几个完整的历史日做基线
+	MinBaselineDay = 3 // operation
 )
 
 type point struct {
@@ -27,9 +27,9 @@ type point struct {
 	balance float64
 }
 
-// Compute 从一个账户的余额快照序列算出消耗画像。
+// Implementation note.
 //
-// records 必须按时间升序；账户信息取最后一条。now 传零值时用当前时间。
+// Implementation note.
 func Compute(records []model.BalancePoint, windowDays int, now time.Time) model.Runway {
 	if now.IsZero() {
 		now = time.Now()
@@ -66,7 +66,7 @@ func Compute(records []model.BalancePoint, windowDays int, now time.Time) model.
 		return result
 	}
 
-	// 除数下限取一小时，防止极短窗口把速率放大到离谱
+	// Implementation note.
 	burn := round(result.Consumed/math.Max(result.SpanHours/24, 1.0/24), 4)
 	result.BurnPerDay = &burn
 	if burn > 0 && result.CurrentBalance != nil {
@@ -81,8 +81,8 @@ func Compute(records []model.BalancePoint, windowDays int, now time.Time) model.
 	return result
 }
 
-// validPoints 丢掉解析不出时间或余额的记录，并按时间升序。
-// 数据库里存的是 UTC，这里转成本地时间，因为"今天消耗了多少"要按用户所在时区分天。
+// Implementation note.
+// Implementation note.
 func validPoints(records []model.BalancePoint) []point {
 	points := make([]point, 0, len(records))
 	for _, r := range records {
@@ -95,7 +95,7 @@ func validPoints(records []model.BalancePoint) []point {
 	return points
 }
 
-// splitFlows 把余额序列还原成收支：下降是消耗，上升是充值；消耗同时按本地日期归集。
+// Implementation note.
 func splitFlows(points []point) (consumed, toppedUp float64, perDay map[string]float64) {
 	perDay = make(map[string]float64)
 	for i := 1; i < len(points); i++ {
@@ -112,7 +112,7 @@ func splitFlows(points []point) (consumed, toppedUp float64, perDay map[string]f
 	return round(consumed, 4), round(toppedUp, 4), perDay
 }
 
-// fillDaily 按日铺平，没有消耗的日子补 0，这样中位数才反映真实的"平时"。
+// Implementation note.
 func fillDaily(perDay map[string]float64, start, end time.Time) []model.DailySpend {
 	startDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
 	endDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
@@ -125,7 +125,7 @@ func fillDaily(perDay map[string]float64, start, end time.Time) []model.DailySpe
 	return daily
 }
 
-// spike 算今日消耗与日常水平的倍数。最后一天不是今天、或基线不足时后两项为 nil。
+// Implementation note.
 func spike(daily []model.DailySpend, today string) (todayConsumed, baseline, ratio *float64) {
 	if len(daily) == 0 || daily[len(daily)-1].Date != today {
 		return nil, nil, nil
@@ -150,7 +150,7 @@ func spike(daily []model.DailySpend, today string) (todayConsumed, baseline, rat
 	return todayConsumed, baseline, ratio
 }
 
-// confidence 数据太少或跨度太短就不下结论；跨度不足一天的结果不用于告警。
+// Implementation note.
 func confidence(points int, spanHours float64) string {
 	switch {
 	case points < MinPoints || spanHours < MinSpanHours:
@@ -164,7 +164,7 @@ func confidence(points int, spanHours float64) string {
 	}
 }
 
-// ComputeAll 把一批快照按账户分组，各算一份画像。
+// Implementation note.
 func ComputeAll(series []model.BalancePoint, windowDays int, now time.Time) map[string]model.Runway {
 	if len(series) == 0 {
 		return nil
@@ -180,7 +180,7 @@ func ComputeAll(series []model.BalancePoint, windowDays int, now time.Time) map[
 	return out
 }
 
-// Attach 把画像挂到余额检查结果上，供看板、指标和告警共用。
+// Implementation note.
 func Attach(results []model.CheckResult, runways map[string]model.Runway) {
 	if len(runways) == 0 {
 		return
@@ -208,11 +208,11 @@ func median(values []float64) float64 {
 	return (sorted[n/2-1] + sorted[n/2]) / 2
 }
 
-// round 保留 n 位小数，用银行家舍入（四舍六入五成双）：2.125 进成 2.12 而不是 2.13。
+// Implementation note.
 //
-// 不能图省事换成普通四舍五入：库里的历史记录都是按这个口径算出来的，换了口径同一批数据
-// 会算出不一样的数字，看板上的曲线会在切换那天出现台阶。差这 0.01 平时无所谓，
-// 但跑道天数正好压在告警阈值上时，它决定发不发告警。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func round(value float64, decimals int) float64 {
 	shift := math.Pow(10, float64(decimals))
 	return math.RoundToEven(value*shift) / shift

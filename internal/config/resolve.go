@@ -5,20 +5,20 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// Resolver 每次调用都重新拼出业务清单：数据库动态配置 + 环境变量自动发现。
+// Implementation note.
 //
-// 不做缓存。页面上改完配置要立刻生效，而这几张表最多几十行，读一次的代价可以忽略。
+// Implementation note.
 type Resolver struct {
 	settings *Settings
 	store    store.Store
 	log      *slog.Logger
 }
 
-// NewResolver 创建清单解析器。store 可以是 store.Null()。
+// Implementation note.
 func NewResolver(settings *Settings, st store.Store, log *slog.Logger) *Resolver {
 	if log == nil {
 		log = slog.Default()
@@ -26,9 +26,9 @@ func NewResolver(settings *Settings, st store.Store, log *slog.Logger) *Resolver
 	return &Resolver{settings: settings, store: st, log: log}
 }
 
-// Load 返回补齐字段后的三段业务清单。
+// Implementation note.
 //
-// 数据库读失败不致命：退回到"只有环境变量"，服务继续跑，日志里留一条警告。
+// Implementation note.
 func (r *Resolver) Load(ctx context.Context) model.Config {
 	cfg := model.Config{}
 	if r.settings.EnableDynamicConfig {
@@ -47,29 +47,29 @@ func (r *Resolver) fromDatabase(ctx context.Context) model.Config {
 
 	if projects, err := r.store.ListProjects(ctx); err != nil {
 		failed = true
-		r.log.Warn("读取数据库项目配置失败，仅使用环境变量", "error", err)
+		r.log.Warn("operation,operationenvironment variable", "error", err)
 	} else {
 		cfg.Projects = projects
 	}
 	if subs, err := r.store.ListSubscriptions(ctx); err != nil {
 		failed = true
-		r.log.Warn("读取数据库订阅配置失败", "error", err)
+		r.log.Warn("operation", "error", err)
 	} else {
 		cfg.Subscriptions = subs
 	}
 	if boxes, err := r.store.ListMailboxes(ctx); err != nil {
 		failed = true
-		r.log.Warn("读取数据库邮箱配置失败", "error", err)
+		r.log.Warn("operation", "error", err)
 	} else {
 		cfg.Mailboxes = boxes
 	}
 	if failed && r.settings.StrictDatabaseErrors {
-		r.log.Error("STRICT_DATABASE_ERRORS 已开启，动态配置读取失败会影响清单完整性")
+		r.log.Error("STRICT_DATABASE_ERRORS operation,operation")
 	}
 	return cfg
 }
 
-// normalize 补齐省略字段，让下游只面对完整记录。
+// Implementation note.
 func (r *Resolver) normalize(cfg *model.Config) {
 	ordinals := make(map[string]int)
 	for i := range cfg.Projects {
@@ -101,7 +101,7 @@ func (r *Resolver) normalize(cfg *model.Config) {
 	}
 }
 
-// KeySource 返回某个项目密钥的来源说明与可用的候选变量名，自检用。
+// Implementation note.
 func KeySource(p model.Project, ordinal int) (source string, candidates []string) {
 	source, _ = "", ""
 	if p.APIKey == "" {
@@ -109,8 +109,8 @@ func KeySource(p model.Project, ordinal int) (source string, candidates []string
 	}
 	for _, name := range ProviderKeyEnvNames(p.Provider, ordinal) {
 		if value, ok := raw(name); ok && value == p.APIKey {
-			return "环境变量 " + name, nil
+			return "environment variable " + name, nil
 		}
 	}
-	return "配置里的 api_key 字段", nil
+	return "operation api_key operation", nil
 }

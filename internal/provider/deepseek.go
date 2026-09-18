@@ -2,7 +2,7 @@ package provider
 
 import "errors"
 
-// DeepSeek 一个账号可能有多币种子账户，余额取人民币账户的总额。
+// Implementation note.
 var deepseekSpec = Spec{
 	Key:         "deepseek",
 	Name:        "DeepSeek",
@@ -12,10 +12,10 @@ var deepseekSpec = Spec{
 	Extract: func(data map[string]any) (float64, error) {
 		infos, ok := data["balance_infos"].([]any)
 		if !ok || len(infos) == 0 {
-			return 0, errors.New("无法从响应中解析 balance_infos 字段")
+			return 0, errors.New("Could not parse balance_infos field")
 		}
 
-		// 优先人民币账户，没有就退回第一条
+		// Implementation note.
 		chosen := Object(infos[0])
 		for _, item := range infos {
 			if obj := Object(item); obj != nil && Str(obj["currency"]) == "CNY" {
@@ -24,10 +24,10 @@ var deepseekSpec = Spec{
 			}
 		}
 
-		// 线上这个字段是字符串金额（"430.37"）
+		// Implementation note.
 		total, ok := Num(chosen["total_balance"])
 		if !ok {
-			return 0, errors.New("无法从响应中解析 total_balance 字段")
+			return 0, errors.New("Could not parse total_balance field")
 		}
 		return total, nil
 	},

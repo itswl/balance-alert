@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"time"
 
-	gen "github.com/itswl/balance-alert/internal/store/sqlc/mysql"
+	gen "github.com/itswl/quotapulse/internal/store/sqlc/mysql"
 )
 
-// mysqlQuerier 把 mysql 生成包接到 querier 上。
-// 三个引擎的适配文件是逐行对应的，改一个记得对着改另外两个。
+// Implementation note.
+// Implementation note.
 type mysqlQuerier struct{ q *gen.Queries }
 
 func newMySQLQuerier(db *sql.DB) querier { return mysqlQuerier{q: gen.New(db)} }

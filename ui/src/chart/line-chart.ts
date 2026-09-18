@@ -1,27 +1,27 @@
 /**
- * Balance趋势折线图。
+ * Implementation note.
  *
- * 原来这张图靠 CDN 上的 Chart.js（压缩后 ~200KB）画，而 Go 版是把前端产物
- * embed 进单个二进制的 —— 留一个 jsdelivr 的 <script> 会让内网 / 离线部署
- * 打开弹窗就是一片空白。这里用 canvas 直接画：一条Balance线 + 一条阈值虚线，
- * 图例、坐标轴刻度、悬停提示都按原来的样子复刻，整段代码不到 8KB。
+ * Implementation note.
+ * Implementation note.
+ * Implementation note.
+ * Implementation note.
  */
 
 export interface Series {
   label: string;
   values: Array<number | null>;
   color: string;
-  /** 线下方的填充色，不填就不填充 */
+  /* Implementation note. */
   fill?: string;
   dashed?: boolean;
-  /** 阈值这类参考线不画数据点 */
+  /* Implementation note. */
   showPoints?: boolean;
 }
 
 export interface LineChartOptions {
   labels: string[];
   series: Series[];
-  /** 提示框里怎么格式化数值 */
+  /* Implementation note. */
   formatValue: (value: number) => string;
   dark: boolean;
 }
@@ -37,7 +37,7 @@ const PADDING: Layout = { left: 64, right: 16, top: 34, bottom: 52 };
 const Y_TICKS = 5;
 const POINT_RADIUS = 3;
 const HOVER_RADIUS = 6;
-/** 平滑度，对应 Chart.js 的 tension: 0.4 */
+/* Implementation note. */
 const TENSION = 0.4;
 
 export class LineChart {
@@ -72,7 +72,7 @@ export class LineChart {
     canvas.addEventListener('mousemove', this.onMove);
     canvas.addEventListener('mouseleave', this.onLeave);
 
-    // 弹窗打开时容器宽度可能还是 0，等布局稳定后自动重画
+    // Implementation note.
     this.resizeObserver =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.draw());
     this.resizeObserver?.observe(canvas.parentElement ?? canvas);
@@ -94,9 +94,9 @@ export class LineChart {
     this.ctx.clearRect(0, 0, width, height);
   }
 
-  // ---------- 几何 ----------
+  // Implementation note.
 
-  /** canvas 的 CSS 尺寸，高分屏下与像素尺寸不同 */
+  /* Implementation note. */
   private size(): { width: number; height: number } {
     const rect = this.canvas.getBoundingClientRect();
     const parent = this.canvas.parentElement;
@@ -106,7 +106,7 @@ export class LineChart {
     };
   }
 
-  /** 所有序列一起定值域，阈值线才不会跑到图外面 */
+  /* Implementation note. */
   private range(): { min: number; max: number } {
     const values: number[] = [];
     for (const s of this.options.series) {
@@ -119,7 +119,7 @@ export class LineChart {
     let min = Math.min(...values);
     let max = Math.max(...values);
     if (min === max) {
-      // Balance一直没变时给一个上下留白，否则线会贴在边上
+      // Implementation note.
       const pad = Math.abs(min) * 0.1 || 1;
       min -= pad;
       max += pad;
@@ -163,7 +163,7 @@ export class LineChart {
     return best;
   }
 
-  // ---------- 绘制 ----------
+  // Implementation note.
 
   draw(): void {
     const { width, height } = this.size();
@@ -220,7 +220,7 @@ export class LineChart {
     ctx.restore();
   }
 
-  /** x 轴标签旋转 45 度，点多的时候按间隔抽稀，避免糊成一团 */
+  /* Implementation note. */
   private drawXLabels(width: number, height: number, textColor: string): void {
     const ctx = this.ctx;
     const labels = this.options.labels;
@@ -243,7 +243,7 @@ export class LineChart {
     ctx.restore();
   }
 
-  /** 用 Catmull-Rom 转三次贝塞尔做平滑，和 Chart.js 的 tension 效果接近 */
+  /* Implementation note. */
   private tracePath(points: Array<{ x: number; y: number }>): void {
     const ctx = this.ctx;
     ctx.beginPath();
@@ -328,7 +328,7 @@ export class LineChart {
     ctx.restore();
   }
 
-  /** 悬停：竖线 + 放大的数据点 + 提示框，提示框里列出所有序列（对应 Chart.js 的 index 模式） */
+  /* Implementation note. */
   private drawHover(
     width: number,
     height: number,

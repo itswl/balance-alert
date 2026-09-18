@@ -1,13 +1,13 @@
-// Package config 是配置的唯一入口。
+// Package config provides the package implementation.
 //
-// 只有两个来源，一个值只有一个家：
+// Implementation note.
 //
-//   - 环境变量：密钥、连接、开关、调度参数，以及由 {PROVIDER}_API_KEY / EMAIL_HOST
-//     自动发现出来的项目与邮箱
-//   - 数据库动态配置：projects / subscriptions / email 三段业务清单，可在页面上增删改
+// Implementation note.
+// Implementation note.
+// Implementation note.
 //
-// 没有配置文件这一层。数据库里的清单排在前面，环境变量发现的追加在后面，
-// 已经声明过的不会重复添加。
+// Implementation note.
+// Implementation note.
 package config
 
 import (
@@ -16,15 +16,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/timeutil"
+	"github.com/itswl/quotapulse/internal/timeutil"
 )
 
-// Settings 是全部环境变量配置。
+// Implementation note.
 //
-// 指针字段表示"未通过环境变量设置"，由取值方法回退到内置默认；
-// 这样才能区分"没配"和"配成了 0"（例如冷却时间设 0 表示不冷却）。
+// Implementation note.
+// Implementation note.
 type Settings struct {
-	// 可选能力开关，默认全关，核心版只跑余额告警
+	// Implementation note.
 	EnableDatabase      bool
 	EnableDynamicConfig bool
 	EnableHistoryAPI    bool
@@ -33,18 +33,18 @@ type Settings struct {
 	EnableWebAlarm      bool
 	EnableMCP           bool
 
-	// 调度与并发
+	// Implementation note.
 	BalanceRefreshIntervalSeconds   *int
 	MaxConcurrentChecks             *int
 	AlertCooldownSeconds            *int
 	SubscriptionAlertCooldownSecond *int
 
-	// 告警通道
+	// Implementation note.
 	WebhookURL    string
 	WebhookType   string
 	WebhookSource string
 
-	// 进程内定时任务，时刻按进程本地时区（容器里由 TZ 决定）
+	// Implementation note.
 	AlertSchedule          string
 	EmailScanSchedule      string
 	EmailScanDays          int
@@ -52,55 +52,55 @@ type Settings struct {
 	EmailAlertKeywords     string
 	EmailExtraAlertKeyword string
 
-	// 消耗与跑道分析，需要数据库历史；阈值设 0 关闭对应告警
+	// Implementation note.
 	BurnRateWindowDays  int
 	RunwayAlertDays     float64
 	SpendSpikeRatio     float64
 	SpendSpikeMinAmount float64
 
-	// HTTP 与扫描
+	// Implementation note.
 	RequestTimeout   int
 	MaxEmailsToScan  int
 	ResponseCacheTTL int
 
-	// 日志
+	// Implementation note.
 	LogLevel  string
 	LogFormat string
 	LogFile   string
 
-	// 数据库
+	// Implementation note.
 	DatabaseURL          string
 	StrictDatabaseErrors bool
 	AutoEncryptOnRead    bool
 	ConfigEncryptionKey  string
 
-	// Web 服务
+	// Implementation note.
 	WebPort       int
 	MetricsPort   int
 	AppVersion    string
 	WebEnableCORS bool
 	CORSOrigins   string
 	WebAPIKey     string
-	// ShutdownDelaySeconds 收到 SIGTERM 后先继续服务这么久再关。
-	// K8s 摘 endpoint 和发信号是并行的，不等一会儿会有几个请求打到正在关闭的 Pod 上。
+	// Implementation note.
+	// Implementation note.
 	ShutdownDelaySeconds int
 
-	// 解析好的调度表，启动时校验过
+	// Implementation note.
 	AlertTimes           []timeutil.ClockTime
 	EmailScanTimes       []timeutil.ClockTime
 	WeeklyReportTimes    []timeutil.ClockTime
 	WeeklyReportWeekdays map[int]bool
 }
 
-// Version 是构建时注入的版本号：
+// Implementation note.
 //
-//	go build -ldflags "-X github.com/itswl/balance-alert/internal/config.Version=v1.2.3"
+//	go build -ldflags "-X github.com/itswl/quotapulse/internal/config.Version=v1.2.3"
 //
-// 没注入时是 dev。/health 与 /live 都会报这个值，线上一眼能看出跑的是哪个构建，
-// 而不是所有版本都显示同一个写死的数字。APP_VERSION 环境变量仍可覆盖它。
+// Implementation note.
+// Implementation note.
 var Version = "dev"
 
-// 默认值集中在这里，取值方法引用它们。
+// Implementation note.
 const (
 	DefaultRefreshInterval = 3600
 	DefaultMaxConcurrent   = 20
@@ -108,7 +108,7 @@ const (
 	DefaultCooldownSeconds = 86400
 )
 
-// Load 从环境变量读出配置，顺带校验。配置写错就让进程起不来，而不是静默跑成别的行为。
+// Implementation note.
 func Load() (*Settings, error) {
 	e := &envReader{}
 	s := &Settings{
@@ -149,7 +149,7 @@ func Load() (*Settings, error) {
 		LogFormat: e.text("LOG_FORMAT", "text"),
 		LogFile:   e.text("LOG_FILE", ""),
 
-		DatabaseURL:          e.text("DATABASE_URL", "sqlite:///./data/balance_alert.db"),
+		DatabaseURL:          e.text("DATABASE_URL", "sqlite:///./data/quotapulse.db"),
 		StrictDatabaseErrors: e.boolean("STRICT_DATABASE_ERRORS", false),
 		AutoEncryptOnRead:    e.boolean("AUTO_ENCRYPT_ON_READ", true),
 		ConfigEncryptionKey:  e.text("CONFIG_ENCRYPTION_KEY", ""),
@@ -170,10 +170,10 @@ func Load() (*Settings, error) {
 		return nil, err
 	}
 	if s.EmailScanDays < 1 || s.EmailScanDays > 30 {
-		return nil, fmt.Errorf("EMAIL_SCAN_DAYS 必须在 1-30 之间，当前 %d", s.EmailScanDays)
+		return nil, fmt.Errorf("EMAIL_SCAN_DAYS operation 1-30 operation,operation %d", s.EmailScanDays)
 	}
 	if s.BurnRateWindowDays < 1 || s.BurnRateWindowDays > 90 {
-		return nil, fmt.Errorf("BURN_RATE_WINDOW_DAYS 必须在 1-90 之间，当前 %d", s.BurnRateWindowDays)
+		return nil, fmt.Errorf("BURN_RATE_WINDOW_DAYS operation 1-90 operation,operation %d", s.BurnRateWindowDays)
 	}
 	return s, nil
 }
@@ -192,7 +192,7 @@ func (s *Settings) parseSchedules() error {
 	return nil
 }
 
-// RefreshInterval 是看板刷新间隔；未设置或非正数时用默认值。
+// Implementation note.
 func (s *Settings) RefreshInterval() int {
 	if s.BalanceRefreshIntervalSeconds == nil || *s.BalanceRefreshIntervalSeconds <= 0 {
 		return DefaultRefreshInterval
@@ -200,7 +200,7 @@ func (s *Settings) RefreshInterval() int {
 	return *s.BalanceRefreshIntervalSeconds
 }
 
-// Concurrency 是并发检查数，钳制在 [1, 50]。
+// Implementation note.
 func (s *Settings) Concurrency() int {
 	n := DefaultMaxConcurrent
 	if s.MaxConcurrentChecks != nil {
@@ -209,8 +209,8 @@ func (s *Settings) Concurrency() int {
 	return max(1, min(n, MaxConcurrentUpper))
 }
 
-// CooldownSeconds 是某类告警的冷却时长。
-// 订阅优先读 SUBSCRIPTION_ALERT_COOLDOWN_SECONDS，未设置时回退到 ALERT_COOLDOWN_SECONDS。
+// Implementation note.
+// Implementation note.
 func (s *Settings) CooldownSeconds(kind string) int {
 	var value *int
 	if kind == "subscription" {
@@ -225,13 +225,13 @@ func (s *Settings) CooldownSeconds(kind string) int {
 	return max(0, *value)
 }
 
-// AlertKeywordOverride 整体替换默认关键词表，为空表示不替换。
+// Implementation note.
 func (s *Settings) AlertKeywordOverride() []string { return splitList(s.EmailAlertKeywords) }
 
-// AlertKeywordExtras 在默认词表之上追加。
+// Implementation note.
 func (s *Settings) AlertKeywordExtras() []string { return splitList(s.EmailExtraAlertKeyword) }
 
-// CORSOriginList 是逗号分隔的白名单。
+// Implementation note.
 func (s *Settings) CORSOriginList() []string { return splitList(s.CORSOrigins) }
 
 func splitList(text string) []string {
@@ -244,19 +244,19 @@ func splitList(text string) []string {
 	return out
 }
 
-// ---------- 环境变量读取 ----------
+// Implementation note.
 
-// envReader 收集所有解析错误，一次性报出来，而不是第一个就退出。
+// Implementation note.
 type envReader struct{ problems []string }
 
 func (e *envReader) err() error {
 	if len(e.problems) == 0 {
 		return nil
 	}
-	return fmt.Errorf("环境变量配置有误：\n  %s", strings.Join(e.problems, "\n  "))
+	return fmt.Errorf("environment variableoperation:\n  %s", strings.Join(e.problems, "\n  "))
 }
 
-// raw 读取环境变量；空白值一律视为未设置（.env 里常见的 KEY= 写法）。
+// Implementation note.
 func raw(key string) (string, bool) {
 	value, ok := os.LookupEnv(key)
 	if !ok {
@@ -290,7 +290,7 @@ func (e *envReader) boolean(key string, fallback bool) bool {
 	if falsy[lowered] {
 		return false
 	}
-	e.problems = append(e.problems, fmt.Sprintf("%s=%q 不是布尔值，可写 true / false", key, value))
+	e.problems = append(e.problems, fmt.Sprintf("%s=%q operation,operation true / false", key, value))
 	return fallback
 }
 
@@ -301,7 +301,7 @@ func (e *envReader) integer(key string, fallback int) int {
 	}
 	n, err := strconv.Atoi(value)
 	if err != nil {
-		e.problems = append(e.problems, fmt.Sprintf("%s=%q 不是整数", key, value))
+		e.problems = append(e.problems, fmt.Sprintf("%s=%q operation", key, value))
 		return fallback
 	}
 	return n
@@ -314,7 +314,7 @@ func (e *envReader) optionalInt(key string) *int {
 	}
 	n, err := strconv.Atoi(value)
 	if err != nil {
-		e.problems = append(e.problems, fmt.Sprintf("%s=%q 不是整数", key, value))
+		e.problems = append(e.problems, fmt.Sprintf("%s=%q operation", key, value))
 		return nil
 	}
 	return &n
@@ -327,7 +327,7 @@ func (e *envReader) number(key string, fallback float64) float64 {
 	}
 	f, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		e.problems = append(e.problems, fmt.Sprintf("%s=%q 不是数字", key, value))
+		e.problems = append(e.problems, fmt.Sprintf("%s=%q operation", key, value))
 		return fallback
 	}
 	return f

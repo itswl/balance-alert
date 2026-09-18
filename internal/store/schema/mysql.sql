@@ -1,8 +1,8 @@
--- MySQL 建表。字符集必须显式写成 utf8mb4：库的默认字符集若是 latin1 或 utf8mb3，
--- 中文项目名一写就报 1366，跨字符集的 JOIN/比较则报 1267，所以每张表都钉死 utf8mb4_unicode_ci。
--- MySQL 的 CREATE INDEX 不支持 IF NOT EXISTS，索引只能内联在 CREATE TABLE IF NOT EXISTS 里，
--- 这样重复启动才不会因为索引已存在而报错。
--- timestamp 是关键字，用反引号包住。
+-- MySQL Localized message utf8mb4�Localized message latin1 Localized message utf8mb3�Localized message
+-- Localized message 1366�Localized message JOIN/Localized message 1267�Localized message utf8mb4_unicode_ciLocalized message
+-- MySQL Localized message CREATE INDEX Localized message IF NOT EXISTS�Localized message CREATE TABLE IF NOT EXISTS Localized message�Localized message
+-- Localized message
+-- timestamp Localized message�Localized message
 
 CREATE TABLE IF NOT EXISTS balance_history (
     id BIGINT NOT NULL AUTO_INCREMENT,

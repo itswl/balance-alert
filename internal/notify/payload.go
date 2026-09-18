@@ -2,8 +2,8 @@ package notify
 
 import "strings"
 
-// 各平台的报文结构。结构体字段顺序就是 JSON 里的字段顺序，是按各平台文档排的，
-// 别为了好看重排——飞书卡片按 header/elements 的顺序渲染，自定义那头有系统在按字段名取值。
+// Implementation note.
+// Implementation note.
 
 type feishuTextPayload struct {
 	MsgType string            `json:"msg_type"`
@@ -67,7 +67,7 @@ type wecomMarkdown struct {
 	Content string `json:"content"`
 }
 
-// customPayload 是自定义 webhook 的通用报文，接收端自己去解析正文。
+// Implementation note.
 type customPayload struct {
 	Title     string `json:"title"`
 	Content   string `json:"content"`
@@ -75,9 +75,9 @@ type customPayload struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// envelope 是自定义 webhook 的结构化信封：余额和订阅的字段是有语义的，
-// 对面的告警系统按 Type/Level 分流、从 Resources 里取原始数值，所以不能只发一段文本。
-// 首字母大写的字段名是对面定的，改了它就取不到值。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 type envelope struct {
 	Type      string `json:"Type"`
 	RuleName  string `json:"RuleName"`
@@ -106,10 +106,10 @@ type subscriptionResource struct {
 	Message          string  `json:"Message"`
 }
 
-// payload 按平台和告警类别挑报文。
+// Implementation note.
 //
-// 余额、订阅是"字段少、要能被系统消费"的告警，发纯文本（或结构化信封）；
-// 跑道、邮件、周报的正文本身就是 Markdown，走富文本卡片。Kind 正好把这两拨分开。
+// Implementation note.
+// Implementation note.
 func (n *notifier) payload(msg Message) any {
 	text := strings.Join(msg.Lines, "\n")
 	if msg.Kind == KindBalance || msg.Kind == KindSubscription {
@@ -123,7 +123,7 @@ func (n *notifier) plainPayload(title, text string, env *envelope) any {
 	case TypeFeishu:
 		return feishuTextPayload{
 			MsgType: "text",
-			Content: feishuTextContent{Text: "【" + title + "】\n\n" + text + "\n来源: " + n.source},
+			Content: feishuTextContent{Text: "[" + title + "]\n\n" + text + "\nSource: " + n.source},
 		}
 	case TypeDingTalk:
 		return dingtalkPayload{
@@ -134,12 +134,12 @@ func (n *notifier) plainPayload(title, text string, env *envelope) any {
 		if env != nil {
 			return env
 		}
-		// 外部自己拼的 Message 带不出结构化字段，只能退回通用报文
+		// Implementation note.
 		return n.customPayload(title, text)
 	default: // wecom
 		return wecomTextPayload{
 			MsgType: "text",
-			Text:    wecomTextContent{Content: "【" + title + "】\n" + text},
+			Text:    wecomTextContent{Content: "[" + title + "]\n" + text},
 		}
 	}
 }
@@ -176,8 +176,8 @@ func (n *notifier) customPayload(title, content string) customPayload {
 	return customPayload{Title: title, Content: content, Source: n.source, Timestamp: isoLocal(n.now())}
 }
 
-// dingtalkList 把 "键: 值" 的裸文本转成 Markdown 列表并给键加粗：
-// 钉钉的 markdown 消息不认换行，不转成列表就会糊成一行。
+// Implementation note.
+// Implementation note.
 func dingtalkList(text string) string {
 	lines := strings.Split(text, "\n")
 	out := make([]string, 0, len(lines))

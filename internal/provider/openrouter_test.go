@@ -23,19 +23,19 @@ func TestOpenRouterFetch(t *testing.T) {
 			want: 0,
 		},
 		{
-			name:   "缺少 total_credits",
+			name:   "Missing total_credits",
 			body:   `{"data":{"total_usage":25.5}}`,
-			errMsg: "无法从响应中解析 total_credits 字段",
+			errMsg: "Could not parse total_credits field",
 		},
 		{
-			name:   "缺少 total_usage",
+			name:   "Missing total_usage",
 			body:   `{"data":{"total_credits":100.0}}`,
-			errMsg: "无法从响应中解析 total_usage 字段",
+			errMsg: "Could not parse total_usage field",
 		},
 		{
 			name:   "data 是 null",
 			body:   `{"data":null}`,
-			errMsg: "无法从响应中解析 total_credits 字段",
+			errMsg: "Could not parse total_credits field",
 		},
 		{
 			name:   "密钥无效",

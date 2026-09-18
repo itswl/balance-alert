@@ -1,8 +1,8 @@
 /**
- * 系统Settings弹窗：深色模式、自动刷新、API Key。
+ * Implementation note.
  *
- * 监听器只在初始化时绑一次。原生 JS 版是每次打开弹窗都 addEventListener，
- * 开五次就有五个监听器，改一下主题会连着跑五遍。
+ * Implementation note.
+ * Implementation note.
  */
 
 import { getApiKey, setApiKey } from '../api/client.js';
@@ -15,7 +15,7 @@ import { toggleTheme } from '../views.js';
 
 const MODAL_ID = 'settings-modal';
 
-/** 每次打开时把控件Status同步成当前真实Status */
+/* Implementation note. */
 function syncSettingsForm(): void {
   const darkMode = byId<HTMLInputElement>('setting-dark-mode');
   if (darkMode) darkMode.checked = AppState.currentTheme === 'dark';
@@ -56,7 +56,7 @@ export function bindSettingsManager(): void {
     showToast(getApiKey() ? 'API key saved' : 'API key cleared', 'info');
   });
 
-  // Settings里改完 key 后，弹窗里的输入框也同步一下，免得两处显示不一致
+  // Implementation note.
   byId('auth-form')?.addEventListener('submit', () => {
     const settingsInput = byId<HTMLInputElement>('setting-api-key');
     if (settingsInput) settingsInput.value = inputById('auth-api-key').value.trim();

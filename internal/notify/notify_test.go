@@ -13,14 +13,14 @@ import (
 	"time"
 )
 
-// 发送日志对测试没用，堆在输出里反而盖住失败信息。
+// Implementation note.
 func TestMain(m *testing.M) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	os.Exit(m.Run())
 }
 
 func TestNewWithoutURLReturnsNil(t *testing.T) {
-	// 没配 webhook 的部署不该报错，调用方直接跳过发送
+	// Implementation note.
 	n, err := New("", TypeFeishu, "credit-monitor", nil)
 	if err != nil {
 		t.Fatalf("未配置 URL 时不该报错: %v", err)
@@ -99,7 +99,7 @@ func TestSendRetriesServerErrors(t *testing.T) {
 	}
 }
 
-// 重试之后仍然失败才算失败；中途恢复了就当成功。
+// Implementation note.
 func TestSendSucceedsAfterRetry(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,7 @@ func TestSendSucceedsAfterRetry(t *testing.T) {
 	}
 }
 
-// 网络层的失败同样要往上抛，不能吞成"发送成功"。
+// Implementation note.
 func TestSendReportsTransportError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	client := srv.Client()
@@ -137,7 +137,7 @@ func TestSendReportsTransportError(t *testing.T) {
 	}
 }
 
-// ctx 取消时要立刻回来，不能卡在重试的等待里。
+// Implementation note.
 func TestSendStopsOnCanceledContext(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -174,8 +174,8 @@ func TestMaskURL(t *testing.T) {
 			"https://open.feishu.cn/open-apis/bot/v2/hook/abcd***"},
 		{"https://oapi.dingtalk.com/robot/send?access_token=deadbeefcafe",
 			"https://oapi.dingtalk.com/robot/send?access_token=dead***"},
-		// 企微地址里的 webhook/ 会先命中 hook/ 这个标记，key= 那条规则走不到；
-		// 结果仍然是密钥整段不进日志，符合预期
+		// Implementation note.
+		// Implementation note.
 		{"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc123456",
 			"https://qyapi.weixin.qq.com/cgi-bin/webhook/send***"},
 		{"https://example.com/a", "https://exam***om/a"},
@@ -191,7 +191,7 @@ func TestMaskURL(t *testing.T) {
 	}
 }
 
-// sendNoWait 把重试间隔清零，免得测试真的睡 2 秒。
+// Implementation note.
 func sendNoWait(t *testing.T, srv *httptest.Server, msg Message) error {
 	t.Helper()
 

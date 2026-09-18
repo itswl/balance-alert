@@ -6,23 +6,23 @@ Set `ENABLE_PROMETHEUS=true` to expose `/metrics` on `METRICS_PORT` (default `91
 
 | Metric | Labels | Meaning |
 | --- | --- | --- |
-| `balance_alert_balance`, `_threshold`, `_ratio`, `_status` | `project`, `provider`, `type` | Current balance, threshold, balance/threshold, and 1 for healthy or 0 for alert |
-| `balance_alert_check_status` | `project`, `provider`, `type` | Last check status; failed checks retain the last successful balance |
-| `balance_alert_burn_rate_per_day`, `_runway_days` | `project`, `provider`, `type` | Daily burn rate and estimated days remaining; emitted only with enough history |
-| `balance_alert_subscription_days`, `_amount`, `_status` | `name`, `cycle_type` | Days to renewal, amount, and 1 healthy, 0 due, or -1 already renewed |
-| `balance_alert_email_mailbox_status` | `mailbox` | Last mailbox scan status |
-| `balance_alert_email_last_scan_emails`, `_alerts` | `mailbox` | Email and alert counts from the last scan |
-| `balance_alert_email_scan_total`, `_alerts_total` | `mailbox` | Cumulative email and alert counts |
-| `balance_alert_job_last_run_timestamp`, `_last_success_timestamp`, `_last_status`, `_last_duration_seconds` | `task` | Last run, last success, status, and duration |
-| `balance_alert_job_runs_total` | `task`, `status` | Job run count |
-| `balance_alert_notifications_total` | `kind`, `status` | Webhook count; kinds include `balance`, `subscription`, `email`, `mailbox_error`, `runway`, `spend_spike`, and `weekly_report` |
-| `balance_alert_last_check_timestamp` | `check_type` | Last balance, subscription, or email check |
+| `quotapulse_balance`, `_threshold`, `_ratio`, `_status` | `project`, `provider`, `type` | Current balance, threshold, balance/threshold, and 1 for healthy or 0 for alert |
+| `quotapulse_check_status` | `project`, `provider`, `type` | Last check status; failed checks retain the last successful balance |
+| `quotapulse_burn_rate_per_day`, `_runway_days` | `project`, `provider`, `type` | Daily burn rate and estimated days remaining; emitted only with enough history |
+| `quotapulse_subscription_days`, `_amount`, `_status` | `name`, `cycle_type` | Days to renewal, amount, and 1 healthy, 0 due, or -1 already renewed |
+| `quotapulse_email_mailbox_status` | `mailbox` | Last mailbox scan status |
+| `quotapulse_email_last_scan_emails`, `_alerts` | `mailbox` | Email and alert counts from the last scan |
+| `quotapulse_email_scan_total`, `_alerts_total` | `mailbox` | Cumulative email and alert counts |
+| `quotapulse_job_last_run_timestamp`, `_last_success_timestamp`, `_last_status`, `_last_duration_seconds` | `task` | Last run, last success, status, and duration |
+| `quotapulse_job_runs_total` | `task`, `status` | Job run count |
+| `quotapulse_notifications_total` | `kind`, `status` | Webhook count; kinds include `balance`, `subscription`, `email`, `mailbox_error`, `runway`, `spend_spike`, and `weekly_report` |
+| `quotapulse_last_check_timestamp` | `check_type` | Last balance, subscription, or email check |
 
 When a project, subscription, or mailbox is renamed or deleted, obsolete gauge series are removed on the next update. The job label is `task`; Prometheus may rename it to `exported_job` to avoid its built-in `job` label.
 
 ## Dashboard
 
-`docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d` provisions Prometheus, Grafana, the data source, and the `balance-alert` dashboard. The dashboard contains:
+`docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d` provisions Prometheus, Grafana, the data source, and the `quotapulse` dashboard. The dashboard contains:
 
 - Overview: project totals, healthy and alerting projects, failed checks, renewals due within seven days, and the last balance check.
 - Balances: ratio gauges, trends, and a type-filtered detail table.
@@ -43,42 +43,42 @@ The provisioned dashboard is restored from disk after a Compose restart. Export 
 ## PromQL examples
 
 ```promql
-balance_alert_balance and on(project, provider, type) balance_alert_status == 0
-bottomk(5, balance_alert_ratio)
-balance_alert_check_status == 0
-bottomk(5, balance_alert_runway_days)
-balance_alert_runway_days < 7
-balance_alert_burn_rate_per_day > 1.5 * avg_over_time(balance_alert_burn_rate_per_day[7d])
-balance_alert_email_mailbox_status == 0
-increase(balance_alert_email_alerts_total[7d])
-time() - balance_alert_job_last_success_timestamp > 26 * 3600
-increase(balance_alert_notifications_total{status="failed"}[1h]) > 0
+quotapulse_balance and on(project, provider, type) quotapulse_status == 0
+bottomk(5, quotapulse_ratio)
+quotapulse_check_status == 0
+bottomk(5, quotapulse_runway_days)
+quotapulse_runway_days < 7
+quotapulse_burn_rate_per_day > 1.5 * avg_over_time(quotapulse_burn_rate_per_day[7d])
+quotapulse_email_mailbox_status == 0
+increase(quotapulse_email_alerts_total[7d])
+time() - quotapulse_job_last_success_timestamp > 26 * 3600
+increase(quotapulse_notifications_total{status="failed"}[1h]) > 0
 ```
 
 ## Self-monitoring rules
 
-Balance Alert sends its own balance alerts through the configured Webhook. These optional rules monitor the monitor:
+QuotaPulse sends its own balance alerts through the configured Webhook. These optional rules monitor the monitor:
 
 ```yaml
 groups:
-  - name: balance-alert-self
+  - name: quotapulse-self
     rules:
       - alert: BalanceAlertJobFailed
-        expr: balance_alert_job_last_status == 0
+        expr: quotapulse_job_last_status == 0
         for: 10m
-        annotations: { summary: "Balance Alert task {{ $labels.task }} failed" }
+        annotations: { summary: "QuotaPulse task {{ $labels.task }} failed" }
       - alert: BalanceAlertJobStale
-        expr: time() - balance_alert_job_last_success_timestamp{task="alert_check"} > 26 * 3600
+        expr: time() - quotapulse_job_last_success_timestamp{task="alert_check"} > 26 * 3600
         annotations: { summary: "alert_check has not succeeded for 26 hours" }
       - alert: BalanceAlertRunwayShort
-        expr: balance_alert_runway_days < 3
+        expr: quotapulse_runway_days < 3
         for: 1h
         annotations: { summary: "{{ $labels.project }} has less than three days of runway" }
       - alert: BalanceAlertMailboxDown
-        expr: balance_alert_email_mailbox_status == 0
+        expr: quotapulse_email_mailbox_status == 0
         for: 1h
         annotations: { summary: "Mailbox {{ $labels.mailbox }} is unavailable" }
       - alert: BalanceAlertNotificationFailed
-        expr: increase(balance_alert_notifications_total{status="failed"}[1h]) > 0
+        expr: increase(quotapulse_notifications_total{status="failed"}[1h]) > 0
         annotations: { summary: "Webhook notification failed ({{ $labels.kind }})" }
 ```

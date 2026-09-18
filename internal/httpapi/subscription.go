@@ -5,16 +5,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/subscription"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/subscription"
 )
 
-// requireSubscriptions 订阅是可选能力，没开时整组接口 503。
+// Implementation note.
 func (s *Server) requireSubscriptions(w http.ResponseWriter) bool {
 	if s.Settings.EnableSubscriptions {
 		return true
 	}
-	fail(w, http.StatusServiceUnavailable, "订阅功能未启用，请设置 ENABLE_SUBSCRIPTIONS=true")
+	fail(w, http.StatusServiceUnavailable, "operationDisabled,operation ENABLE_SUBSCRIPTIONS=true")
 	return false
 }
 
@@ -30,8 +30,8 @@ func (s *Server) handleListSubscriptions(w http.ResponseWriter, r *http.Request)
 	etagJSON(w, r, map[string]any{"status": "success", "subscriptions": subs})
 }
 
-// subscriptionRequest 里 RenewalDay 用 json.RawMessage 收，
-// 因为年付允许写成 "03-15" 字符串，也允许写成 315 数字。
+// Implementation note.
+// Implementation note.
 type subscriptionRequest struct {
 	Name            string          `json:"name"`
 	NewName         *string         `json:"new_name"`
@@ -49,7 +49,7 @@ var validCycles = map[string]bool{
 }
 
 func (s *Server) handleAddSubscription(w http.ResponseWriter, r *http.Request) {
-	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "订阅配置") {
+	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body subscriptionRequest
@@ -58,13 +58,13 @@ func (s *Server) handleAddSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Name = trimSpace(body.Name)
 	if body.Name == "" {
-		failValidation(w, []string{"name: 不能为空"})
+		failValidation(w, []string{"name: cannot be empty"})
 		return
 	}
 
 	cfg := s.Resolver.Load(r.Context())
 	if findSubscription(cfg.Subscriptions, body.Name) != nil {
-		fail(w, http.StatusBadRequest, "订阅名称 ["+body.Name+"] 已存在")
+		fail(w, http.StatusBadRequest, "operation ["+body.Name+"] operation")
 		return
 	}
 
@@ -78,18 +78,18 @@ func (s *Server) handleAddSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.UpsertSubscription(r.Context(), sub); err != nil {
-		s.log().Error("添加订阅失败", "subscription", body.Name, "error", err)
-		fail(w, storeWriteStatus(err), "保存失败")
+		s.log().Error("operation", "subscription", body.Name, "error", err)
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 添加订阅", "subscription", body.Name, "cycle", sub.CycleType, "amount", sub.Amount)
+	s.log().Info("[AUDIT] operation", "subscription", body.Name, "cycle", sub.CycleType, "amount", sub.Amount)
 	s.refreshSubscriptions(r)
-	ok(w, map[string]any{"message": "订阅 [" + body.Name + "] 已成功添加"})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
-// handleUpdateSubscription 更新订阅：只改传了的字段；改名时先删旧名再按新名写入。
+// Implementation note.
 func (s *Server) handleUpdateSubscription(w http.ResponseWriter, r *http.Request) {
-	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "订阅配置") {
+	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body subscriptionRequest
@@ -100,7 +100,7 @@ func (s *Server) handleUpdateSubscription(w http.ResponseWriter, r *http.Request
 	cfg := s.Resolver.Load(r.Context())
 	current := findSubscription(cfg.Subscriptions, body.Name)
 	if current == nil {
-		fail(w, http.StatusNotFound, "未找到订阅: "+body.Name)
+		fail(w, http.StatusNotFound, "operation: "+body.Name)
 		return
 	}
 
@@ -112,27 +112,27 @@ func (s *Server) handleUpdateSubscription(w http.ResponseWriter, r *http.Request
 	if body.NewName != nil && trimSpace(*body.NewName) != "" {
 		updated.Name = trimSpace(*body.NewName)
 		if err := s.Store.DeleteSubscription(r.Context(), body.Name); err != nil {
-			s.log().Warn("改名时删除旧记录失败", "subscription", body.Name, "error", err)
+			s.log().Warn("operation", "subscription", body.Name, "error", err)
 		}
 	}
 
 	if err := s.Store.UpsertSubscription(r.Context(), updated); err != nil {
-		s.log().Error("更新订阅失败", "subscription", body.Name, "error", err)
-		fail(w, storeWriteStatus(err), "保存失败")
+		s.log().Error("operation", "subscription", body.Name, "error", err)
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 更新订阅", "subscription", body.Name)
+	s.log().Info("[AUDIT] operation", "subscription", body.Name)
 	s.refreshSubscriptions(r)
-	ok(w, map[string]any{"message": "订阅 [" + body.Name + "] 配置已更新"})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
-// applySubscriptionPatch 把请求里传了的字段盖到订阅上，返回校验问题。
+// Implementation note.
 func applySubscriptionPatch(target *model.Subscription, body subscriptionRequest) []string {
 	var problems []string
 
 	if body.CycleType != nil {
 		if !validCycles[*body.CycleType] {
-			problems = append(problems, "cycle_type: 只能是 weekly / monthly / yearly")
+			problems = append(problems, "cycle_type: operation weekly / monthly / yearly")
 		} else {
 			target.CycleType = *body.CycleType
 		}
@@ -140,14 +140,14 @@ func applySubscriptionPatch(target *model.Subscription, body subscriptionRequest
 	if len(body.RenewalDay) > 0 && string(body.RenewalDay) != "null" {
 		day, ok := parseRenewalDay(body.RenewalDay, target.CycleType)
 		if !ok {
-			problems = append(problems, `renewal_day: 无法识别（年付可写 "03-15"，月付写 1-31，周付写 1-7）`)
+			problems = append(problems, `renewal_day: operation(operation "03-15",operation 1-31,operation 1-7)`)
 		} else {
 			target.RenewalDay = day
 		}
 	}
 	if body.AlertDaysBefore != nil {
 		if *body.AlertDaysBefore < 0 {
-			problems = append(problems, "alert_days_before: 不能为负数")
+			problems = append(problems, "alert_days_before: cannot be negative")
 		} else {
 			target.AlertDaysBefore = *body.AlertDaysBefore
 		}
@@ -165,7 +165,7 @@ func applySubscriptionPatch(target *model.Subscription, body subscriptionRequest
 		if *body.LastRenewedDate == "" {
 			target.LastRenewedDate = nil
 		} else if _, err := time.Parse("2006-01-02", *body.LastRenewedDate); err != nil {
-			problems = append(problems, "last_renewed_date: 格式应为 YYYY-MM-DD")
+			problems = append(problems, "last_renewed_date: operation YYYY-MM-DD")
 		} else {
 			target.LastRenewedDate = body.LastRenewedDate
 		}
@@ -173,7 +173,7 @@ func applySubscriptionPatch(target *model.Subscription, body subscriptionRequest
 	return problems
 }
 
-// parseRenewalDay 同时接受 315 和 "03-15" 两种写法。
+// Implementation note.
 func parseRenewalDay(raw json.RawMessage, cycleType string) (int, bool) {
 	var asNumber int
 	if err := json.Unmarshal(raw, &asNumber); err == nil {
@@ -187,7 +187,7 @@ func parseRenewalDay(raw json.RawMessage, cycleType string) (int, bool) {
 }
 
 func (s *Server) handleDeleteSubscription(w http.ResponseWriter, r *http.Request) {
-	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "订阅配置") {
+	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body nameRequest
@@ -196,16 +196,16 @@ func (s *Server) handleDeleteSubscription(w http.ResponseWriter, r *http.Request
 	}
 	cfg := s.Resolver.Load(r.Context())
 	if findSubscription(cfg.Subscriptions, body.Name) == nil {
-		fail(w, http.StatusNotFound, "未找到订阅: "+body.Name)
+		fail(w, http.StatusNotFound, "operation: "+body.Name)
 		return
 	}
 	if err := s.Store.DeleteSubscription(r.Context(), body.Name); err != nil {
-		fail(w, storeWriteStatus(err), "删除失败")
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 删除订阅", "subscription", body.Name)
+	s.log().Info("[AUDIT] operation", "subscription", body.Name)
 	s.refreshSubscriptions(r)
-	ok(w, map[string]any{"message": "订阅 [" + body.Name + "] 已删除"})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
 type renewedRequest struct {
@@ -213,9 +213,9 @@ type renewedRequest struct {
 	RenewedDate *string `json:"renewed_date"`
 }
 
-// handleMarkRenewed 标记订阅本周期已续费，默认今天，返回下次续费日期。
+// Implementation note.
 func (s *Server) handleMarkRenewed(w http.ResponseWriter, r *http.Request) {
-	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "订阅配置") {
+	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body renewedRequest
@@ -223,14 +223,14 @@ func (s *Server) handleMarkRenewed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		fail(w, http.StatusBadRequest, "缺少必要参数: name")
+		fail(w, http.StatusBadRequest, "operation: name")
 		return
 	}
 
 	renewedDate := time.Now().Format("2006-01-02")
 	if body.RenewedDate != nil && *body.RenewedDate != "" {
 		if _, err := time.Parse("2006-01-02", *body.RenewedDate); err != nil {
-			fail(w, http.StatusBadRequest, "renewed_date 格式应为 YYYY-MM-DD")
+			fail(w, http.StatusBadRequest, "renewed_date operation YYYY-MM-DD")
 			return
 		}
 		renewedDate = *body.RenewedDate
@@ -239,16 +239,16 @@ func (s *Server) handleMarkRenewed(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Resolver.Load(r.Context())
 	current := findSubscription(cfg.Subscriptions, body.Name)
 	if current == nil {
-		fail(w, http.StatusNotFound, "未找到订阅配置")
+		fail(w, http.StatusNotFound, "operation")
 		return
 	}
 	updated := *current
 	updated.LastRenewedDate = &renewedDate
 	if err := s.Store.UpsertSubscription(r.Context(), updated); err != nil {
-		fail(w, storeWriteStatus(err), "更新订阅失败")
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 标记已续费", "subscription", body.Name, "date", renewedDate)
+	s.log().Info("[AUDIT] operation", "subscription", body.Name, "date", renewedDate)
 	s.refreshSubscriptions(r)
 
 	renewedAt, _ := time.ParseInLocation("2006-01-02", renewedDate, time.Local)
@@ -258,13 +258,13 @@ func (s *Server) handleMarkRenewed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok(w, map[string]any{
-		"message":           "订阅 [" + body.Name + "] 已标记为已续费",
+		"message":           "operation [" + body.Name + "] operation",
 		"next_renewal_date": next.Format("2006-01-02T15:04:05"),
 	})
 }
 
 func (s *Server) handleClearRenewed(w http.ResponseWriter, r *http.Request) {
-	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "订阅配置") {
+	if !s.requireSubscriptions(w) || !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body nameRequest
@@ -274,21 +274,21 @@ func (s *Server) handleClearRenewed(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Resolver.Load(r.Context())
 	current := findSubscription(cfg.Subscriptions, body.Name)
 	if current == nil {
-		fail(w, http.StatusNotFound, "未找到订阅配置")
+		fail(w, http.StatusNotFound, "operation")
 		return
 	}
 	updated := *current
 	updated.LastRenewedDate = nil
 	if err := s.Store.UpsertSubscription(r.Context(), updated); err != nil {
-		fail(w, storeWriteStatus(err), "更新订阅失败")
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 清除续费标记", "subscription", body.Name)
+	s.log().Info("[AUDIT] operation", "subscription", body.Name)
 	s.refreshSubscriptions(r)
-	ok(w, map[string]any{"message": "订阅 [" + body.Name + "] 的续费标记已清除"})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
-// refreshSubscriptions 配置变化后重算订阅状态，页面上立刻能看到新的倒计时。
+// Implementation note.
 func (s *Server) refreshSubscriptions(r *http.Request) {
 	cfg := s.Resolver.Load(r.Context())
 	results := s.Subs.Check(r.Context(), cfg.EnabledSubscriptions(), !s.Settings.EnableWebAlarm)

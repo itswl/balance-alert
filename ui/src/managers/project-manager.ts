@@ -1,6 +1,6 @@
 /**
- * Project管理：新增 / Edit / Delete。
- * 开了 ENABLE_DYNAMIC_CONFIG 后，Project清单可以完全在页面上维护。
+ * Implementation note.
+ * Implementation note.
  */
 
 import { mutate, request } from '../api/client.js';
@@ -13,7 +13,7 @@ import { showToast } from '../ui/toast.js';
 
 const MODAL_ID = 'project-modal';
 
-/** Provider清单基本不变，拉一次缓存住 */
+/* Implementation note. */
 let providers: ProviderOption[] = [];
 
 async function loadProviders(): Promise<ProviderOption[]> {
@@ -37,14 +37,14 @@ function fillProviderOptions(selected = ''): void {
   );
 }
 
-/** 类型影响阈值的含义：Quota型按剩余百分比填，不提示一句用户会填成Amount */
+/* Implementation note. */
 function syncTypeHint(): void {
   const provider = byId<HTMLSelectElement>('project-provider')?.value;
   const known = providers.find((p) => p.value === provider);
   const typeSelect = byId<HTMLSelectElement>('project-type');
   const hint = byId('project-threshold-hint');
 
-  // 用户手动选过类型就不再跟着Provider变
+  // Implementation note.
   if (known && typeSelect && !typeSelect.dataset['touched']) {
     typeSelect.value = known.default_type;
   }
@@ -70,7 +70,7 @@ export async function openProjectModal(project: ProjectConfig | null = null): Pr
 
   const nameInput = inputById('project-name');
   nameInput.value = project?.name ?? '';
-  nameInput.readOnly = isEdit; // 名称是唯一键，改名请删掉重建
+  nameInput.readOnly = isEdit; // The name is the stable key; delete and recreate it to rename.
   fillProviderOptions(project?.provider ?? '');
   selectById('project-provider').disabled = isEdit;
   setInputValue('project-threshold', project?.threshold ?? '');
@@ -82,7 +82,7 @@ export async function openProjectModal(project: ProjectConfig | null = null): Pr
   const keyHint = byId('project-api-key-hint');
   if (keyHint) keyHint.textContent = isEdit ? 'Leave empty to keep the existing API key' : '';
 
-  // 环境变量发现的Project在这里Save会被固化进数据库，得先说清楚
+  // Implementation note.
   const envNote = byId('project-env-note');
   if (envNote) envNote.style.display = project?.from_env ? 'block' : 'none';
 
@@ -138,7 +138,7 @@ export async function deleteProject(name: string): Promise<void> {
   }
 }
 
-/** 看板Status里没有密钥、阈值这些配置字段，Edit前要单独拉一次Project配置 */
+/* Implementation note. */
 export async function editProject(name: string): Promise<void> {
   try {
     const result = await request<ProjectsConfigResponse>('/api/config/projects');

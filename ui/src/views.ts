@@ -1,4 +1,4 @@
-/** 视图切换、地址栏 hash、主题。 */
+/* Implementation note. */
 
 import { byId } from './dom.js';
 import { AppState, writeStorage, type Theme, type ViewName } from './state.js';
@@ -6,7 +6,7 @@ import { EmailManager } from './managers/email-manager.js';
 import { renderProjects } from './ui/projects.js';
 import { renderSubscriptions } from './ui/subscriptions.js';
 
-/** 四个视图对应的快速操作按钮 */
+/* Implementation note. */
 const VIEW_BUTTONS: Record<ViewName, string> = {
   all: 'view-all-btn',
   alerts: 'view-alerts-btn',
@@ -31,7 +31,7 @@ export function toggleTheme(): void {
 export function switchView(view: ViewName): void {
   AppState.currentView = view;
 
-  // 用 replaceState 而不是 location.hash：后者会往历史里塞一条，退格键就退不出页面了
+  // Implementation note.
   if (window.history?.replaceState) {
     window.history.replaceState(null, '', window.location.pathname + (view === 'all' ? '' : `#${view}`));
   }
@@ -39,7 +39,7 @@ export function switchView(view: ViewName): void {
   document.querySelectorAll('.action-btn').forEach((btn) => btn.classList.remove('active'));
   byId(VIEW_BUTTONS[view])?.classList.add('active');
 
-  // 三块内容区互斥显示：ProjectBalance（all / alerts）、Subscription、Mailbox scanning
+  // Implementation note.
   const visible = view === 'subscriptions' || view === 'email' ? view : 'projects';
   for (const [name, id] of [
     ['projects', 'projects-section'],

@@ -1,4 +1,4 @@
-/** 模态框：开、关、点遮罩关闭。五个弹窗的开关逻辑完全一样，没必要各写一遍。 */
+/* Implementation note. */
 
 import { byId, onClickAll } from '../dom.js';
 
@@ -15,8 +15,8 @@ export function isModalOpen(id: string): boolean {
 }
 
 /**
- * 绑定一个弹窗的关闭方式：关闭按钮 + 点击遮罩。
- * 点击判定用 `event.target === modal`，点在内容区上不会误关。
+ * Implementation note.
+ * Implementation note.
  */
 export function bindModalClose(id: string, closeButtonSelector: string, onClose?: () => void): void {
   const close = (): void => {

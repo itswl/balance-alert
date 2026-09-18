@@ -17,11 +17,11 @@ func TestParseURL(t *testing.T) {
 	}{
 		{
 			name:     "sqlite 三斜杠是相对路径",
-			input:    "sqlite:///./data/balance_alert.db",
+			input:    "sqlite:///./data/quotapulse.db",
 			engine:   EngineSQLite,
 			driver:   "sqlite",
-			dsn:      "./data/balance_alert.db?_pragma=busy_timeout%285000%29&_time_format=sqlite",
-			filePath: "./data/balance_alert.db",
+			dsn:      "./data/quotapulse.db?_pragma=busy_timeout%285000%29&_time_format=sqlite",
+			filePath: "./data/quotapulse.db",
 		},
 		{
 			name:     "sqlite 四斜杠是绝对路径",
@@ -74,17 +74,17 @@ func TestParseURL(t *testing.T) {
 		},
 		{
 			name:   "postgresql 原样交给 pgx",
-			input:  "postgresql://user:pass@db.internal:5432/balance_alert",
+			input:  "postgresql://user:pass@db.internal:5432/quotapulse",
 			engine: EnginePostgres,
 			driver: "pgx",
-			dsn:    "postgres://user:pass@db.internal:5432/balance_alert",
+			dsn:    "postgres://user:pass@db.internal:5432/quotapulse",
 		},
 		{
 			name:   "postgres 短写法",
-			input:  "postgres://user:pass@localhost:5432/balance_alert?sslmode=disable",
+			input:  "postgres://user:pass@localhost:5432/quotapulse?sslmode=disable",
 			engine: EnginePostgres,
 			driver: "pgx",
-			dsn:    "postgres://user:pass@localhost:5432/balance_alert?sslmode=disable",
+			dsn:    "postgres://user:pass@localhost:5432/quotapulse?sslmode=disable",
 		},
 		{
 			name:   "postgresql 去掉驱动后缀",
@@ -95,17 +95,17 @@ func TestParseURL(t *testing.T) {
 		},
 		{
 			name:   "mysql 带驱动后缀，保留 charset 并补 parseTime",
-			input:  "mysql+pymysql://user:pass@db.internal:3306/balance_alert?charset=utf8mb4",
+			input:  "mysql+pymysql://user:pass@db.internal:3306/quotapulse?charset=utf8mb4",
 			engine: EngineMySQL,
 			driver: "mysql",
-			dsn:    "user:pass@tcp(db.internal:3306)/balance_alert?charset=utf8mb4&loc=UTC&parseTime=true",
+			dsn:    "user:pass@tcp(db.internal:3306)/quotapulse?charset=utf8mb4&loc=UTC&parseTime=true",
 		},
 		{
 			name:   "mysql 省略端口时补 3306",
-			input:  "mysql://user:pass@db.internal/balance_alert",
+			input:  "mysql://user:pass@db.internal/quotapulse",
 			engine: EngineMySQL,
 			driver: "mysql",
-			dsn:    "user:pass@tcp(db.internal:3306)/balance_alert?loc=UTC&parseTime=true",
+			dsn:    "user:pass@tcp(db.internal:3306)/quotapulse?loc=UTC&parseTime=true",
 		},
 		{
 			name:   "mysql 百分号编码的密码要还原",
@@ -179,8 +179,8 @@ func TestParseURLRejects(t *testing.T) {
 	}
 }
 
-// sqlite 的 DSN 会被驱动当查询串解析，参数必须是合法的百分号编码，
-// 否则 busy_timeout(5000) 里的括号会让驱动读不出 pragma。
+// Implementation note.
+// Implementation note.
 func TestSQLiteDSNQueryIsParsable(t *testing.T) {
 	target, err := ParseURL("sqlite:///./data/x.db")
 	if err != nil {
@@ -199,11 +199,11 @@ func TestSQLiteDSNQueryIsParsable(t *testing.T) {
 	}
 }
 
-// TestPasswordWithURLSpecialCharacters 密码里的 # 和 ? 不能把连接串截断。
+// Implementation note.
 //
-// 这是生产上真踩过的坑：OCI 生成的 MySQL 密码里带一个 #，net/url 把它当片段起点，
-// 连接串在那里断掉，报成「invalid port」，服务连不上数据库。
-// 连接串因此是自己按正则拆的，这几条用例钉住这个行为，免得有人图省事又改回 net/url。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func TestPasswordWithURLSpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -213,8 +213,8 @@ func TestPasswordWithURLSpecialCharacters(t *testing.T) {
 	}{
 		{
 			name:    "mysql 密码里有井号",
-			url:     "mysql+pymysql://admin:pa#ss!^word@10.0.10.35:3306/balance_alert?charset=utf8mb4",
-			wantDSN: "admin:pa#ss!^word@tcp(10.0.10.35:3306)/balance_alert?charset=utf8mb4&loc=UTC&parseTime=true",
+			url:     "mysql+pymysql://admin:pa#ss!^word@10.0.10.35:3306/quotapulse?charset=utf8mb4",
+			wantDSN: "admin:pa#ss!^word@tcp(10.0.10.35:3306)/quotapulse?charset=utf8mb4&loc=UTC&parseTime=true",
 		},
 		{
 			name:    "mysql 密码里有问号",
@@ -245,15 +245,15 @@ func TestPasswordWithURLSpecialCharacters(t *testing.T) {
 	}
 }
 
-// TestPostgresPasswordIsReEncoded postgres 的 DSN 要重新转义后再交给 pgx，
-// 因为 pgx 内部同样用 net/url，原样透传一样会被 # 截断。
+// Implementation note.
+// Implementation note.
 func TestPostgresPasswordIsReEncoded(t *testing.T) {
-	got, err := ParseURL("postgresql://admin:pa#ss@db.internal:5432/balance_alert?sslmode=require")
+	got, err := ParseURL("postgresql://admin:pa#ss@db.internal:5432/quotapulse?sslmode=require")
 	if err != nil {
 		t.Fatalf("解析失败: %v", err)
 	}
 
-	// 重新解析一遍，确认 pgx 拿到的是能正确还原出原密码的串
+	// Implementation note.
 	parsed, err := url.Parse(got.DSN)
 	if err != nil {
 		t.Fatalf("生成的 DSN 自己都解析不了: %v（%s）", err, got.DSN)
@@ -270,7 +270,7 @@ func TestPostgresPasswordIsReEncoded(t *testing.T) {
 	}
 }
 
-// TestIPv6Host IPv6 地址要能识别出来，方括号不能进主机名。
+// Implementation note.
 func TestIPv6Host(t *testing.T) {
 	got, err := ParseURL("mysql://u:p@[2001:db8::1]:3306/db")
 	if err != nil {

@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/provider"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/provider"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// fakeStore 记下写入的内容，并让冷却状态可控。
+// Implementation note.
 type fakeStore struct {
 	store.Store
 	mu       sync.Mutex
@@ -46,7 +46,7 @@ func (f *fakeStore) HasRecentAlert(context.Context, string, string, time.Duratio
 	return f.cooling, nil
 }
 
-// fakeNotifier 记下发出的消息，并能模拟发送失败。
+// Implementation note.
 type fakeNotifier struct {
 	mu       sync.Mutex
 	messages []notify.Message
@@ -69,18 +69,18 @@ func (f *fakeNotifier) count() int {
 	return len(f.messages)
 }
 
-// newTestMonitor 造一个查 fake HTTP 服务的监控器，balance 是上游会返回的余额。
+// Implementation note.
 func newTestMonitor(t *testing.T, projects []model.Project, balance string) (*Monitor, *fakeStore, *fakeNotifier) {
 	t.Helper()
 
-	// deepseek 的响应形状，避免测试依赖真实上游
+	// Implementation note.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"balance_infos":[{"currency":"CNY","total_balance":"` + balance + `"}]}`))
 	}))
 	t.Cleanup(upstream.Close)
 
-	// 用一个只在测试里注册的平台指向假服务
+	// Implementation note.
 	provider.RegisterSpec(provider.Spec{
 		Key: "testupstream", Name: "测试平台", DefaultType: model.TypeBalance,
 		URL: upstream.URL,
@@ -154,7 +154,7 @@ func TestCheckProjectNeedsAlarm(t *testing.T) {
 	}
 }
 
-// TestDryRunSendsNothing 测试模式下一切照跑，只是不真的发通知。
+// Implementation note.
 func TestDryRunSendsNothing(t *testing.T) {
 	m, st, notifier := newTestMonitor(t, nil, "8.5")
 	result := m.CheckProject(context.Background(), testProject(50), true)
@@ -173,7 +173,7 @@ func TestDryRunSendsNothing(t *testing.T) {
 	}
 }
 
-// TestCooldownSkipsDuplicate 冷却窗口内不重复打扰。
+// Implementation note.
 func TestCooldownSkipsDuplicate(t *testing.T) {
 	m, st, notifier := newTestMonitor(t, nil, "8.5")
 	st.cooling = true
@@ -187,7 +187,7 @@ func TestCooldownSkipsDuplicate(t *testing.T) {
 	}
 }
 
-// TestFailedSendIsNotRecorded 发送失败不留痕，下一轮还能再试。
+// Implementation note.
 func TestFailedSendIsNotRecorded(t *testing.T) {
 	m, st, notifier := newTestMonitor(t, nil, "8.5")
 	notifier.err = errors.New("webhook 超时")
@@ -210,7 +210,7 @@ func TestUnknownProviderFails(t *testing.T) {
 	if result.Success {
 		t.Fatal("未知平台应当失败")
 	}
-	if result.Error == nil || !strings.Contains(*result.Error, "未知的服务商") {
+	if result.Error == nil || !strings.Contains(*result.Error, "Unknown provider") {
 		t.Errorf("错误消息应说明是未知平台，实际 %v", result.Error)
 	}
 	if result.Credits != nil {
@@ -218,7 +218,7 @@ func TestUnknownProviderFails(t *testing.T) {
 	}
 }
 
-// TestResponseCache 同一个密钥在 TTL 内只打一次上游，防止页面连点把配额刷光。
+// Implementation note.
 func TestResponseCache(t *testing.T) {
 	var hits int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

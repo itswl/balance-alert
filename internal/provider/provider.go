@@ -1,7 +1,7 @@
-// Package provider 是各平台余额查询的适配层。
+// Package provider provides the package implementation.
 //
-// 绝大多数平台都是"GET 一次、从 JSON 里取个数"，这类用 Spec 声明式接入，
-// 几行就能加一个新平台；需要签名的（火山、阿里云）自己实现 Provider 接口。
+// Implementation note.
+// Implementation note.
 package provider
 
 import (
@@ -19,22 +19,22 @@ import (
 	"time"
 )
 
-// DefaultTimeout 单次请求的超时；重试由 Client 负责。
+// Implementation note.
 const DefaultTimeout = 15 * time.Second
 
-// MaxRetries 是失败后的重试次数。
+// Implementation note.
 const MaxRetries = 3
 
-// Provider 查询一个账户的当前余额。
+// Implementation note.
 type Provider interface {
-	// Fetch 返回当前余额。语义由平台决定：货币金额、点数或剩余百分比。
+	// Implementation note.
 	Fetch(ctx context.Context) (float64, error)
 }
 
-// Factory 用 API Key 造一个适配器。Key 格式不对时返回错误。
+// Implementation note.
 type Factory func(apiKey string, client *Client) (Provider, error)
 
-// Info 是注册表里一个平台的元信息，供 /api/providers 和页面下拉框使用。
+// Implementation note.
 type Info struct {
 	Key         string `json:"value"`
 	Name        string `json:"label"`
@@ -46,7 +46,7 @@ var registry = map[string]struct {
 	factory Factory
 }{}
 
-// Register 登记一个平台。在各适配器的 init 里调用。
+// Implementation note.
 func Register(key, name, defaultType string, factory Factory) {
 	registry[key] = struct {
 		info    Info
@@ -54,11 +54,11 @@ func Register(key, name, defaultType string, factory Factory) {
 	}{Info{Key: key, Name: name, DefaultType: defaultType}, factory}
 }
 
-// New 按平台名创建适配器。
+// Implementation note.
 func New(key, apiKey string, client *Client) (Provider, error) {
 	entry, ok := registry[key]
 	if !ok {
-		return nil, fmt.Errorf("未知的服务商: %s. 支持的服务商: %s", key, strings.Join(Keys(), ", "))
+		return nil, fmt.Errorf("Unknown provider: %s. Supported providers: %s", key, strings.Join(Keys(), ", "))
 	}
 	if client == nil {
 		client = NewClient(DefaultTimeout)
@@ -66,7 +66,7 @@ func New(key, apiKey string, client *Client) (Provider, error) {
 	return entry.factory(apiKey, client)
 }
 
-// Keys 返回所有已注册平台名，按字典序。
+// Implementation note.
 func Keys() []string {
 	keys := make([]string, 0, len(registry))
 	for k := range registry {
@@ -76,7 +76,7 @@ func Keys() []string {
 	return keys
 }
 
-// All 返回所有平台的元信息，按平台名排序。
+// Implementation note.
 func All() []Info {
 	out := make([]Info, 0, len(registry))
 	for _, k := range Keys() {
@@ -85,13 +85,13 @@ func All() []Info {
 	return out
 }
 
-// Lookup 返回一个平台的元信息。
+// Implementation note.
 func Lookup(key string) (Info, bool) {
 	entry, ok := registry[key]
 	return entry.info, ok
 }
 
-// DisplayName 返回平台展示名，未注册时原样返回。
+// Implementation note.
 func DisplayName(key string) string {
 	if info, ok := Lookup(key); ok {
 		return info.Name
@@ -101,12 +101,12 @@ func DisplayName(key string) string {
 
 // ---------- HTTP ----------
 
-// Client 是带重试的 HTTP 客户端。适配器之间共享，连接池才有意义。
+// Implementation note.
 type Client struct {
 	http *http.Client
 }
 
-// NewClient 创建一个带超时的客户端。
+// Implementation note.
 func NewClient(timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -121,11 +121,11 @@ func NewClient(timeout time.Duration) *Client {
 	}}
 }
 
-// 这些状态码重试一次可能就好了。
+// Implementation note.
 var retriableStatus = map[int]bool{429: true, 500: true, 502: true, 503: true, 504: true}
 
-// Do 发送请求，对可重试的状态码与网络错误退避重试。
-// 只重试幂等方法：非幂等请求可能已经在服务端生效了，重发就成了第二次。
+// Implementation note.
+// Implementation note.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	idempotent := req.Method == http.MethodGet || req.Method == http.MethodHead || req.Method == http.MethodOptions
 
@@ -151,7 +151,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		if !idempotent || !retriableStatus[resp.StatusCode] || attempt == MaxRetries {
 			return resp, nil
 		}
-		// 丢弃响应体才能复用连接
+		// Implementation note.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 		resp.Body.Close()
 		lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -159,7 +159,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return nil, classify(lastErr)
 }
 
-// GetJSON 发一个 GET 并把响应解析成 map。
+// Implementation note.
 func (c *Client) GetJSON(ctx context.Context, rawURL string, headers map[string]string, params map[string]string) (map[string]any, error) {
 	if len(params) > 0 {
 		q := url.Values{}
@@ -188,7 +188,7 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, headers map[string]
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
+		return nil, fmt.Errorf("failed to read provider response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
@@ -196,58 +196,58 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, headers map[string]
 
 	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, errors.New("响应不是有效的 JSON 格式")
+		return nil, errors.New("Response is not valid JSON")
 	}
 	return data, nil
 }
 
-// classify 把底层网络错误翻译成给用户看的消息：超时说"请求超时"，
-// 带 HTTP 状态码的原样透出，其余一律归到"网络连接错误"。
+// Implementation note.
+// Implementation note.
 func classify(err error) error {
 	if err == nil {
 		return nil
 	}
 	var netErr interface{ Timeout() bool }
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return errors.New("请求超时")
+		return errors.New("Request timed out")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return errors.New("请求超时")
+		return errors.New("Request timed out")
 	}
 	if strings.HasPrefix(err.Error(), "HTTP ") {
 		return err
 	}
-	return fmt.Errorf("网络连接错误: %w", err)
+	return fmt.Errorf("Network connection error: %w", err)
 }
 
-// ---------- 声明式适配器 ----------
+// Implementation note.
 
-// AuthMode 决定 API Key 放在哪。
+// Implementation note.
 type AuthMode int
 
 const (
 	AuthBearer AuthMode = iota // Authorization: Bearer <key>
-	AuthQuery                  // 拼进查询参数
+	AuthQuery                  // operation
 )
 
-// Spec 声明一个"GET 一次、从 JSON 里取个数"的余额接口。
+// Implementation note.
 type Spec struct {
-	Key         string // 注册名，如 deepseek
-	Name        string // 展示名，如 DeepSeek
-	DefaultType string // 余额类型：balance / credits / quota
+	Key         string // operation,operation deepseek
+	Name        string // operation,operation DeepSeek
+	DefaultType string // operation:balance / credits / quota
 	URL         string
 	Auth        AuthMode
-	AuthParam   string // Auth 为 AuthQuery 时的参数名
+	AuthParam   string // Auth operation AuthQuery operation
 	Headers     map[string]string
 	Params      map[string]string
 
-	// Check 做业务层成功校验，返回错误表示这次查询失败。可空。
+	// Implementation note.
 	Check func(data map[string]any) error
-	// Extract 从响应里取余额，取不到就返回错误。
+	// Implementation note.
 	Extract func(data map[string]any) (float64, error)
 }
 
-// RegisterSpec 用声明式 Spec 注册一个平台。
+// Implementation note.
 func RegisterSpec(spec Spec) {
 	Register(spec.Key, spec.Name, spec.DefaultType, func(apiKey string, client *Client) (Provider, error) {
 		return &specProvider{spec: spec, apiKey: apiKey, client: client}, nil
@@ -287,9 +287,9 @@ func (p *specProvider) Fetch(ctx context.Context) (float64, error) {
 	return p.spec.Extract(data)
 }
 
-// ---------- JSON 取值助手 ----------
+// Implementation note.
 
-// Dig 按路径取嵌套字段，任一层不是对象就返回 nil。
+// Implementation note.
 func Dig(data map[string]any, path ...string) any {
 	var current any = data
 	for _, key := range path {
@@ -302,13 +302,13 @@ func Dig(data map[string]any, path ...string) any {
 	return current
 }
 
-// Object 把值断言成对象，失败返回 nil。
+// Implementation note.
 func Object(v any) map[string]any {
 	obj, _ := v.(map[string]any)
 	return obj
 }
 
-// Num 把 JSON 里的数值（可能是 float64 或带千位分隔符的字符串）转成 float64。
+// Implementation note.
 func Num(v any) (float64, bool) {
 	switch value := v.(type) {
 	case float64:
@@ -327,20 +327,20 @@ func Num(v any) (float64, bool) {
 	return 0, false
 }
 
-// Str 把值当字符串取，非字符串返回空。
+// Implementation note.
 func Str(v any) string {
 	s, _ := v.(string)
 	return s
 }
 
-// ---------- 日志脱敏 ----------
+// Implementation note.
 
 var sensitiveQueryKeys = map[string]bool{
 	"access_token": true, "ak": true, "api_key": true, "authorization": true,
 	"key": true, "secret": true, "signature": true, "sk": true, "token": true,
 }
 
-// MaskURL 把 URL 里的密钥与 webhook token 打码，用于日志。
+// Implementation note.
 func MaskURL(raw string) string {
 	parsed, err := url.Parse(raw)
 	if err != nil {
@@ -363,8 +363,8 @@ func MaskURL(raw string) string {
 			if hasTail {
 				parsed.Path += "/" + tail
 			}
-			// String() 默认会把 * 转义成 %2A，日志里的 abcd%2A%2A%2A7890 没法看；
-			// RawPath 指定原样输出
+			// Implementation note.
+			// Implementation note.
 			parsed.RawPath = parsed.Path
 		}
 		break
@@ -391,12 +391,12 @@ func MaskURL(raw string) string {
 	return parsed.String()
 }
 
-// SplitKeyPair 拆开 "ID:Secret" 形式的密钥，火山与阿里云用。
-// label 是平台名，format 是这个平台的密钥写法（如 "AK:SK"），两者拼成给用户看的提示。
+// Implementation note.
+// Implementation note.
 func SplitKeyPair(apiKey, label, format string) (string, string, error) {
 	id, secret, ok := strings.Cut(apiKey, ":")
 	if !ok || id == "" || secret == "" {
-		return "", "", fmt.Errorf("%s API Key 格式错误，应为 '%s' 格式", label, format)
+		return "", "", fmt.Errorf("%s: invalid API key format; expected '%s'", label, format)
 	}
 	return id, secret, nil
 }

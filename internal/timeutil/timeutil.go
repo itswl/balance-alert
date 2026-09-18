@@ -1,7 +1,7 @@
-// Package timeutil 解析定时任务的时刻表达式，并计算下一次触发时间。
+// Package timeutil provides the package implementation.
 //
-// 纯函数，不依赖项目内其它包（config 与 scheduler 都要用它，不能有环）。
-// 星期一律用 ISO 编号：1=周一 … 7=周日。
+// Implementation note.
+// Implementation note.
 package timeutil
 
 import (
@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// ClockTime 是一天内的某个时刻。
+// Implementation note.
 type ClockTime struct {
 	Hour   int
 	Minute int
@@ -25,14 +25,14 @@ func (c ClockTime) before(other ClockTime) bool {
 	return c.Hour < other.Hour || (c.Hour == other.Hour && c.Minute < other.Minute)
 }
 
-// 这些值表示"关闭该任务"。
+// Implementation note.
 var offValues = map[string]bool{
 	"off": true, "none": true, "disabled": true, "false": true, "0": true, "-": true,
 }
 
 var timePattern = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
 
-// 星期写法，值为 ISO 编号。
+// Implementation note.
 var weekdayNames = map[string]int{
 	"mon": 1, "monday": 1, "周一": 1, "一": 1,
 	"tue": 2, "tues": 2, "tuesday": 2, "周二": 2, "二": 2,
@@ -43,8 +43,8 @@ var weekdayNames = map[string]int{
 	"sun": 7, "sunday": 7, "周日": 7, "周天": 7, "日": 7, "天": 7,
 }
 
-// ParseDailyTimes 把 "09:00,15:30" 解析成去重排序后的时刻列表；off / none 等表示关闭。
-// 格式不对时返回错误，配合启动时校验做到配置错就起不来。
+// Implementation note.
+// Implementation note.
 func ParseDailyTimes(text string) ([]ClockTime, error) {
 	raw := strings.TrimSpace(text)
 	if raw == "" || offValues[strings.ToLower(raw)] {
@@ -60,12 +60,12 @@ func ParseDailyTimes(text string) ([]ClockTime, error) {
 		}
 		matched := timePattern.FindStringSubmatch(part)
 		if matched == nil {
-			return nil, fmt.Errorf("时刻格式错误: %q，应为 HH:MM，多个时刻用逗号分隔", part)
+			return nil, fmt.Errorf("invalid time format %q; use HH:MM and separate multiple times with commas", part)
 		}
 		hour, _ := strconv.Atoi(matched[1])
 		minute, _ := strconv.Atoi(matched[2])
 		if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
-			return nil, fmt.Errorf("时刻越界: %q", part)
+			return nil, fmt.Errorf("time is out of range: %q", part)
 		}
 		c := ClockTime{Hour: hour, Minute: minute}
 		if !seen[c] {
@@ -77,7 +77,7 @@ func ParseDailyTimes(text string) ([]ClockTime, error) {
 	return result, nil
 }
 
-// ParseWeekdays 把 "Mon,Thu" / "周一" 解析成 {1,4}；空表示不限定星期。
+// Implementation note.
 func ParseWeekdays(text string) (map[int]bool, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
@@ -90,22 +90,22 @@ func ParseWeekdays(text string) (map[int]bool, error) {
 		}
 		if n, err := strconv.Atoi(part); err == nil {
 			if n < 1 || n > 7 {
-				return nil, fmt.Errorf("星期格式错误: %q，可写 Mon / 周一 / 1", part)
+				return nil, fmt.Errorf("invalid weekday %q; use Mon or an ISO weekday number", part)
 			}
 			result[n] = true
 			continue
 		}
 		day, ok := weekdayNames[part]
 		if !ok {
-			return nil, fmt.Errorf("星期格式错误: %q，可写 Mon / 周一 / 1", part)
+			return nil, fmt.Errorf("invalid weekday %q; use Mon or an ISO weekday number", part)
 		}
 		result[day] = true
 	}
 	return result, nil
 }
 
-// ParseWeeklySchedule 把 "Mon 09:00" 解析成 ({1}, [09:00])；省略星期表示每天，off 表示关闭。
-// 星期与时刻之间用空格分隔，各自都能用逗号写多个，例如 "Mon,Thu 09:00,18:00"。
+// Implementation note.
+// Implementation note.
 func ParseWeeklySchedule(text string) (map[int]bool, []ClockTime, error) {
 	raw := strings.TrimSpace(text)
 	if raw == "" || offValues[strings.ToLower(raw)] {
@@ -124,12 +124,12 @@ func ParseWeeklySchedule(text string) (map[int]bool, []ClockTime, error) {
 	return weekdays, times, err
 }
 
-var weekdayLabels = []rune("一二三四五六日")
+var weekdayLabels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
-// Describe 把时刻表渲染成人话，用于自检输出与 /api/jobs。
+// Implementation note.
 func Describe(times []ClockTime, weekdays map[int]bool) string {
 	if len(times) == 0 {
-		return "已关闭"
+		return "Disabled"
 	}
 	clocks := make([]string, len(times))
 	for i, t := range times {
@@ -137,7 +137,7 @@ func Describe(times []ClockTime, weekdays map[int]bool) string {
 	}
 	clock := strings.Join(clocks, " / ")
 	if len(weekdays) == 0 {
-		return "每天 " + clock
+		return "Daily " + clock
 	}
 	days := make([]int, 0, len(weekdays))
 	for d := range weekdays {
@@ -146,12 +146,12 @@ func Describe(times []ClockTime, weekdays map[int]bool) string {
 	sort.Ints(days)
 	labels := make([]string, len(days))
 	for i, d := range days {
-		labels[i] = string(weekdayLabels[d-1])
+		labels[i] = weekdayLabels[d-1]
 	}
-	return "每周" + strings.Join(labels, "、") + " " + clock
+	return "Weekly " + strings.Join(labels, ", ") + " " + clock
 }
 
-// ISOWeekday 返回 1=周一 … 7=周日。
+// Implementation note.
 func ISOWeekday(t time.Time) int {
 	if w := int(t.Weekday()); w == 0 {
 		return 7
@@ -160,8 +160,8 @@ func ISOWeekday(t time.Time) int {
 	}
 }
 
-// NextOccurrence 返回严格晚于 now 的下一个触发时刻。
-// weekdays 非空时只在这些星期触发。返回值与 now 同时区。
+// Implementation note.
+// Implementation note.
 func NextOccurrence(now time.Time, times []ClockTime, weekdays map[int]bool) (time.Time, bool) {
 	if len(times) == 0 {
 		return time.Time{}, false
@@ -169,7 +169,7 @@ func NextOccurrence(now time.Time, times []ClockTime, weekdays map[int]bool) (ti
 	ordered := append([]ClockTime(nil), times...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].before(ordered[j]) })
 
-	for offset := 0; offset < 8; offset++ { // 最多找一周，一定能落到某一天
+	for offset := 0; offset < 8; offset++ { // Search at most one week; a matching day must exist.
 		day := now.AddDate(0, 0, offset)
 		if len(weekdays) > 0 && !weekdays[ISOWeekday(day)] {
 			continue
@@ -184,7 +184,7 @@ func NextOccurrence(now time.Time, times []ClockTime, weekdays map[int]bool) (ti
 	return time.Time{}, false
 }
 
-// UTCISO 把时间转成 Z 结尾的 ISO 字符串，nil 时间返回 nil。
+// Implementation note.
 func UTCISO(t time.Time) *string {
 	if t.IsZero() {
 		return nil
@@ -193,5 +193,5 @@ func UTCISO(t time.Time) *string {
 	return &s
 }
 
-// NowISO 是当前时刻的 UTC ISO 字符串。
+// Implementation note.
 func NowISO() string { return time.Now().UTC().Format("2006-01-02T15:04:05.999999Z") }

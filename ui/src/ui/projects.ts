@@ -1,4 +1,4 @@
-/** ProjectBalance区：卡片渲染、搜索 / Provider / 视图三重筛选、Provider下拉框。 */
+/* Implementation note. */
 
 import { byId, requireById, selectById } from '../dom.js';
 import {
@@ -16,14 +16,14 @@ import { emptyState } from './empty.js';
 import { ICON_ARROW_RIGHT, ICON_DELETE, ICON_EDIT } from './icons.js';
 
 /**
- * 一张Project卡片。
+ * Implementation note.
  *
- * features 作为参数传进来而不是直接读 AppState：这样这个函数是纯的，
- * 冒烟测试可以直接喂数据比对输出。
+ * Implementation note.
+ * Implementation note.
  */
 export function renderProjectCard(project: CheckResult, features: Features): string {
-  // 查不到Balance的Project单独一种形态。旧版把 credits 的 null 当 0 渲染，阈值也是 null，
-  // 于是"密钥过期"在页面上长得跟"Balance充足"一模一样——监控工具最不该出的错。
+  // Implementation note.
+  // Implementation note.
   if (!project.success) {
     return renderFailedCard(project, features);
   }
@@ -43,7 +43,7 @@ export function renderProjectCard(project: CheckResult, features: Features): str
   const projectNameAttr = escapeAttr(projectName);
   const providerAttr = escapeAttr(provider);
 
-  // Project的增删改依赖 ENABLE_DYNAMIC_CONFIG，关掉时连按钮都不该出现
+  // Implementation note.
   const optionalActions = features.dynamic_config
     ? `
                         <button class="action-icon-btn js-edit-project" data-project="${projectNameAttr}" title="Edit project">
@@ -109,7 +109,7 @@ export function renderProjectCard(project: CheckResult, features: Features): str
         `;
 }
 
-/** 查不到Balance的Project：不显示Balance与进度条，直接把错误原文摆出来 */
+/* Implementation note. */
 function renderFailedCard(project: CheckResult, features: Features): string {
   const projectName = project.project || 'Unknown project';
   const provider = project.provider || 'unknown';
@@ -158,7 +158,7 @@ function renderFailedCard(project: CheckResult, features: Features): string {
         `;
 }
 
-/** 搜索词 / Provider / 当前视图三重筛选，顺序与原版一致 */
+/* Implementation note. */
 export function filterProjects(
   projects: CheckResult[],
   { search, provider, alertsOnly }: { search: string; provider: string; alertsOnly: boolean },
@@ -199,7 +199,7 @@ export function renderProjects(data: CreditsResponse): void {
       : filtered.map((p) => renderProjectCard(p, AppState.features)).join('');
 }
 
-/** 重建Provider下拉框；会把已选Provider重置成「全部Provider」，所以只在首次加载时调 */
+/* Implementation note. */
 export function updateProviderFilter(data: CreditsResponse): void {
   const select = selectById('provider-filter');
   const providers = [...new Set((data.projects || []).map((p) => p.provider))];

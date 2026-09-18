@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// TestReadsLegacyDatabase 证明现在的实现能直接接上旧版建的库。
+// Implementation note.
 //
-// testdata/legacy.db 是重写前的实现真实写出来的库，六张表都有数据。
-// 升级不需要迁移脚本、不需要停机导数据，这条是整个重写的前提。
+// Implementation note.
+// Implementation note.
 func TestReadsLegacyDatabase(t *testing.T) {
-	// 复制一份再打开：建表语句会写库，不能弄脏 testdata
+	// Implementation note.
 	source, err := os.ReadFile("testdata/legacy.db")
 	if err != nil {
 		t.Fatalf("读取旧版数据库失败: %v", err)
@@ -53,7 +53,7 @@ func TestReadsLegacyDatabase(t *testing.T) {
 		if !volc.Enabled {
 			t.Error("enabled 应为 true")
 		}
-		// 停用状态也要如实读出来，否则停掉的账户会被重新拉起来查
+		// Implementation note.
 		deepseek := findByName(projects, func(p model.Project) string { return p.Name }, "deepseek")
 		if deepseek == nil || deepseek.Enabled {
 			t.Errorf("deepseek 应是停用状态，实际 %+v", deepseek)
@@ -69,7 +69,7 @@ func TestReadsLegacyDatabase(t *testing.T) {
 			t.Fatalf("应有 1 条订阅，实际 %d 条", len(subs))
 		}
 		s := subs[0]
-		// 年付的续费日在旧库里存成 MMDD 整数，新版必须照这个理解
+		// Implementation note.
 		if s.Name != "域名续费" || s.CycleType != "yearly" || s.RenewalDay != 315 {
 			t.Errorf("订阅字段不对: %+v", s)
 		}
@@ -103,7 +103,7 @@ func TestReadsLegacyDatabase(t *testing.T) {
 		if len(series) != 5 {
 			t.Fatalf("应有 5 条快照，实际 %d 条", len(series))
 		}
-		// 必须按时间升序，跑道分析依赖这个顺序
+		// Implementation note.
 		for i := 1; i < len(series); i++ {
 			if series[i].Timestamp < series[i-1].Timestamp {
 				t.Fatal("余额快照没有按时间升序返回")
@@ -159,7 +159,7 @@ func TestReadsLegacyDatabase(t *testing.T) {
 			t.Errorf("告警字段不对: %+v", alerts[0])
 		}
 
-		// 兼容性 fixture 的时间是固定的；使用足够宽的窗口，避免测试结果随日历漂移。
+		// Implementation note.
 		series, _ := st.BalanceSeries(ctx, 7)
 		cooling, err := st.HasRecentAlert(ctx, series[0].ProjectID, "low_balance", 365*24*time.Hour)
 		if err != nil {
@@ -192,7 +192,7 @@ func TestReadsLegacyDatabase(t *testing.T) {
 			t.Error("alert_sent 应为 true")
 		}
 
-		// 去重要能认出旧库里已经通知过的邮件
+		// Implementation note.
 		seen, err := st.HasRecentEmailAlert(ctx, "工作邮箱", "noreply@aliyun.com",
 			"【阿里云】余额不足提醒", "Mon, 01 Sep 2026 10:00:00 +0800", 30)
 		if err != nil {

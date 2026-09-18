@@ -9,11 +9,11 @@
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 
 services:
-  balance-alert:
-    # Defaults to latest. Pin BALANCE_ALERT_VERSION in production so a pull cannot
+  quotapulse:
+    # Defaults to latest. Pin QUOTAPULSE_VERSION in production so a pull cannot
     # silently replace the running version.
-    image: ghcr.io/itswl/balance-alert:${BALANCE_ALERT_VERSION:-latest}
-    container_name: balance-alert
+    image: ghcr.io/itswl/quotapulse:${QUOTAPULSE_VERSION:-latest}
+    container_name: quotapulse
     restart: unless-stopped
     pull_policy: missing
     ports:

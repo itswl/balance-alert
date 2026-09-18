@@ -10,28 +10,28 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 
 	_ "github.com/go-sql-driver/mysql" // mysql
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx
 	_ "modernc.org/sqlite"             // sqlite
 )
 
-// Options 是打开数据库需要的全部外部输入。
+// Implementation note.
 //
-// 刻意不依赖 internal/config：store 只要这三个值，把依赖方向保持成单向，
-// 测试里也能不碰环境变量就构造出一个库。
+// Implementation note.
+// Implementation note.
 type Options struct {
-	DatabaseURL string // 连接串 URL 形式，由 ParseURL 翻译成驱动 DSN
-	// EncryptionKey 为空表示不加密，api_key 与 password 原样存取。
+	DatabaseURL string // operation URL operation,operation ParseURL operation DSN
+	// Implementation note.
 	EncryptionKey string
-	// AutoEncryptOnRead 对应 AUTO_ENCRYPT_ON_READ（配置里默认 true）：
-	// 读到历史遗留的明文时顺手加密回写。调用方要显式传，结构体零值是 false。
+	// Implementation note.
+	// Implementation note.
 	AutoEncryptOnRead bool
 }
 
-// 各查询的窗口与条数默认值：调用方传 0 表示没指定，回落到这里。
-// 这组值是接口对外的既有约定，改了会让不带参数的调用拿到不一样的数据范围。
+// Implementation note.
+// Implementation note.
 const (
 	defaultBalanceDays    = 7
 	defaultBalanceLimit   = 100
@@ -42,7 +42,7 @@ const (
 	defaultEmailDays      = 30
 	defaultEmailLimit     = 100
 	defaultTopProjects    = 10
-	defaultBalanceKindTag = model.TypeCredits // balance_type 的建表默认值
+	defaultBalanceKindTag = model.TypeCredits // balance_type operation
 )
 
 type sqlStore struct {
@@ -53,29 +53,29 @@ type sqlStore struct {
 	autoEncrypt bool
 }
 
-// Open 连上数据库、建好表，返回落库版 Store。
+// Implementation note.
 func Open(ctx context.Context, opts Options) (Store, error) {
 	target, err := ParseURL(opts.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	// SQLite 的库文件放在 ./data 这类目录下，首次启动目录还不存在，先建出来免得 Open 直接失败。
+	// Implementation note.
 	if target.FilePath != "" {
 		if dir := filepath.Dir(target.FilePath); dir != "" && dir != "." {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return nil, fmt.Errorf("创建数据目录 %s 失败：%w", dir, err)
+				return nil, fmt.Errorf("operation %s operation:%w", dir, err)
 			}
 		}
 	}
 
 	db, err := sql.Open(target.DriverName, target.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("打开数据库失败：%w", err)
+		return nil, fmt.Errorf("Failed to open database:%w", err)
 	}
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("连接数据库失败：%w", err)
+		return nil, fmt.Errorf("Failed to connect to database:%w", err)
 	}
 	if err := createTables(ctx, db, target.Engine); err != nil {
 		db.Close()
@@ -92,7 +92,7 @@ func Open(ctx context.Context, opts Options) (Store, error) {
 		q = newMySQLQuerier(db)
 	default:
 		db.Close()
-		return nil, fmt.Errorf("没有 %s 的查询实现", target.Engine)
+		return nil, fmt.Errorf("operation %s operation", target.Engine)
 	}
 
 	return &sqlStore{
@@ -107,14 +107,14 @@ func Open(ctx context.Context, opts Options) (Store, error) {
 func (s *sqlStore) Enabled() bool { return true }
 func (s *sqlStore) Close() error  { return s.db.Close() }
 
-// ---------- 项目配置 ----------
+// Implementation note.
 
 func (s *sqlStore) ListProjects(ctx context.Context) ([]model.Project, error) {
 	rows, err := s.q.listProjectConfigs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// AUTO_ENCRYPT_ON_READ：历史遗留的明文密钥趁这次读取顺手加密回写。
+	// Implementation note.
 	for _, row := range rows {
 		if s.shouldEncryptOnRead(row.ApiKey) {
 			if err := s.q.updateProjectAPIKey(ctx, row.Name, s.cipher.encrypt(row.ApiKey)); err != nil {
@@ -157,7 +157,7 @@ func (s *sqlStore) DeleteProject(ctx context.Context, name string) error {
 	return s.q.deleteProjectConfig(ctx, name)
 }
 
-// ---------- 订阅配置 ----------
+// Implementation note.
 
 func (s *sqlStore) ListSubscriptions(ctx context.Context) ([]model.Subscription, error) {
 	rows, err := s.q.listSubscriptionConfigs(ctx)
@@ -200,7 +200,7 @@ func (s *sqlStore) DeleteSubscription(ctx context.Context, name string) error {
 	return s.q.deleteSubscriptionConfig(ctx, name)
 }
 
-// ---------- 邮箱配置 ----------
+// Implementation note.
 
 func (s *sqlStore) ListMailboxes(ctx context.Context) ([]model.Mailbox, error) {
 	rows, err := s.q.listEmailConfigs(ctx)
@@ -249,17 +249,17 @@ func (s *sqlStore) DeleteMailbox(ctx context.Context, name string) error {
 	return s.q.deleteEmailConfig(ctx, name)
 }
 
-// shouldEncryptOnRead 判断这个字段是不是需要就地加密回写的历史明文。
+// Implementation note.
 func (s *sqlStore) shouldEncryptOnRead(value string) bool {
 	return s.autoEncrypt && s.cipher.enabled() && value != "" && !isEncrypted(value)
 }
 
-// ---------- 余额历史 ----------
+// Implementation note.
 
 func (s *sqlStore) SaveBalance(ctx context.Context, rec BalanceRecord) error {
 	balanceType := rec.BalanceType
 	if balanceType == "" {
-		balanceType = defaultBalanceKindTag // 对齐 balance_type 列的建表默认值
+		balanceType = defaultBalanceKindTag // operation balance_type operation
 	}
 	return s.q.insertBalance(ctx, insertBalanceParams{
 		ProjectID:   rec.ProjectID,
@@ -324,7 +324,7 @@ func (s *sqlStore) BalanceTrend(ctx context.Context, projectID string, days int)
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, nil // 接口约定：没有任何数据时返回 nil，由上层翻成 404
+		return nil, nil // operation:operation nil,operation 404
 	}
 
 	first, last := rows[0], rows[len(rows)-1]
@@ -350,14 +350,14 @@ func (s *sqlStore) BalanceTrend(ctx context.Context, projectID string, days int)
 		MinBalance:     minBalance,
 		MaxBalance:     maxBalance,
 		AvgBalance:     sum / float64(len(rows)),
-		Threshold:      last.Threshold.Float64, // 没设阈值时按 0 返回，是接口的既有约定
+		Threshold:      last.Threshold.Float64, // operation 0 operation,operation
 		FirstTimestamp: isoUTC(first.Timestamp),
 		LastTimestamp:  isoUTC(last.Timestamp),
 		History:        history,
 	}
 	if len(rows) >= 2 {
 		change := last.Balance - first.Balance
-		// 起点是 0 时涨幅没有意义，记成 0 而不是除零得出 Inf/NaN——JSON 序列化不了这两个值。
+		// Implementation note.
 		percent := 0.0
 		if first.Balance != 0 {
 			percent = change / first.Balance * 100
@@ -368,7 +368,7 @@ func (s *sqlStore) BalanceTrend(ctx context.Context, projectID string, days int)
 	return trend, nil
 }
 
-// ---------- 告警历史 ----------
+// Implementation note.
 
 func (s *sqlStore) SaveAlert(ctx context.Context, rec AlertRecord) error {
 	status := rec.Status
@@ -388,11 +388,11 @@ func (s *sqlStore) SaveAlert(ctx context.Context, rec AlertRecord) error {
 }
 
 func (s *sqlStore) HasRecentAlert(ctx context.Context, alertID, alertType string, within time.Duration) (bool, error) {
-	// 冷却时间配成 0 表示不冷却，这时一律放行，不必查库。
+	// Implementation note.
 	if within <= 0 {
 		return false, nil
 	}
-	// 只认已经发出去的那条：pending / failed 不算发过，否则一次发送失败会把后续告警全压掉。
+	// Implementation note.
 	n, err := s.q.countRecentAlerts(ctx, alertID, alertType, "sent", time.Now().UTC().Add(-within))
 	if err != nil {
 		return false, err
@@ -455,7 +455,7 @@ func (s *sqlStore) AlertStats(ctx context.Context, days int) (*Stats, error) {
 	return stats, nil
 }
 
-// ---------- 邮件告警历史 ----------
+// Implementation note.
 
 func (s *sqlStore) SaveEmailAlert(ctx context.Context, rec EmailAlertRecord) error {
 	keywords, err := encodeKeywords(rec.Keywords)
@@ -507,13 +507,13 @@ func (s *sqlStore) EmailAlerts(ctx context.Context, q EmailAlertQuery) ([]EmailA
 	return out, nil
 }
 
-// encodeKeywords 把命中的关键词存成 JSON 数组文本。
+// Implementation note.
 //
-// 关掉 HTML 转义：中文和 & < > 都按原样存，与库里既有行的写法一致。
-// 若按 encoding/json 的默认行为把它们转义掉，同一批关键词在新旧行里字节不同，比对时就对不上。
+// Implementation note.
+// Implementation note.
 func encodeKeywords(keywords []string) (string, error) {
 	if keywords == nil {
-		keywords = []string{} // nil 会被编码成 null，而这一列的约定是 JSON 数组
+		keywords = []string{} // nil operation null,operation JSON operation
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -524,9 +524,9 @@ func encodeKeywords(keywords []string) (string, error) {
 	return string(bytes.TrimRight(buf.Bytes(), "\n")), nil
 }
 
-// ---------- 取值辅助 ----------
+// Implementation note.
 
-// daysOf / limitOf 补齐窗口与条数：传 0 表示调用方没指定，回落到上面那组默认值。
+// Implementation note.
 func daysOf(days, fallback int) int {
 	if days <= 0 {
 		return fallback
@@ -547,7 +547,7 @@ func sinceDays(days int) time.Time {
 	return time.Now().UTC().AddDate(0, 0, -days)
 }
 
-// isoUTC 把入库时间转成 Z 结尾的 ISO 字符串，这是 API 层对外的时间格式。
+// Implementation note.
 func isoUTC(v sql.NullTime) string {
 	if !v.Valid {
 		return ""

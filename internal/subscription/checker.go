@@ -6,29 +6,29 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// Checker 检查订阅是否临近续费。
+// Implementation note.
 type Checker struct {
 	Store    store.Store
 	Notifier notify.Notifier
 	Log      *slog.Logger
 	Cooldown time.Duration
 
-	// OnNotify 每发一次通知回调一次，用于记指标。可空。
+	// Implementation note.
 	OnNotify func(kind string, ok bool)
 }
 
-// Check 逐条判断订阅要不要提醒。dryRun 时只判断不发送。
+// Implementation note.
 func (c *Checker) Check(ctx context.Context, subs []model.Subscription, dryRun bool) []model.SubscriptionResult {
 	if len(subs) == 0 {
-		c.log().Info("没有订阅项目，可在页面上添加（需要数据库动态配置）")
+		c.log().Info("operation,operation(operationdatabase dynamic configuration)")
 		return []model.SubscriptionResult{}
 	}
-	c.log().Info("开始检查订阅", "count", len(subs), "dry_run", dryRun)
+	c.log().Info("operation", "count", len(subs), "dry_run", dryRun)
 
 	today := time.Now()
 	results := make([]model.SubscriptionResult, 0, len(subs))
@@ -63,38 +63,38 @@ func (c *Checker) checkOne(ctx context.Context, sub model.Subscription, today ti
 		LastRenewedDate:  sub.LastRenewedDate,
 	}
 
-	c.log().Info("订阅检查",
+	c.log().Info("operation",
 		"name", sub.Name,
 		"cycle", notify.FormatSubscriptionCycle(sub.CycleType, sub.RenewalDay),
 		"amount", sub.Amount, "days_until_renewal", days, "next", result.NextRenewalDate)
 
 	switch {
 	case alreadyRenewed:
-		c.log().Info("本周期已续费，无需提醒", "name", sub.Name)
+		c.log().Info("operation,operation", "name", sub.Name)
 	case !needAlert:
-		c.log().Info("无需提醒", "name", sub.Name)
+		c.log().Info("operation", "name", sub.Name)
 	case dryRun:
-		c.log().Warn("需要提醒续费，测试模式不发送", "name", sub.Name, "before_days", sub.AlertDaysBefore)
+		c.log().Warn("operation,operation", "name", sub.Name, "before_days", sub.AlertDaysBefore)
 	default:
-		c.log().Warn("需要提醒续费", "name", sub.Name, "before_days", sub.AlertDaysBefore)
+		c.log().Warn("operation", "name", sub.Name, "before_days", sub.AlertDaysBefore)
 		result.AlertSent = c.send(ctx, sub, days)
 	}
 	return result
 }
 
-// send 发送续费提醒并留痕；冷却窗口内跳过。
+// Implementation note.
 func (c *Checker) send(ctx context.Context, sub model.Subscription, days int) bool {
 	alertID := model.SubscriptionID(sub.Name)
 	cooling, err := c.Store.HasRecentAlert(ctx, alertID, "subscription_renewal", c.Cooldown)
 	if err != nil {
-		c.log().Warn("查询订阅告警冷却失败，按未冷却处理", "name", sub.Name, "error", err)
+		c.log().Warn("operation,operation", "name", sub.Name, "error", err)
 	}
 	if cooling {
-		c.log().Info("订阅提醒仍在冷却窗口内，跳过重复通知", "name", sub.Name, "cooldown", c.Cooldown)
+		c.log().Info("operation,operation", "name", sub.Name, "cooldown", c.Cooldown)
 		return false
 	}
 	if c.Notifier == nil {
-		c.log().Error("未配置 webhook 地址")
+		c.log().Error("Webhook URL is not configured")
 		return false
 	}
 
@@ -104,29 +104,29 @@ func (c *Checker) send(ctx context.Context, sub model.Subscription, days int) bo
 		c.OnNotify(msg.Kind, sendErr == nil)
 	}
 	if sendErr != nil {
-		c.log().Error("发送订阅提醒失败", "name", sub.Name, "error", sendErr)
+		c.log().Error("Failed to send subscription reminder", "name", sub.Name, "error", sendErr)
 		return false
 	}
 
 	if err := c.Store.SaveAlert(ctx, store.AlertRecord{
 		AlertID: alertID, Name: sub.Name, AlertType: "subscription_renewal",
-		Message:   fmt.Sprintf("订阅续费提醒: %s 将在 %d 天后续费", sub.Name, days),
+		Message:   fmt.Sprintf("Subscription renewal reminder: %s operation %d operation", sub.Name, days),
 		Value:     &sub.Amount,
 		Threshold: model.Ptr(float64(sub.AlertDaysBefore)),
 	}); err != nil {
-		c.log().Warn("记录订阅告警失败", "name", sub.Name, "error", err)
+		c.log().Warn("Failed to record subscription alert", "name", sub.Name, "error", err)
 	}
 	return true
 }
 
-// parseRenewedDate 解析上次续费日期；格式不对时当作没续过，并记一条警告。
+// Implementation note.
 func parseRenewedDate(value *string, loc *time.Location, log *slog.Logger) *time.Time {
 	if value == nil || *value == "" {
 		return nil
 	}
 	parsed, err := time.ParseInLocation("2006-01-02", *value, loc)
 	if err != nil {
-		log.Warn("续费日期格式错误", "value", *value)
+		log.Warn("Invalid renewal date format", "value", *value)
 		return nil
 	}
 	return &parsed
@@ -142,7 +142,7 @@ func (c *Checker) logSummary(results []model.SubscriptionResult) {
 			sent++
 		}
 	}
-	c.log().Info("订阅检查汇总", "total", len(results), "need_alert", needAlert, "sent", sent)
+	c.log().Info("operationCheck summary", "total", len(results), "need_alert", needAlert, "sent", sent)
 }
 
 func (c *Checker) log() *slog.Logger {
@@ -152,7 +152,7 @@ func (c *Checker) log() *slog.Logger {
 	return slog.Default()
 }
 
-// NextRenewalFrom 供页面"标记已续费"后展示下次续费日用。
+// Implementation note.
 func NextRenewalFrom(cycleType string, renewalDay int, from time.Time) (time.Time, error) {
 	switch cycleType {
 	case model.CycleWeekly:
@@ -166,10 +166,10 @@ func NextRenewalFrom(cycleType string, renewalDay int, from time.Time) (time.Tim
 	case model.CycleYearly:
 		month, day, ok := SplitMMDD(renewalDay)
 		if !ok {
-			// 兼容旧格式：只写了 1-31 时按周年日计算
+			// Implementation note.
 			return safeReplaceYear(from, from.Year()+1), nil
 		}
 		return safeMonthDate(from.Year()+1, time.Month(month), day, from.Location()), nil
 	}
-	return time.Time{}, fmt.Errorf("不支持的周期类型: %s", cycleType)
+	return time.Time{}, fmt.Errorf("Unsupported cycle type: %s", cycleType)
 }

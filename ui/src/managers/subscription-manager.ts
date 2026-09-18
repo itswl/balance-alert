@@ -1,4 +1,4 @@
-/** Subscription管理：新增 / Edit / Delete / Mark renewed。 */
+/* Implementation note. */
 
 import { mutate } from '../api/client.js';
 import { ENDPOINTS, getSubscriptionsConfig } from '../api/endpoints.js';
@@ -11,7 +11,7 @@ import { showToast } from '../ui/toast.js';
 
 const MODAL_ID = 'subscription-modal';
 
-/** 可选的「所属Project」取自当前看板里出现过的分组名 */
+/* Implementation note. */
 function populateProjectOptions(selectedProject = ''): void {
   const select = byId<HTMLSelectElement>('sub-owner-project');
   if (!select) return;
@@ -32,7 +32,7 @@ function populateProjectOptions(selectedProject = ''): void {
     select.appendChild(option);
   }
 
-  // 已有Subscription关联的Project可能已经不在看板里了，补一个选项免得Edit时被悄悄清空
+  // Implementation note.
   if (selectedProject && !known.includes(selectedProject)) {
     const option = document.createElement('option');
     option.value = selectedProject;
@@ -42,7 +42,7 @@ function populateProjectOptions(selectedProject = ''): void {
   }
 }
 
-/** 续费日的取值范围随周期变：Weekly 1-7，Monthly 1-31，Yearly MMDD */
+/* Implementation note. */
 function updateRenewalDayInputForCycle(): void {
   const cycle = byId<HTMLSelectElement>('sub-cycle')?.value || 'monthly';
   const input = byId<HTMLInputElement>('sub-renewal-day');
@@ -120,7 +120,7 @@ async function saveSubscription(event: Event): Promise<void> {
   let endpoint: string = ENDPOINTS.addSubscription;
   if (isEdit) {
     endpoint = ENDPOINTS.updateSubscription;
-    // 名称是定位键：改名时 name 传旧名用于查找，new_name 才是新名字
+    // Implementation note.
     if (data.name !== originalName) {
       data.new_name = data.name;
       data.name = originalName;
@@ -134,7 +134,7 @@ async function saveSubscription(event: Event): Promise<void> {
   }
 }
 
-/** 看板上的SubscriptionStatus不含 alert_days_before，Edit前要拿一次完整配置 */
+/* Implementation note. */
 export async function editSubscription(name: string): Promise<void> {
   try {
     const current = (AppState.subscriptionData?.subscriptions || []).find((s) => s.name === name);

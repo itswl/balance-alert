@@ -1,7 +1,7 @@
-// Package model 定义跨模块共用的领域类型。
+// Package model provides the package implementation.
 //
-// 这些类型同时是 HTTP API 的响应结构，JSON tag 必须与既有前端约定一致：
-// 可能缺失的数值一律用指针，序列化成 null 而不是 0，避免前端把"没查到"当成"余额为零"。
+// Implementation note.
+// Implementation note.
 package model
 
 import (
@@ -10,14 +10,14 @@ import (
 	"strings"
 )
 
-// 余额类型：展示单位不同，跨项目比较要看比例而不是绝对值。
+// Implementation note.
 const (
-	TypeBalance = "balance" // 货币余额
-	TypeCredits = "credits" // 平台点数
-	TypeQuota   = "quota"   // 套餐剩余百分比
+	TypeBalance = "balance" // operation
+	TypeCredits = "credits" // operation
+	TypeQuota   = "quota"   // operation
 )
 
-// Project 一个受监控的账户。
+// Implementation note.
 type Project struct {
 	Name         string  `json:"name"`
 	Provider     string  `json:"provider"`
@@ -26,12 +26,12 @@ type Project struct {
 	Type         string  `json:"type"`
 	OwnerProject *string `json:"owner_project"`
 	Enabled      bool    `json:"enabled"`
-	FromEnv      bool    `json:"from_env,omitempty"` // 环境变量自动发现，页面上只读
+	FromEnv      bool    `json:"from_env,omitempty"` // environment variableauto-discovered,operation
 }
 
-// ID 是项目在历史表与告警冷却里的稳定标识。
-// 库里的历史记录都是按这个算法存的，换算法等于把既有数据全部认成另一批项目：
-// 余额曲线断掉、跑道重新从零开始算、冷却状态全部失效。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func (p Project) ID() string { return ProjectID(p.Provider, p.Name) }
 
 // ProjectID = md5("provider:name")。
@@ -40,32 +40,32 @@ func ProjectID(provider, name string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// SubscriptionID = md5("subscription:name")，同样是既有数据的稳定标识，改不得。
+// Implementation note.
 func SubscriptionID(name string) string {
 	sum := md5.Sum([]byte("subscription:" + name))
 	return hex.EncodeToString(sum[:])
 }
 
-// Subscription 一条续费提醒。
+// Implementation note.
 type Subscription struct {
 	Name            string  `json:"name"`
 	OwnerProject    *string `json:"owner_project"`
 	CycleType       string  `json:"cycle_type"`  // weekly / monthly / yearly
-	RenewalDay      int     `json:"renewal_day"` // 周付 1-7，月付 1-31，年付 MMDD
+	RenewalDay      int     `json:"renewal_day"` // operation 1-7,operation 1-31,operation MMDD
 	AlertDaysBefore int     `json:"alert_days_before"`
 	Amount          float64 `json:"amount"`
 	Enabled         bool    `json:"enabled"`
 	LastRenewedDate *string `json:"last_renewed_date"` // YYYY-MM-DD
 }
 
-// 订阅周期类型。
+// Implementation note.
 const (
 	CycleWeekly  = "weekly"
 	CycleMonthly = "monthly"
 	CycleYearly  = "yearly"
 )
 
-// Mailbox 一个被扫描的 IMAP 邮箱。
+// Implementation note.
 type Mailbox struct {
 	Name     string `json:"name"`
 	Host     string `json:"host"`
@@ -77,14 +77,14 @@ type Mailbox struct {
 	FromEnv  bool   `json:"from_env,omitempty"`
 }
 
-// Config 是三段业务清单，由环境变量自动发现与数据库动态配置合并而成。
+// Implementation note.
 type Config struct {
 	Projects      []Project      `json:"projects"`
 	Subscriptions []Subscription `json:"subscriptions"`
 	Mailboxes     []Mailbox      `json:"email"`
 }
 
-// EnabledProjects 等过滤器只留下 Enabled 为真的条目，关掉的配置项照样留在清单里供页面展示。
+// Implementation note.
 func (c Config) EnabledProjects() []Project {
 	out := make([]Project, 0, len(c.Projects))
 	for _, p := range c.Projects {
@@ -115,9 +115,9 @@ func (c Config) EnabledMailboxes() []Mailbox {
 	return out
 }
 
-// CheckResult 一次余额检查的结果，也是 /api/credits 里 projects[] 的元素。
+// Implementation note.
 //
-// 失败时 Credits / Threshold / NeedAlarm / Cached 为 nil，序列化成 null。
+// Implementation note.
 type CheckResult struct {
 	Project      string   `json:"project"`
 	OwnerProject *string  `json:"owner_project"`
@@ -133,7 +133,7 @@ type CheckResult struct {
 	Runway       *Runway  `json:"runway,omitempty"`
 }
 
-// BalanceSummary 是看板顶部的计数。
+// Implementation note.
 type BalanceSummary struct {
 	Total     int `json:"total"`
 	Success   int `json:"success"`
@@ -141,7 +141,7 @@ type BalanceSummary struct {
 	NeedAlarm int `json:"need_alarm"`
 }
 
-// SummarizeBalance 统计一批检查结果。
+// Implementation note.
 func SummarizeBalance(results []CheckResult) BalanceSummary {
 	s := BalanceSummary{Total: len(results)}
 	for _, r := range results {
@@ -157,13 +157,13 @@ func SummarizeBalance(results []CheckResult) BalanceSummary {
 	return s
 }
 
-// DailySpend 是跑道分析里按本地日期归集的消耗。
+// Implementation note.
 type DailySpend struct {
 	Date     string  `json:"date"` // YYYY-MM-DD
 	Consumed float64 `json:"consumed"`
 }
 
-// 置信度：数据太少不下结论，跨度不足一天的估算不用于告警。
+// Implementation note.
 const (
 	ConfidenceNone   = "none"
 	ConfidenceLow    = "low"
@@ -171,7 +171,7 @@ const (
 	ConfidenceHigh   = "high"
 )
 
-// Runway 一个账户的消耗画像。字段名同时是接口响应的 JSON 键，前端和看板按这套名字取值。
+// Implementation note.
 type Runway struct {
 	ProjectID      string       `json:"project_id"`
 	ProjectName    string       `json:"project_name"`
@@ -193,17 +193,17 @@ type Runway struct {
 	SpikeRatio     *float64     `json:"spike_ratio"`
 }
 
-// HasEstimate 表示这份画像的日均消耗可用。
+// Implementation note.
 func (r *Runway) HasEstimate() bool {
 	return r != nil && r.BurnPerDay != nil && r.Confidence != ConfidenceNone
 }
 
-// Alertable 表示置信度足以用来发告警（跨度不足一天的不算）。
+// Implementation note.
 func (r *Runway) Alertable() bool {
 	return r != nil && (r.Confidence == ConfidenceMedium || r.Confidence == ConfidenceHigh)
 }
 
-// SubscriptionResult 一条订阅的检查结果，也是 /api/subscriptions 的元素。
+// Implementation note.
 type SubscriptionResult struct {
 	Name             string  `json:"name"`
 	OwnerProject     *string `json:"owner_project"`
@@ -218,7 +218,7 @@ type SubscriptionResult struct {
 	LastRenewedDate  *string `json:"last_renewed_date"`
 }
 
-// MailboxResult 一个邮箱本次扫描的连接与统计情况。
+// Implementation note.
 type MailboxResult struct {
 	Name        string  `json:"name"`
 	Host        string  `json:"host"`
@@ -230,7 +230,7 @@ type MailboxResult struct {
 	Error       *string `json:"error"`
 }
 
-// EmailAlert 一封命中关键词的邮件。
+// Implementation note.
 type EmailAlert struct {
 	Mailbox     string   `json:"mailbox"`
 	Subject     string   `json:"subject"`
@@ -240,12 +240,12 @@ type EmailAlert struct {
 	ServiceName *string  `json:"service_name"`
 	Amount      *float64 `json:"amount"`
 	AlertSent   bool     `json:"alert_sent"`
-	// Duplicate 表示这封邮件近期已经通知过，本次跳过。
-	// 看板据此显示「已通知过」徽章，好让人知道它不是漏发了。
+	// Implementation note.
+	// Implementation note.
 	Duplicate bool `json:"duplicate,omitempty"`
 }
 
-// ScanResult 一次邮箱扫描的完整结果。
+// Implementation note.
 type ScanResult struct {
 	Days      int             `json:"days"`
 	DryRun    bool            `json:"dry_run"`
@@ -253,7 +253,7 @@ type ScanResult struct {
 	Alerts    []EmailAlert    `json:"alerts"`
 }
 
-// BalancePoint 是余额历史里的一条快照，跑道分析的输入。
+// Implementation note.
 type BalancePoint struct {
 	ProjectID   string
 	ProjectName string
@@ -262,10 +262,10 @@ type BalancePoint struct {
 	Balance     float64
 	Threshold   *float64
 	NeedAlarm   bool
-	Timestamp   int64 // Unix 秒，UTC
+	Timestamp   int64 // Unix operation,UTC
 }
 
-// NormalizeProject 补齐省略字段：provider 统一成小写，name 缺省跟 provider 走，type 按 provider 推导。
+// Implementation note.
 func NormalizeProject(p *Project) {
 	p.Provider = strings.ToLower(strings.TrimSpace(p.Provider))
 	if p.Name == "" {
@@ -279,7 +279,7 @@ func NormalizeProject(p *Project) {
 	}
 }
 
-// DefaultBalanceType 按 provider 推导展示用的余额类型。
+// Implementation note.
 func DefaultBalanceType(provider string) string {
 	switch provider {
 	case "openrouter", "uniapi", "wxrank":
@@ -291,10 +291,10 @@ func DefaultBalanceType(provider string) string {
 	}
 }
 
-// Ptr 用于给可空字段取地址，避免到处写临时变量。
+// Implementation note.
 func Ptr[T any](v T) *T { return &v }
 
-// OwnerProjectOf 把空字符串（含纯空白）归一成 nil，"没填归属项目"只有这一种表示。
+// Implementation note.
 func OwnerProjectOf(s string) *string {
 	if strings.TrimSpace(s) == "" {
 		return nil

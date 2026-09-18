@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// 微信排名没有专门的余额接口，剩余点数写在查询接口的 msg 文本里，如 "剩余263419余额"。
+// Implementation note.
 var wxrankDigits = regexp.MustCompile(`\d+`)
 
 var wxrankSpec = Spec{
@@ -19,12 +19,12 @@ var wxrankSpec = Spec{
 	Check: func(data map[string]any) error {
 		code, ok := jsonNum(data["code"])
 		if !ok || code != 0 {
-			return fmt.Errorf("API 返回错误: %s", messageOr(data, "msg", "未知错误"))
+			return fmt.Errorf("API returned an error: %s", messageOr(data, "msg", "Unknown error"))
 		}
 		return nil
 	},
 	Extract: func(data map[string]any) (float64, error) {
-		// 先抠 msg 里的第一串数字
+		// Implementation note.
 		msg := Str(data["msg"])
 		if matched := wxrankDigits.FindString(msg); matched != "" {
 			if value, err := strconv.ParseFloat(matched, 64); err == nil {
@@ -32,7 +32,7 @@ var wxrankSpec = Spec{
 			}
 		}
 
-		// msg 里没有数字时的后备字段，按这个顺序找：data 本身是数字 > data.score/credits > 顶层 score/credits
+		// Implementation note.
 		switch raw := data["data"].(type) {
 		case float64:
 			return raw, nil
@@ -44,7 +44,7 @@ var wxrankSpec = Spec{
 		if value, ok := Num(orElse(data["score"], data["credits"])); ok {
 			return value, nil
 		}
-		return 0, fmt.Errorf("无法从响应中解析余额: %s", msg)
+		return 0, fmt.Errorf("Could not parse balance: %s", msg)
 	},
 }
 

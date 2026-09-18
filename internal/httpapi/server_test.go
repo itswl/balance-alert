@@ -9,18 +9,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/mailscan"
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/monitor"
-	"github.com/itswl/balance-alert/internal/state"
-	"github.com/itswl/balance-alert/internal/store"
-	"github.com/itswl/balance-alert/internal/subscription"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/mailscan"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/monitor"
+	"github.com/itswl/quotapulse/internal/state"
+	"github.com/itswl/quotapulse/internal/store"
+	"github.com/itswl/quotapulse/internal/subscription"
 )
 
 const testAPIKey = "test-key"
 
-// newServer 拉起一个完整的 Server，默认不开任何可选能力。
+// Implementation note.
 func newServer(t *testing.T, tweak func(*config.Settings)) (*Server, http.Handler) {
 	t.Helper()
 
@@ -72,7 +72,7 @@ func decode(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
 	return payload
 }
 
-// TestAuth 所有 /api/* 都要鉴权，探针不用。
+// Implementation note.
 func TestAuth(t *testing.T) {
 	_, handler := newServer(t, nil)
 
@@ -149,7 +149,7 @@ func TestLiveAndHealth(t *testing.T) {
 		t.Error("/live 应返回 alive")
 	}
 
-	// 还没有数据时不算就绪，K8s 才不会把流量打进来
+	// Implementation note.
 	got = request(t, handler, "GET", "/health", "", false)
 	if got.Code != http.StatusServiceUnavailable {
 		t.Errorf("没数据时 /health 应为 503，实际 %d", got.Code)
@@ -178,7 +178,7 @@ func TestFeaturesReflectsToggles(t *testing.T) {
 	}
 }
 
-// TestCreditsBeforeFirstCheck 首次检查完成前要明确回 503，而不是给一个空列表让前端以为没项目。
+// Implementation note.
 func TestCreditsBeforeFirstCheck(t *testing.T) {
 	s, handler := newServer(t, nil)
 
@@ -212,7 +212,7 @@ func TestCreditsBeforeFirstCheck(t *testing.T) {
 	}
 }
 
-// TestETag 读接口带 ETag，前端轮询命中就只回 304。
+// Implementation note.
 func TestETag(t *testing.T) {
 	s, handler := newServer(t, nil)
 	s.State.SetBalance([]model.CheckResult{{Project: "a", Provider: "p", Success: true}})
@@ -237,7 +237,7 @@ func TestETag(t *testing.T) {
 	}
 }
 
-// TestWritesNeedDynamicConfig 没开动态配置时，读得到但改不了。
+// Implementation note.
 func TestWritesNeedDynamicConfig(t *testing.T) {
 	_, handler := newServer(t, nil)
 
@@ -260,7 +260,7 @@ func TestWritesNeedDynamicConfig(t *testing.T) {
 	}
 }
 
-// TestSubscriptionsNeedFeatureFlag 订阅没开时整组接口 503。
+// Implementation note.
 func TestSubscriptionsNeedFeatureFlag(t *testing.T) {
 	_, handler := newServer(t, nil)
 	for _, path := range []string{"/api/config/subscriptions"} {
@@ -274,7 +274,7 @@ func TestSubscriptionsNeedFeatureFlag(t *testing.T) {
 	}
 }
 
-// TestHistoryRoutesAbsentWhenDisabled 历史 API 没开时整组不注册，访问即 404。
+// Implementation note.
 func TestHistoryRoutesAbsentWhenDisabled(t *testing.T) {
 	_, off := newServer(t, nil)
 	if got := request(t, off, "GET", "/api/history/balance", "", true); got.Code != http.StatusNotFound {
@@ -287,7 +287,7 @@ func TestHistoryRoutesAbsentWhenDisabled(t *testing.T) {
 	}
 }
 
-// TestHistoryParamValidation 越界参数回 400 而不是 500。
+// Implementation note.
 func TestHistoryParamValidation(t *testing.T) {
 	_, handler := newServer(t, func(s *config.Settings) { s.EnableHistoryAPI = true })
 
@@ -322,7 +322,7 @@ func TestProviders(t *testing.T) {
 	}
 }
 
-// TestScanDaysValidation 扫描天数必须在 1-30。
+// Implementation note.
 func TestScanDaysValidation(t *testing.T) {
 	_, handler := newServer(t, nil)
 	for _, body := range []string{`{"days":0}`, `{"days":31}`, `{"days":-1}`} {
@@ -333,7 +333,7 @@ func TestScanDaysValidation(t *testing.T) {
 	}
 }
 
-// TestRefreshCooldown 手动刷新完成后有冷却，防止连点把上游打爆。
+// Implementation note.
 func TestRefreshCooldown(t *testing.T) {
 	_, handler := newServer(t, nil)
 
@@ -344,12 +344,12 @@ func TestRefreshCooldown(t *testing.T) {
 	if second.Code != http.StatusTooManyRequests {
 		t.Errorf("冷却期内应回 429，实际 %d", second.Code)
 	}
-	if !strings.Contains(decode(t, second)["message"].(string), "刷新") {
-		t.Error("429 的消息应说明是刷新过于频繁")
+	if !strings.Contains(decode(t, second)["message"].(string), "Refresh") {
+		t.Error("429 response should describe refresh throttling")
 	}
 }
 
-// TestBadJSONIsRejected 请求体不是 JSON 时回 400 而不是 500。
+// Implementation note.
 func TestBadJSONIsRejected(t *testing.T) {
 	_, handler := newServer(t, func(s *config.Settings) { s.EnableDynamicConfig = true })
 	got := request(t, handler, "POST", "/api/config/project", `{不是 JSON`, true)
@@ -358,7 +358,7 @@ func TestBadJSONIsRejected(t *testing.T) {
 	}
 }
 
-// TestUnknownProviderRejected 未知平台在保存时就要拦住，不能等到检查余额才报错。
+// Implementation note.
 func TestUnknownProviderRejected(t *testing.T) {
 	_, handler := newServer(t, func(s *config.Settings) { s.EnableDynamicConfig = true })
 	got := request(t, handler, "POST", "/api/config/project",
@@ -368,13 +368,13 @@ func TestUnknownProviderRejected(t *testing.T) {
 	}
 }
 
-// TestTrendPathIsDecoded 前端传的是 encodeURIComponent("provider:name")，
-// 项目名里可能有中文甚至斜杠。Flask 会自动解码，Go 的 PathValue 也会——
-// 这条钉住它，防止以后有人改成手工切 r.URL.Path 而切错。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func TestTrendPathIsDecoded(t *testing.T) {
 	_, handler := newServer(t, func(s *config.Settings) { s.EnableHistoryAPI = true })
 
-	// 没有数据库时查不到数据，回 404 即说明路由匹配上了、参数解出来了
+	// Implementation note.
 	for _, path := range []string{
 		"/api/history/trend/583276a5396571565636ca419969f306",
 		"/api/history/trend/deepseek%3Adeepseek",

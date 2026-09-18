@@ -1,10 +1,10 @@
-// Package mailscan 扫 IMAP 邮箱，把"欠费 / 续费 / 停机"这类提醒邮件变成告警。
+// Package mailscan provides the package implementation.
 //
-// 很多账单只发到邮箱，等人翻到的时候服务已经停了——所以要有人替值班同学看邮件。
-// 邮箱之间并发扫描，一个连不上不影响其它邮箱：它自己记一条错误，再单独发一条系统告警。
+// Implementation note.
+// Implementation note.
 //
-// 去重分两层：一次扫描内同一封邮件（Message-ID）只处理一次，多个邮箱共享这个集合，
-// 因为同一封通知常常抄送到好几个被扫的邮箱；跨扫描则问 store 最近几天有没有通知过同一封。
+// Implementation note.
+// Implementation note.
 package mailscan
 
 import (
@@ -14,41 +14,41 @@ import (
 	"sync"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
-// 扫描过程中的几个上限。
+// Implementation note.
 const (
-	maxMailboxWorkers = 5    // 同时扫描的邮箱数
-	batchSize         = 100  // 一次 IMAP FETCH 拉多少封
-	defaultMaxEmails  = 1000 // MaxEmails 没给时的上限，对应 MAX_EMAILS_TO_SCAN 的默认值
+	maxMailboxWorkers = 5    // operation
+	batchSize         = 100  // operation IMAP FETCH operation
+	defaultMaxEmails  = 1000 // MaxEmails operation,operation MAX_EMAILS_TO_SCAN operation
 
-	// 连接重试节奏：一共三次，两次重试各等 4 秒。
-	// 网络抖动和邮箱限流很常见，重来一次多半就过去了。
+	// Implementation note.
+	// Implementation note.
 	connectAttempts   = 3
 	connectRetryDelay = 4 * time.Second
 )
 
-// Scanner 扫一批邮箱。零值不可用：至少要有 Store（没数据库就传 store.Null()）。
+// Implementation note.
 type Scanner struct {
 	Store     store.Store
 	Notifier  notify.Notifier
 	Log       *slog.Logger
-	Keywords  []string      // 为空时用 DefaultAlertKeywords
-	MaxEmails int           // 单个邮箱最多扫多少封，零值表示没配置，用 defaultMaxEmails
-	Timeout   time.Duration // 连接与登录的超时，不限制整轮扫描
+	Keywords  []string      // operation DefaultAlertKeywords
+	MaxEmails int           // operation,operation,operation defaultMaxEmails
+	Timeout   time.Duration // operation,operation
 
-	// OnNotify 每发一次通知回调一次，用于记指标。可空。
+	// Implementation note.
 	OnNotify func(kind string, ok bool)
 
-	// 下面两个只给测试换实现，生产走默认值。
+	// Implementation note.
 	dial      dialFunc
 	retryWait time.Duration
 }
 
-// scanState 是一次扫描里各邮箱共享的东西。
+// Implementation note.
 type scanState struct {
 	matcher *matcher
 	seen    seenSet
@@ -56,10 +56,10 @@ type scanState struct {
 	dryRun  bool
 }
 
-// Scan 扫描给定的邮箱，返回逐邮箱统计与命中的告警邮件。
+// Implementation note.
 //
-// 单个邮箱失败只影响它自己那条 MailboxResult；dryRun 时一切照跑，
-// 既不查去重也不发通知——页面上的"试扫一下"就是靠它。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) Scan(ctx context.Context, mailboxes []model.Mailbox, days int, dryRun bool) model.ScanResult {
 	result := model.ScanResult{
 		Days:      days,
@@ -68,14 +68,14 @@ func (s *Scanner) Scan(ctx context.Context, mailboxes []model.Mailbox, days int,
 		Alerts:    []model.EmailAlert{},
 	}
 	if len(mailboxes) == 0 {
-		s.log().Error("未配置邮箱信息或所有邮箱均已禁用")
+		s.log().Error("operation")
 		return result
 	}
 
-	s.log().Info("开始扫描邮箱", "mailboxes", len(mailboxes), "days", days, "dry_run", dryRun)
+	s.log().Info("Starting mailbox scan", "mailboxes", len(mailboxes), "days", days, "dry_run", dryRun)
 	state := &scanState{matcher: newMatcher(s.keywords()), days: days, dryRun: dryRun}
 
-	// 结果按输入顺序回填，页面上的邮箱顺序才不会每次扫描都变
+	// Implementation note.
 	results := make([]model.MailboxResult, len(mailboxes))
 	alerts := make([][]model.EmailAlert, len(mailboxes))
 	workers := min(len(mailboxes), maxMailboxWorkers)
@@ -105,8 +105,8 @@ func (s *Scanner) Scan(ctx context.Context, mailboxes []model.Mailbox, days int,
 	return result
 }
 
-// scanMailbox 扫一个邮箱。任何失败都记进 MailboxResult.Error，不向外抛，
-// 已经扫到的邮件与告警照样留下——半截结果也比丢掉强。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) scanMailbox(ctx context.Context, m model.Mailbox, state *scanState) (model.MailboxResult, []model.EmailAlert) {
 	name := displayName(m)
 	out := model.MailboxResult{
@@ -117,9 +117,9 @@ func (s *Scanner) scanMailbox(ctx context.Context, m model.Mailbox, state *scanS
 		Success:  true,
 	}
 	if m.Host == "" || m.Username == "" || m.Password == "" {
-		s.log().Warn("邮箱配置不完整，跳过", "mailbox", name)
+		s.log().Warn("Incomplete mailbox configuration; skipping", "mailbox", name)
 		out.Success = false
-		out.Error = model.Ptr("配置不完整，需要 host / username / password")
+		out.Error = model.Ptr("Incomplete configuration; host, username, and password are required")
 		return out, nil
 	}
 
@@ -129,7 +129,7 @@ func (s *Scanner) scanMailbox(ctx context.Context, m model.Mailbox, state *scanS
 	if err != nil {
 		out.Success = false
 		out.Error = model.Ptr(err.Error())
-		s.log().Error("扫描邮箱失败", "mailbox", name, "error", err)
+		s.log().Error("operation", "mailbox", name, "error", err)
 		if !state.dryRun {
 			s.sendMailboxError(ctx, name, m.Host, err.Error())
 		}
@@ -137,8 +137,8 @@ func (s *Scanner) scanMailbox(ctx context.Context, m model.Mailbox, state *scanS
 	return out, alerts
 }
 
-// scanInbox 连上邮箱，逐批检查最近 days 天的邮件。
-// 出错时已经扫到的数量与告警一并返回，调用方据此保留半截结果。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) scanInbox(ctx context.Context, m model.Mailbox, name string, state *scanState) (int, []model.EmailAlert, error) {
 	conn, err := s.connect(ctx, m)
 	if err != nil {
@@ -146,31 +146,31 @@ func (s *Scanner) scanInbox(ctx context.Context, m model.Mailbox, name string, s
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			s.log().Warn("断开邮箱连接时出错", "mailbox", name, "error", err)
+			s.log().Warn("operation", "mailbox", name, "error", err)
 		}
 	}()
 
-	// 按本地时区往前推 days 天，IMAP SINCE 只比日期不比时刻
+	// Implementation note.
 	since := time.Now().Add(-time.Duration(state.days) * 24 * time.Hour)
 	nums, err := conn.Search(since)
 	if err != nil {
 		return 0, nil, err
 	}
 	if len(nums) == 0 {
-		s.log().Info("没有需要检查的邮件", "mailbox", name)
+		s.log().Info("No messages require checking", "mailbox", name)
 		return 0, nil, nil
 	}
 
 	if limit := s.maxEmails(); len(nums) > limit {
-		s.log().Warn("邮件数量超过上限，只扫最新的", "mailbox", name, "found", len(nums), "limit", limit)
+		s.log().Warn("Message count exceeds limit; scanning newest only", "mailbox", name, "found", len(nums), "limit", limit)
 		nums = nums[len(nums)-limit:]
 	}
 	total := len(nums)
-	s.log().Info("找到邮件", "mailbox", name, "count", total)
+	s.log().Info("Messages found", "mailbox", name, "count", total)
 
 	var alerts []model.EmailAlert
 	for start := 0; start < total; start += batchSize {
-		// 页面上把请求取消了就别接着拉，剩下的邮件下一轮再看
+		// Implementation note.
 		if err := ctx.Err(); err != nil {
 			return total, alerts, err
 		}
@@ -180,27 +180,27 @@ func (s *Scanner) scanInbox(ctx context.Context, m model.Mailbox, name string, s
 				alerts = append(alerts, alert)
 			}
 		}
-		s.log().Info("扫描进度", "mailbox", name, "scanned", end, "total", total)
+		s.log().Info("Scan progress", "mailbox", name, "scanned", end, "total", total)
 	}
 
-	s.log().Info("邮箱扫描汇总", "mailbox", name, "total_emails", total, "alert_count", len(alerts))
+	s.log().Info("Mailbox scan summary", "mailbox", name, "total_emails", total, "alert_count", len(alerts))
 	return total, alerts, nil
 }
 
-// fetchBatch 批量取一批邮件，整批失败时降级为逐封取——
-// 一封邮件格式坏掉就让整批拿不到，剩下 99 封没道理跟着陪葬。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) fetchBatch(conn mailConn, nums []uint32, name string) [][]byte {
 	raws, err := conn.Fetch(nums)
 	if err == nil {
 		return raws
 	}
-	s.log().Warn("批量获取邮件失败，降级为逐封获取", "mailbox", name, "error", err)
+	s.log().Warn("operation,operation", "mailbox", name, "error", err)
 
 	raws = make([][]byte, 0, len(nums))
 	for _, num := range nums {
 		one, err := conn.Fetch([]uint32{num})
 		if err != nil {
-			s.log().Warn("获取邮件失败", "mailbox", name, "seq", num, "error", err)
+			s.log().Warn("operation", "mailbox", name, "seq", num, "error", err)
 			continue
 		}
 		raws = append(raws, one...)
@@ -208,12 +208,12 @@ func (s *Scanner) fetchBatch(conn mailConn, nums []uint32, name string) [][]byte
 	return raws
 }
 
-// inspect 判断一封邮件是不是告警邮件；是则（按需）发通知并返回明细。
+// Implementation note.
 func (s *Scanner) inspect(ctx context.Context, raw []byte, mailbox string, state *scanState) (model.EmailAlert, bool) {
 	msg, err := parseMessage(raw)
 	if err != nil {
-		// 解析失败的邮件不丢，按原文接着扫，只是记一笔
-		s.log().Warn("邮件格式有问题，按原文扫描", "mailbox", mailbox, "error", err)
+		// Implementation note.
+		s.log().Warn("operation,operation", "mailbox", mailbox, "error", err)
 	}
 	if !state.seen.mark(msg.ID) {
 		return model.EmailAlert{}, false
@@ -242,37 +242,37 @@ func (s *Scanner) inspect(ctx context.Context, raw []byte, mailbox string, state
 	if amount != nil {
 		attrs = append(attrs, "amount", *amount)
 	}
-	s.log().Warn("发现告警邮件", attrs...)
+	s.log().Warn("Alert email found", attrs...)
 
 	switch {
 	case state.dryRun:
-		s.log().Info("测试模式，跳过发送告警", "mailbox", mailbox, "subject", msg.Subject)
+		s.log().Info("Dry run; skipping alert delivery", "mailbox", mailbox, "subject", msg.Subject)
 	case s.duplicated(ctx, alert, state.days):
-		// 标出来而不是静默跳过：看板上要能区分「已经通知过」和「没匹配上」
+		// Implementation note.
 		alert.Duplicate = true
-		s.log().Info("邮件告警已发送过，跳过重复通知", "mailbox", mailbox, "subject", msg.Subject)
+		s.log().Info("Email alertoperation,operation", "mailbox", mailbox, "subject", msg.Subject)
 	default:
 		alert.AlertSent = s.send(ctx, alert)
 	}
 	return alert, true
 }
 
-// duplicated 问数据库这封邮件最近有没有通知过。查不动就按"没通知过"走：
-// 宁可多发一条，也不能因为数据库抽风把欠费提醒吞掉。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) duplicated(ctx context.Context, alert model.EmailAlert, days int) bool {
 	recent, err := s.Store.HasRecentEmailAlert(ctx, alert.Mailbox, alert.Sender, alert.Subject, alert.Date, max(days, 1))
 	if err != nil {
-		s.log().Warn("查询邮件告警去重失败，按未通知过处理", "mailbox", alert.Mailbox, "error", err)
+		s.log().Warn("operationEmail alertoperation,operation", "mailbox", alert.Mailbox, "error", err)
 		return false
 	}
 	return recent
 }
 
-// send 发一封邮件告警并留痕。留痕带上发送结果：
-// 没发出去的也要记，下次才知道这封邮件已经处理过、现在是什么状态。
+// Implementation note.
+// Implementation note.
 func (s *Scanner) send(ctx context.Context, alert model.EmailAlert) bool {
 	if s.Notifier == nil {
-		s.log().Error("未配置 webhook 地址")
+		s.log().Error("Webhook URL is not configured")
 		return false
 	}
 
@@ -283,7 +283,7 @@ func (s *Scanner) send(ctx context.Context, alert model.EmailAlert) bool {
 		s.OnNotify(msg.Kind, err == nil)
 	}
 	if err != nil {
-		s.log().Error("发送邮件告警失败", "mailbox", alert.Mailbox, "subject", alert.Subject, "error", err)
+		s.log().Error("Failed to send email alert", "mailbox", alert.Mailbox, "subject", alert.Subject, "error", err)
 	}
 
 	sent := err == nil
@@ -292,12 +292,12 @@ func (s *Scanner) send(ctx context.Context, alert model.EmailAlert) bool {
 		ServiceName: alert.ServiceName, Amount: alert.Amount,
 		Keywords: alert.Keywords, AlertSent: sent,
 	}); err != nil {
-		s.log().Warn("记录邮件告警失败", "mailbox", alert.Mailbox, "error", err)
+		s.log().Warn("operationEmail alertoperation", "mailbox", alert.Mailbox, "error", err)
 	}
 	return sent
 }
 
-// sendMailboxError 邮箱连不上时发一条系统告警——没人看邮件这件事本身就是故障。
+// Implementation note.
 func (s *Scanner) sendMailboxError(ctx context.Context, mailbox, host, reason string) {
 	if s.Notifier == nil {
 		return
@@ -308,11 +308,11 @@ func (s *Scanner) sendMailboxError(ctx context.Context, mailbox, host, reason st
 		s.OnNotify(msg.Kind, err == nil)
 	}
 	if err != nil {
-		s.log().Error("发送邮箱故障告警失败", "mailbox", mailbox, "error", err)
+		s.log().Error("operation", "mailbox", mailbox, "error", err)
 	}
 }
 
-// connect 建连接，失败按 connectAttempts / connectRetryDelay 的节奏重试。
+// Implementation note.
 func (s *Scanner) connect(ctx context.Context, m model.Mailbox) (mailConn, error) {
 	dial := s.dial
 	if dial == nil {
@@ -326,26 +326,26 @@ func (s *Scanner) connect(ctx context.Context, m model.Mailbox) (mailConn, error
 	for attempt := 1; ; attempt++ {
 		conn, err := dial(ctx, m, s.Timeout)
 		if err == nil {
-			s.log().Info("成功连接邮箱", "mailbox", displayName(m), "host", m.Host)
+			s.log().Info("Mailbox connected", "mailbox", displayName(m), "host", m.Host)
 			return conn, nil
 		}
 		if attempt >= connectAttempts {
 			return nil, err
 		}
-		s.log().Warn("连接邮箱失败，稍后重试", "mailbox", displayName(m), "attempt", attempt, "error", err)
+		s.log().Warn("Mailbox connection failed; retrying later", "mailbox", displayName(m), "attempt", attempt, "error", err)
 		if waitErr := sleep(ctx, wait); waitErr != nil {
 			return nil, err
 		}
 	}
 }
 
-// seenSet 记住本次扫描已经处理过的邮件。多个邮箱并发写，必须加锁。
+// Implementation note.
 type seenSet struct {
 	mu  sync.Mutex
 	ids map[string]struct{}
 }
 
-// mark 第一次见到这封邮件返回 true，之后都是 false。
+// Implementation note.
 func (s *seenSet) mark(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -359,7 +359,7 @@ func (s *seenSet) mark(id string) bool {
 	return true
 }
 
-// keywords 没配置时兜底用默认词表，否则一个词都不配就等于关掉了整个扫描。
+// Implementation note.
 func (s *Scanner) keywords() []string {
 	if len(s.Keywords) > 0 {
 		return s.Keywords
@@ -367,7 +367,7 @@ func (s *Scanner) keywords() []string {
 	return DefaultAlertKeywords
 }
 
-// maxEmails 没配置时用默认上限；配成负数按 1 算，免得算出个负的取信范围。
+// Implementation note.
 func (s *Scanner) maxEmails() int {
 	if s.MaxEmails == 0 {
 		return defaultMaxEmails
@@ -385,7 +385,7 @@ func (s *Scanner) logSummary(result model.ScanResult) {
 			sent++
 		}
 	}
-	s.log().Info("邮箱扫描总汇总",
+	s.log().Info("operation",
 		"mailboxes", len(result.Mailboxes), "total_emails", total,
 		"total_alerts", len(result.Alerts), "alerts_sent", sent)
 }
@@ -397,7 +397,7 @@ func (s *Scanner) log() *slog.Logger {
 	return slog.Default()
 }
 
-// displayName 取邮箱在日志和告警里的显示名：没配名字就退回账号。
+// Implementation note.
 func displayName(m model.Mailbox) string {
 	if m.Name != "" {
 		return m.Name
@@ -405,10 +405,10 @@ func displayName(m model.Mailbox) string {
 	if m.Username != "" {
 		return m.Username
 	}
-	return "(未命名)"
+	return "(Unnamed)"
 }
 
-// sleep 等一段时间，ctx 取消就立刻回来，别让整轮扫描卡在重试上。
+// Implementation note.
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()

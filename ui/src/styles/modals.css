@@ -1,4 +1,4 @@
-/* ==================== 模态框 ==================== */
+/* ==================== layout ==================== */
 .modal {
     display: none;
     position: fixed;
@@ -88,7 +88,7 @@
     border-top: 1px solid var(--border);
 }
 
-/* ==================== 表单 ==================== */
+/* ==================== layout ==================== */
 .form-group {
     margin-bottom: 16px;
 }
@@ -177,7 +177,7 @@
     margin-bottom: 10px;
 }
 
-/* ==================== 趋势弹窗 ==================== */
+/* ==================== layout ==================== */
 .chart-container {
     position: relative;
     height: 360px;
@@ -213,7 +213,7 @@
 .trend-stat-value.positive { color: var(--success); }
 .trend-stat-value.negative { color: var(--danger); }
 
-/* ==================== 网格 / 列表切换 ==================== */
+/* ==================== layout / layout ==================== */
 .view-toggle {
     display: inline-flex;
     gap: 2px;

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// rawMessage 拼一封 RFC822 原文，行尾按协议用 CRLF。
+// Implementation note.
 func rawMessage(headers []string, body string) []byte {
 	return []byte(strings.Join(headers, "\r\n") + "\r\n\r\n" + body)
 }
@@ -16,7 +16,7 @@ func TestParseMessageDecodesMIMEHeaders(t *testing.T) {
 		subject string
 		want    string
 	}{
-		// =?utf-8?B?...?= 是中文主题最常见的写法，解不开就会以乱码进关键词匹配
+		// Implementation note.
 		{"utf-8 base64", "=?utf-8?B?5L2Z6aKd5ZGK6K2m6YCa55+l?=", "余额告警通知"},
 		{"gbk base64", "=?gbk?B?suLK1LHqzOI=?=", "测试标题"},
 		{"quoted-printable", "=?utf-8?Q?=E6=AC=A0=E8=B4=B9?=", "欠费"},
@@ -138,7 +138,7 @@ func TestParseMessageMultipart(t *testing.T) {
 	if !strings.Contains(msg.Body, "余额") || strings.Contains(msg.Body, "<b>") {
 		t.Errorf("正文 = %q, 期望 HTML 分段去掉标签后保留文字", msg.Body)
 	}
-	// 附件正文进了匹配范围就会凭附件里的词误报，所以解析时整段跳过
+	// Implementation note.
 	if strings.Contains(msg.Body, "附件内容") {
 		t.Errorf("正文 = %q, 附件不该进正文", msg.Body)
 	}
@@ -159,8 +159,8 @@ func TestParseMessageID(t *testing.T) {
 		t.Errorf("ID = %q, 期望直接用 Message-ID", withID.ID)
 	}
 
-	// 没有 Message-ID 时退回 md5(date|subject|from)。
-	// 期望值是独立算出来的，改了实现就会在这里露馅
+	// Implementation note.
+	// Implementation note.
 	fallback, err := parseMessage(rawMessage(headers, "正文"))
 	if err != nil {
 		t.Fatalf("parseMessage 报错: %v", err)
@@ -180,7 +180,7 @@ func TestParseMessageID(t *testing.T) {
 	}
 }
 
-// 邮件头坏掉的邮件不该被丢掉：整封当正文扫，关键词照样要命中。
+// Implementation note.
 func TestParseMessageTolerantOfJunk(t *testing.T) {
 	msg, err := parseMessage([]byte("这不是一封邮件，但里面写了欠费"))
 	if err == nil {

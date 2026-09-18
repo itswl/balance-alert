@@ -1,16 +1,16 @@
-# 打 tag 发版：跑测试 → 构建多架构镜像 → 推 ghcr。
+# Implementation note.
 #
 #   git tag v1.2.3 && git push origin v1.2.3
 #
-# 产出 ghcr.io/itswl/balance-alert，标签 1.2.3 / 1.2 / 1 / latest。
-# 带后缀的预发布版（v1.2.3-rc1）不会动 latest，正式版才会。
+# Implementation note.
+# Implementation note.
 name: release
 
 on:
   push:
     tags:
       - "v*"
-  # 手动触发只构建不推送，用来验证流水线本身有没有坏
+  # Implementation note.
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  # 测试是发版的闸门。镜像推出去就可能被人拉走跑，没验证过的不该发出去。
+  # Implementation note.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -32,20 +32,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: 格式检查
+      - name: Localized message
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
-            echo "以下文件没有格式化：" >&2
+            echo "Localized messageNo Localized message�Localized message" >&2
             echo "$unformatted" >&2
             exit 1
           fi
 
       - run: go vet ./...
 
-      # -race 是必要的：看板状态被后台调度和 HTTP 处理器同时读写，
-      # 竞态在本地偶发，在这里必须每次都查。
-      - name: 测试
+      # Implementation note.
+      # Implementation note.
+      - name: Localized message
         run: go test -race ./...
         env:
           TZ: Asia/Shanghai
@@ -56,19 +56,19 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: 前端类型检查与测试
+      - name: Localized message
         run: |
           npm --prefix ui ci
           npm --prefix ui run typecheck
           npm --prefix ui test
 
-      # 仓库里提交的 dist 必须和源码对得上，否则镜像里嵌的是旧页面。
-      # 这类问题不检查的话，要等到有人打开看板才会发现。
-      - name: 检查前端产物是否为最新
+      # Implementation note.
+      # Implementation note.
+      - name: Localized message
         run: |
           npm --prefix ui run build
           if ! git diff --quiet -- ui/dist; then
-            echo "ui/dist 与源码不一致，请在本地执行 npm --prefix ui run build 后一起提交：" >&2
+            echo "ui/dist Localized message�Localized message npm --prefix ui run build Localized message�Localized message" >&2
             git diff --stat -- ui/dist >&2
             exit 1
           fi
@@ -81,7 +81,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: 登录 ghcr
+      - name: Localized message ghcr
         if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
@@ -97,13 +97,13 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-          # 预发布版（v1.2.3-rc1）不该覆盖 latest
+          # Implementation note.
           flavor: |
             latest=auto
 
-      # 不需要 QEMU：Go 阶段用 --platform=$BUILDPLATFORM 加 GOOS/GOARCH 交叉编译，
-      # 前端阶段同样钉在构建机上，两边都是原生速度。
-      - name: 构建并推送
+      # Implementation note.
+      # Implementation note.
+      - name: Localized message
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -116,15 +116,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 输出结果
+      - name: Localized message
         if: github.event_name == 'push'
         run: |
           {
-            echo "### 镜像已发布"
+            echo "### Localized messageAlready Localized message"
             echo
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
             echo '```'
             echo
-            echo "版本号：\`${{ github.ref_name }}\`（程序内 /health 会报这个值）"
+            echo "Localized message�Localized message\`${{ github.ref_name }}\`�Localized message /health Localized message�Localized message"
           } >> "$GITHUB_STEP_SUMMARY"

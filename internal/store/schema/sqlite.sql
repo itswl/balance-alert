@@ -1,7 +1,7 @@
--- SQLite 建表。类型名照抄现有生产库里的声明（VARCHAR/FLOAT/BOOLEAN/DATETIME），
--- 不改写成 TEXT/REAL/INTEGER：SQLite 按声明类型决定亲和性与驱动的回读行为，
--- 只有 DATETIME 才会让 modernc.org/sqlite 把文本解析成 time.Time，
--- 改了名字就读不出现有生产库里的时间戳。索引名也照抄，升级后 CREATE ... IF NOT EXISTS 才是真正的空操作。
+-- SQLite Localized message�Localized messageVARCHAR/FLOAT/BOOLEAN/DATETIME�Localized message�Localized message
+-- Localized message TEXT/REAL/INTEGER�Localized messageSQLite Localized message�Localized message
+-- Localized message DATETIME Localized message modernc.org/sqlite Localized message time.Time�Localized message
+-- Localized message�Localized message CREATE ... IF NOT EXISTS Localized message
 
 CREATE TABLE IF NOT EXISTS balance_history (
     id INTEGER NOT NULL,

@@ -4,20 +4,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/provider"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/provider"
+	"github.com/itswl/quotapulse/internal/store"
 )
 
 func trimSpace(s string) string { return strings.TrimSpace(s) }
 
-// requireDynamicConfig 拦住所有写操作。读接口任何时候都可用，
-// 这样没开数据库的核心版页面上也能看到项目清单，只是改不了。
+// Implementation note.
+// Implementation note.
 func (s *Server) requireDynamicConfig(w http.ResponseWriter, what string) bool {
 	if s.Settings.EnableDynamicConfig {
 		return true
 	}
-	fail(w, http.StatusServiceUnavailable, "修改"+what+"需要数据库动态配置，请设置 ENABLE_DYNAMIC_CONFIG=true")
+	fail(w, http.StatusServiceUnavailable, "operation"+what+"operationdatabase dynamic configuration,operation ENABLE_DYNAMIC_CONFIG=true")
 	return false
 }
 
@@ -25,7 +25,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	etagJSON(w, r, map[string]any{"status": "success", "providers": provider.All()})
 }
 
-// maskedProject 是项目配置的对外形状，密钥永远打码。
+// Implementation note.
 type maskedProject struct {
 	Name         string  `json:"name"`
 	Provider     string  `json:"provider"`
@@ -60,10 +60,10 @@ type projectRequest struct {
 	Enabled      *bool    `json:"enabled"`
 }
 
-// handleSaveProject 新增或更新项目。name 是唯一键；更新时只改传了的字段，
-// 密钥留空表示不变——页面上看到的是打码后的值，原样提交回来不能把密钥覆盖成星号。
+// Implementation note.
+// Implementation note.
 func (s *Server) handleSaveProject(w http.ResponseWriter, r *http.Request) {
-	if !s.requireDynamicConfig(w, "项目配置") {
+	if !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body projectRequest
@@ -72,7 +72,7 @@ func (s *Server) handleSaveProject(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Name = trimSpace(body.Name)
 	if body.Name == "" {
-		failValidation(w, []string{"name: 不能为空"})
+		failValidation(w, []string{"name: cannot be empty"})
 		return
 	}
 
@@ -95,31 +95,31 @@ func (s *Server) handleSaveProject(w http.ResponseWriter, r *http.Request) {
 			missing = append(missing, "api_key")
 		}
 		if len(missing) > 0 {
-			fail(w, http.StatusBadRequest, "新增项目缺少必要参数: "+strings.Join(missing, ", "))
+			fail(w, http.StatusBadRequest, "operation: "+strings.Join(missing, ", "))
 			return
 		}
 	}
 	if _, known := provider.Lookup(target.Provider); !known {
-		fail(w, http.StatusBadRequest, "未知的服务商: "+target.Provider+"，支持: "+strings.Join(provider.Keys(), ", "))
+		fail(w, http.StatusBadRequest, "Unknown provider: "+target.Provider+",operation: "+strings.Join(provider.Keys(), ", "))
 		return
 	}
 	model.NormalizeProject(&target)
-	// 环境变量发现的项目在这里改动，等于把它固化进数据库，之后以数据库为准
+	// Implementation note.
 	target.FromEnv = false
 
 	if err := s.Store.UpsertProject(r.Context(), target); err != nil {
-		s.log().Error("保存项目配置失败", "project", body.Name, "error", err)
-		fail(w, http.StatusInternalServerError, "保存失败")
+		s.log().Error("operation", "project", body.Name, "error", err)
+		fail(w, http.StatusInternalServerError, "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 保存项目", "project", body.Name, "new", isNew)
+	s.log().Info("[AUDIT] operation", "project", body.Name, "new", isNew)
 
 	s.refreshOne(r, target.Name)
-	action := "更新"
+	action := "operation"
 	if isNew {
-		action = "添加"
+		action = "operation"
 	}
-	ok(w, map[string]any{"message": "项目 [" + body.Name + "] 已" + action})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation" + action})
 }
 
 func applyProjectPatch(target *model.Project, body projectRequest) {
@@ -148,7 +148,7 @@ type nameRequest struct {
 }
 
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
-	if !s.requireDynamicConfig(w, "项目配置") {
+	if !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body nameRequest
@@ -156,34 +156,34 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		fail(w, http.StatusBadRequest, "缺少必要参数: name")
+		fail(w, http.StatusBadRequest, "operation: name")
 		return
 	}
 
 	cfg := s.Resolver.Load(r.Context())
 	existing := findProject(cfg.Projects, body.Name)
 	if existing == nil {
-		fail(w, http.StatusNotFound, "未找到项目: "+body.Name)
+		fail(w, http.StatusNotFound, "operation: "+body.Name)
 		return
 	}
-	// 环境变量发现的项目删不掉：数据库里本来就没有它，删了下次启动还会回来
+	// Implementation note.
 	if existing.FromEnv {
-		fail(w, http.StatusBadRequest, "项目 ["+body.Name+"] 来自环境变量自动发现，请移除对应的 "+
-			strings.ToUpper(existing.Provider)+"_API_KEY 后重启")
+		fail(w, http.StatusBadRequest, "operation ["+body.Name+"] operationenvironment variableauto-discovered,operation "+
+			strings.ToUpper(existing.Provider)+"_API_KEY operationrestart")
 		return
 	}
 
 	if err := s.Store.DeleteProject(r.Context(), body.Name); err != nil {
-		s.log().Error("删除项目配置失败", "project", body.Name, "error", err)
-		fail(w, http.StatusInternalServerError, "删除失败")
+		s.log().Error("operation", "project", body.Name, "error", err)
+		fail(w, http.StatusInternalServerError, "operation")
 		return
 	}
 	s.State.RemoveBalanceProject(body.Name)
 	if s.OnBalanceUpdated != nil {
 		s.OnBalanceUpdated(s.State.Balance().Projects)
 	}
-	s.log().Info("[AUDIT] 删除项目", "project", body.Name)
-	ok(w, map[string]any{"message": "项目 [" + body.Name + "] 已删除"})
+	s.log().Info("[AUDIT] operation", "project", body.Name)
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
 type thresholdRequest struct {
@@ -191,9 +191,9 @@ type thresholdRequest struct {
 	NewThreshold *float64 `json:"new_threshold"`
 }
 
-// handleUpdateThreshold 是只改阈值的快捷入口，保留给旧的调用方。
+// Implementation note.
 func (s *Server) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
-	if !s.requireDynamicConfig(w, "项目配置") {
+	if !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body thresholdRequest
@@ -201,18 +201,18 @@ func (s *Server) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.ProjectName == "" || body.NewThreshold == nil {
-		fail(w, http.StatusBadRequest, "缺少必要参数: project_name, new_threshold")
+		fail(w, http.StatusBadRequest, "operation: project_name, new_threshold")
 		return
 	}
 	if *body.NewThreshold < 0 {
-		fail(w, http.StatusBadRequest, "阈值不能为负数")
+		fail(w, http.StatusBadRequest, "operationcannot be negative")
 		return
 	}
 
 	cfg := s.Resolver.Load(r.Context())
 	target := findProject(cfg.Projects, body.ProjectName)
 	if target == nil {
-		fail(w, http.StatusNotFound, "未找到项目: "+body.ProjectName)
+		fail(w, http.StatusNotFound, "operation: "+body.ProjectName)
 		return
 	}
 	updated := *target
@@ -220,22 +220,22 @@ func (s *Server) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 	updated.FromEnv = false
 
 	if err := s.Store.UpsertProject(r.Context(), updated); err != nil {
-		s.log().Error("更新阈值失败", "project", body.ProjectName, "error", err)
-		fail(w, http.StatusInternalServerError, "保存失败")
+		s.log().Error("operation", "project", body.ProjectName, "error", err)
+		fail(w, http.StatusInternalServerError, "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 更新项目阈值", "project", body.ProjectName,
+	s.log().Info("[AUDIT] operation", "project", body.ProjectName,
 		"old", target.Threshold, "new", *body.NewThreshold)
 
 	s.refreshOne(r, body.ProjectName)
-	ok(w, map[string]any{"message": "项目 [" + body.ProjectName + "] 阈值已更新"})
+	ok(w, map[string]any{"message": "operation [" + body.ProjectName + "] operation"})
 }
 
-// refreshOne 只重查这一个项目并合并进看板，不把所有上游都打一遍。
+// Implementation note.
 func (s *Server) refreshOne(r *http.Request, name string) {
 	outcome, err := s.Monitor.Run(r.Context(), name, !s.Settings.EnableWebAlarm)
 	if err != nil {
-		s.log().Warn("刷新项目失败", "project", name, "error", err)
+		s.log().Warn("operation", "project", name, "error", err)
 		return
 	}
 	s.State.MergeBalance(outcome.Results)
@@ -253,7 +253,7 @@ func findProject(projects []model.Project, name string) *model.Project {
 	return nil
 }
 
-// storeWriteStatus 把"数据库没开"翻译成 503，其余写失败算 500。
+// Implementation note.
 func storeWriteStatus(err error) int {
 	if err == store.ErrDisabled {
 		return http.StatusServiceUnavailable

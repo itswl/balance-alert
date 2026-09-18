@@ -16,17 +16,17 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// 断言一律对着抓取时的文本做，而不是去读 Vec 内部：
-// 契约是"Prometheus 抓到什么"，WithLabelValues 还会顺手把已被清理的序列建回来，掩盖 bug。
+// Implementation note.
+// Implementation note.
 //
-// 这里没用 prometheus/testutil：它依赖 kylelemons/godebug，本仓库的 go.sum 里没有，
-// 而这个任务不许动 go.mod。下面这几个 helper 就是 testutil 里 GatherAndCompare / ToFloat64 /
-// CollectAndCount 的等价物，都走 Gather + expfmt 这条官方路径。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 
-// 固定时钟：last_check_timestamp 这类指标要能断言出确切数值。
+// Implementation note.
 var testNow = time.Date(2026, 9, 16, 10, 30, 0, 0, time.UTC)
 
 func newTestCollector(t *testing.T) (*Collector, *prometheus.Registry) {
@@ -46,7 +46,7 @@ func gather(t *testing.T, reg *prometheus.Registry) []*dto.MetricFamily {
 	return mfs
 }
 
-// encode 把指标族渲染成文本格式，Gather 出来的族名与序列都已排好序。
+// Implementation note.
 func encode(t *testing.T, mfs []*dto.MetricFamily) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -59,13 +59,13 @@ func encode(t *testing.T, mfs []*dto.MetricFamily) string {
 	return buf.String()
 }
 
-// dump 是整个注册表的抓取文本。
+// Implementation note.
 func dump(t *testing.T, reg *prometheus.Registry) string {
 	t.Helper()
 	return encode(t, gather(t, reg))
 }
 
-// compareText 只比对给定指标的完整输出，等价于 testutil.GatherAndCompare。
+// Implementation note.
 func compareText(t *testing.T, reg *prometheus.Registry, expected string, names ...string) {
 	t.Helper()
 	keep := map[string]bool{}
@@ -102,7 +102,7 @@ func mustNotContain(t *testing.T, text string, lines ...string) {
 	}
 }
 
-// seriesCount 是某个指标当前有几条序列，指标整个不存在时为 0。
+// Implementation note.
 func seriesCount(t *testing.T, reg *prometheus.Registry, name string) int {
 	t.Helper()
 	for _, mf := range gather(t, reg) {
@@ -113,7 +113,7 @@ func seriesCount(t *testing.T, reg *prometheus.Registry, name string) int {
 	return 0
 }
 
-// gaugeValue 读一条 Gauge 序列的值，读不到就让用例失败。
+// Implementation note.
 func gaugeValue(t *testing.T, reg *prometheus.Registry, name string, labels ...string) float64 {
 	t.Helper()
 	for _, mf := range gather(t, reg) {
@@ -156,7 +156,7 @@ func failedResult(project, provider, balanceType string) model.CheckResult {
 	}
 }
 
-// exerciseAll 走一遍全部更新路径，让每个指标都至少有一条序列。
+// Implementation note.
 func exerciseAll(c *Collector) {
 	c.UpdateBalance([]model.CheckResult{{
 		Project: "openai-main", Provider: "openai", Type: model.TypeBalance, Success: true,
@@ -173,35 +173,35 @@ func exerciseAll(c *Collector) {
 	c.RecordNotification("balance", true)
 }
 
-// 指标清单即契约，逐条对着 grafana/README.md：少一个面板 No Data，多一个说明写歪了。
+// Implementation note.
 func TestMetricInventoryMatchesContract(t *testing.T) {
 	c, reg := newTestCollector(t)
 	exerciseAll(c)
 
-	// value 是按名字排序后的标签名，Gather 出来的标签本身就是有序的。
+	// Implementation note.
 	want := map[string]string{
-		"balance_alert_balance":                    "project,provider,type",
-		"balance_alert_threshold":                  "project,provider,type",
-		"balance_alert_ratio":                      "project,provider,type",
-		"balance_alert_status":                     "project,provider,type",
-		"balance_alert_check_status":               "project,provider,type",
-		"balance_alert_burn_rate_per_day":          "project,provider,type",
-		"balance_alert_runway_days":                "project,provider,type",
-		"balance_alert_subscription_days":          "cycle_type,name",
-		"balance_alert_subscription_amount":        "cycle_type,name",
-		"balance_alert_subscription_status":        "cycle_type,name",
-		"balance_alert_email_mailbox_status":       "mailbox",
-		"balance_alert_email_last_scan_emails":     "mailbox",
-		"balance_alert_email_last_scan_alerts":     "mailbox",
-		"balance_alert_email_scan_total":           "mailbox",
-		"balance_alert_email_alerts_total":         "mailbox",
-		"balance_alert_job_last_run_timestamp":     "task",
-		"balance_alert_job_last_success_timestamp": "task",
-		"balance_alert_job_last_status":            "task",
-		"balance_alert_job_last_duration_seconds":  "task",
-		"balance_alert_job_runs_total":             "status,task",
-		"balance_alert_notifications_total":        "kind,status",
-		"balance_alert_last_check_timestamp":       "check_type",
+		"quotapulse_balance":                    "project,provider,type",
+		"quotapulse_threshold":                  "project,provider,type",
+		"quotapulse_ratio":                      "project,provider,type",
+		"quotapulse_status":                     "project,provider,type",
+		"quotapulse_check_status":               "project,provider,type",
+		"quotapulse_burn_rate_per_day":          "project,provider,type",
+		"quotapulse_runway_days":                "project,provider,type",
+		"quotapulse_subscription_days":          "cycle_type,name",
+		"quotapulse_subscription_amount":        "cycle_type,name",
+		"quotapulse_subscription_status":        "cycle_type,name",
+		"quotapulse_email_mailbox_status":       "mailbox",
+		"quotapulse_email_last_scan_emails":     "mailbox",
+		"quotapulse_email_last_scan_alerts":     "mailbox",
+		"quotapulse_email_scan_total":           "mailbox",
+		"quotapulse_email_alerts_total":         "mailbox",
+		"quotapulse_job_last_run_timestamp":     "task",
+		"quotapulse_job_last_success_timestamp": "task",
+		"quotapulse_job_last_status":            "task",
+		"quotapulse_job_last_duration_seconds":  "task",
+		"quotapulse_job_runs_total":             "status,task",
+		"quotapulse_notifications_total":        "kind,status",
+		"quotapulse_last_check_timestamp":       "check_type",
 	}
 
 	got := map[string]string{}
@@ -244,50 +244,50 @@ func TestBalanceMetricsText(t *testing.T) {
 	}})
 
 	expected := `
-# HELP balance_alert_balance Current balance or credits
-# TYPE balance_alert_balance gauge
-balance_alert_balance{project="openai-main",provider="openai",type="balance"} 42.5
-# HELP balance_alert_burn_rate_per_day Average daily consumption over the burn-rate window
-# TYPE balance_alert_burn_rate_per_day gauge
-balance_alert_burn_rate_per_day{project="openai-main",provider="openai",type="balance"} 3
-# HELP balance_alert_check_status Result of the last balance check (1=success, 0=failed; balance keeps its last good value)
-# TYPE balance_alert_check_status gauge
-balance_alert_check_status{project="openai-main",provider="openai",type="balance"} 1
-# HELP balance_alert_ratio Balance to threshold ratio
-# TYPE balance_alert_ratio gauge
-balance_alert_ratio{project="openai-main",provider="openai",type="balance"} 0.85
-# HELP balance_alert_runway_days Days of runway left at the current burn rate
-# TYPE balance_alert_runway_days gauge
-balance_alert_runway_days{project="openai-main",provider="openai",type="balance"} 14.1666
-# HELP balance_alert_status Balance status (1=ok, 0=alert)
-# TYPE balance_alert_status gauge
-balance_alert_status{project="openai-main",provider="openai",type="balance"} 0
-# HELP balance_alert_threshold Alert threshold
-# TYPE balance_alert_threshold gauge
-balance_alert_threshold{project="openai-main",provider="openai",type="balance"} 50
+# HELP quotapulse_balance Current balance or credits
+# TYPE quotapulse_balance gauge
+quotapulse_balance{project="openai-main",provider="openai",type="balance"} 42.5
+# HELP quotapulse_burn_rate_per_day Average daily consumption over the burn-rate window
+# TYPE quotapulse_burn_rate_per_day gauge
+quotapulse_burn_rate_per_day{project="openai-main",provider="openai",type="balance"} 3
+# HELP quotapulse_check_status Result of the last balance check (1=success, 0=failed; balance keeps its last good value)
+# TYPE quotapulse_check_status gauge
+quotapulse_check_status{project="openai-main",provider="openai",type="balance"} 1
+# HELP quotapulse_ratio Balance to threshold ratio
+# TYPE quotapulse_ratio gauge
+quotapulse_ratio{project="openai-main",provider="openai",type="balance"} 0.85
+# HELP quotapulse_runway_days Days of runway left at the current burn rate
+# TYPE quotapulse_runway_days gauge
+quotapulse_runway_days{project="openai-main",provider="openai",type="balance"} 14.1666
+# HELP quotapulse_status Balance status (1=ok, 0=alert)
+# TYPE quotapulse_status gauge
+quotapulse_status{project="openai-main",provider="openai",type="balance"} 0
+# HELP quotapulse_threshold Alert threshold
+# TYPE quotapulse_threshold gauge
+quotapulse_threshold{project="openai-main",provider="openai",type="balance"} 50
 `
 	compareText(t, reg, expected,
-		"balance_alert_balance", "balance_alert_threshold", "balance_alert_ratio", "balance_alert_status",
-		"balance_alert_check_status", "balance_alert_burn_rate_per_day", "balance_alert_runway_days")
+		"quotapulse_balance", "quotapulse_threshold", "quotapulse_ratio", "quotapulse_status",
+		"quotapulse_check_status", "quotapulse_burn_rate_per_day", "quotapulse_runway_days")
 }
 
-// 阈值为 0 时比例必须是 0，不能是除零出来的 +Inf。
+// Implementation note.
 func TestRatioWithZeroThreshold(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{okResult("p1", "glm", model.TypeQuota, 80, 0, false)})
 
-	mustContain(t, dump(t, reg), `balance_alert_ratio{project="p1",provider="glm",type="quota"} 0`)
+	mustContain(t, dump(t, reg), `quotapulse_ratio{project="p1",provider="glm",type="quota"} 0`)
 }
 
-// 没攒够历史就不写跑道指标：写成 0 会被 runway_days < 3 这种告警当成马上见底。
+// Implementation note.
 func TestRunwayMetricsAbsentWithoutHistory(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{okResult("p1", "openai", model.TypeBalance, 100, 20, false)})
 
-	mustNotContain(t, dump(t, reg), "balance_alert_burn_rate_per_day", "balance_alert_runway_days")
+	mustNotContain(t, dump(t, reg), "quotapulse_burn_rate_per_day", "quotapulse_runway_days")
 }
 
-// 检查失败只把 check_status 打成 0，余额相关序列保留上次成功的值。
+// Implementation note.
 func TestFailedCheckKeepsLastBalance(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{{
@@ -298,24 +298,24 @@ func TestFailedCheckKeepsLastBalance(t *testing.T) {
 	c.UpdateBalance([]model.CheckResult{failedResult("p1", "openai", model.TypeBalance)})
 
 	mustContain(t, dump(t, reg),
-		`balance_alert_balance{project="p1",provider="openai",type="balance"} 100`,
-		`balance_alert_threshold{project="p1",provider="openai",type="balance"} 20`,
-		`balance_alert_ratio{project="p1",provider="openai",type="balance"} 5`,
-		`balance_alert_status{project="p1",provider="openai",type="balance"} 1`,
-		`balance_alert_burn_rate_per_day{project="p1",provider="openai",type="balance"} 5`,
-		`balance_alert_runway_days{project="p1",provider="openai",type="balance"} 20`,
-		`balance_alert_check_status{project="p1",provider="openai",type="balance"} 0`,
+		`quotapulse_balance{project="p1",provider="openai",type="balance"} 100`,
+		`quotapulse_threshold{project="p1",provider="openai",type="balance"} 20`,
+		`quotapulse_ratio{project="p1",provider="openai",type="balance"} 5`,
+		`quotapulse_status{project="p1",provider="openai",type="balance"} 1`,
+		`quotapulse_burn_rate_per_day{project="p1",provider="openai",type="balance"} 5`,
+		`quotapulse_runway_days{project="p1",provider="openai",type="balance"} 20`,
+		`quotapulse_check_status{project="p1",provider="openai",type="balance"} 0`,
 	)
 
-	// 恢复成功后余额跟着刷新，check_status 回到 1。
+	// Implementation note.
 	c.UpdateBalance([]model.CheckResult{okResult("p1", "openai", model.TypeBalance, 88, 20, false)})
 	mustContain(t, dump(t, reg),
-		`balance_alert_balance{project="p1",provider="openai",type="balance"} 88`,
-		`balance_alert_check_status{project="p1",provider="openai",type="balance"} 1`,
+		`quotapulse_balance{project="p1",provider="openai",type="balance"} 88`,
+		`quotapulse_check_status{project="p1",provider="openai",type="balance"} 1`,
 	)
 }
 
-// 失败结果里没有 type 时，按 project+provider 前缀也要认出那条要保留的余额序列。
+// Implementation note.
 func TestFailedCheckWithoutTypeStillKeepsBalance(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{okResult("p1", "openai", model.TypeBalance, 100, 20, false)})
@@ -323,14 +323,14 @@ func TestFailedCheckWithoutTypeStillKeepsBalance(t *testing.T) {
 
 	text := dump(t, reg)
 	mustContain(t, text,
-		`balance_alert_balance{project="p1",provider="openai",type="balance"} 100`,
-		`balance_alert_check_status{project="p1",provider="openai",type="unknown"} 0`,
+		`quotapulse_balance{project="p1",provider="openai",type="balance"} 100`,
+		`quotapulse_check_status{project="p1",provider="openai",type="unknown"} 0`,
 	)
-	// check_status 跟着本轮走：上一轮那条 type="balance" 要被清掉。
-	mustNotContain(t, text, `balance_alert_check_status{project="p1",provider="openai",type="balance"}`)
+	// Implementation note.
+	mustNotContain(t, text, `quotapulse_check_status{project="p1",provider="openai",type="balance"}`)
 }
 
-// 项目改名后旧序列必须消失，否则面板上的 count() 永远偏大。
+// Implementation note.
 func TestRenamedProjectDropsOldSeries(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{{
@@ -342,16 +342,16 @@ func TestRenamedProjectDropsOldSeries(t *testing.T) {
 
 	text := dump(t, reg)
 	mustNotContain(t, text, `project="old-name"`)
-	mustContain(t, text, `balance_alert_balance{project="new-name",provider="openai",type="balance"} 100`)
+	mustContain(t, text, `quotapulse_balance{project="new-name",provider="openai",type="balance"} 100`)
 
 	for name, want := range map[string]int{
-		"balance_alert_balance":           1,
-		"balance_alert_threshold":         1,
-		"balance_alert_ratio":             1,
-		"balance_alert_status":            1,
-		"balance_alert_check_status":      1,
-		"balance_alert_burn_rate_per_day": 0, // 新项目没有历史，这两条压根没写过
-		"balance_alert_runway_days":       0,
+		"quotapulse_balance":           1,
+		"quotapulse_threshold":         1,
+		"quotapulse_ratio":             1,
+		"quotapulse_status":            1,
+		"quotapulse_check_status":      1,
+		"quotapulse_burn_rate_per_day": 0, // 新项目没有历史，这两条压根没写过
+		"quotapulse_runway_days":       0,
 	} {
 		if got := seriesCount(t, reg, name); got != want {
 			t.Errorf("%s 剩下 %d 条序列，期望 %d", name, got, want)
@@ -359,7 +359,7 @@ func TestRenamedProjectDropsOldSeries(t *testing.T) {
 	}
 }
 
-// 项目被删光时传空切片，所有余额序列一起清掉。
+// Implementation note.
 func TestEmptyBalanceUpdateClearsSeries(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{
@@ -369,9 +369,9 @@ func TestEmptyBalanceUpdateClearsSeries(t *testing.T) {
 	c.UpdateBalance(nil)
 
 	text := dump(t, reg)
-	mustNotContain(t, text, "balance_alert_balance{", "balance_alert_check_status{", "balance_alert_status{")
-	// last_check_timestamp 不受影响：这一轮确实检查过了。
-	mustContain(t, text, `balance_alert_last_check_timestamp{check_type="balance"}`)
+	mustNotContain(t, text, "quotapulse_balance{", "quotapulse_check_status{", "quotapulse_status{")
+	// Implementation note.
+	mustContain(t, text, `quotapulse_last_check_timestamp{check_type="balance"}`)
 }
 
 func TestSubscriptionStatus(t *testing.T) {
@@ -379,22 +379,22 @@ func TestSubscriptionStatus(t *testing.T) {
 	c.UpdateSubscriptions([]model.SubscriptionResult{
 		{Name: "claude", CycleType: model.CycleMonthly, DaysUntilRenewal: 3, Amount: 20, NeedAlert: true},
 		{Name: "github", CycleType: model.CycleYearly, DaysUntilRenewal: 200, Amount: 100},
-		// 已续费优先于 need_alert：本周期交过钱了就不该再提醒。
+		// Implementation note.
 		{Name: "vps", CycleType: model.CycleMonthly, DaysUntilRenewal: 28, Amount: 5, NeedAlert: true, AlreadyRenewed: true},
 	})
 
 	expected := `
-# HELP balance_alert_subscription_status Subscription status (1=normal, 0=needs_renewal, -1=renewed_in_cycle)
-# TYPE balance_alert_subscription_status gauge
-balance_alert_subscription_status{cycle_type="monthly",name="claude"} 0
-balance_alert_subscription_status{cycle_type="monthly",name="vps"} -1
-balance_alert_subscription_status{cycle_type="yearly",name="github"} 1
+# HELP quotapulse_subscription_status Subscription status (1=normal, 0=needs_renewal, -1=renewed_in_cycle)
+# TYPE quotapulse_subscription_status gauge
+quotapulse_subscription_status{cycle_type="monthly",name="claude"} 0
+quotapulse_subscription_status{cycle_type="monthly",name="vps"} -1
+quotapulse_subscription_status{cycle_type="yearly",name="github"} 1
 `
-	compareText(t, reg, expected, "balance_alert_subscription_status")
+	compareText(t, reg, expected, "quotapulse_subscription_status")
 
 	mustContain(t, dump(t, reg),
-		`balance_alert_subscription_days{cycle_type="monthly",name="claude"} 3`,
-		`balance_alert_subscription_amount{cycle_type="yearly",name="github"} 100`,
+		`quotapulse_subscription_days{cycle_type="monthly",name="claude"} 3`,
+		`quotapulse_subscription_amount{cycle_type="yearly",name="github"} 100`,
 	)
 }
 
@@ -409,11 +409,11 @@ func TestSubscriptionRenameAndDisableDropSeries(t *testing.T) {
 
 	text := dump(t, reg)
 	mustNotContain(t, text, `name="old-sub"`)
-	mustContain(t, text, `balance_alert_subscription_days{cycle_type="monthly",name="new-sub"} 3`)
+	mustContain(t, text, `quotapulse_subscription_days{cycle_type="monthly",name="new-sub"} 3`)
 
-	// 订阅功能关掉时调用方传空切片，序列随之清空。
+	// Implementation note.
 	c.UpdateSubscriptions(nil)
-	mustNotContain(t, dump(t, reg), "balance_alert_subscription_days{", "balance_alert_subscription_status{")
+	mustNotContain(t, dump(t, reg), "quotapulse_subscription_days{", "quotapulse_subscription_status{")
 }
 
 func TestEmailScanGaugesAndCounters(t *testing.T) {
@@ -424,30 +424,30 @@ func TestEmailScanGaugesAndCounters(t *testing.T) {
 	}})
 
 	mustContain(t, dump(t, reg),
-		`balance_alert_email_mailbox_status{mailbox="work"} 1`,
-		`balance_alert_email_mailbox_status{mailbox="broken"} 0`,
-		`balance_alert_email_last_scan_emails{mailbox="work"} 10`,
-		`balance_alert_email_last_scan_alerts{mailbox="work"} 2`,
+		`quotapulse_email_mailbox_status{mailbox="work"} 1`,
+		`quotapulse_email_mailbox_status{mailbox="broken"} 0`,
+		`quotapulse_email_last_scan_emails{mailbox="work"} 10`,
+		`quotapulse_email_last_scan_alerts{mailbox="work"} 2`,
 	)
 
-	// 第二轮：Gauge 反映本次扫描，Counter 累加；broken 这个邮箱被删了。
+	// Implementation note.
 	c.UpdateEmailScan(model.ScanResult{Mailboxes: []model.MailboxResult{
 		{Name: "work", TotalEmails: 5, AlertCount: 1, Success: true},
 	}})
 
 	text := dump(t, reg)
 	mustContain(t, text,
-		`balance_alert_email_last_scan_emails{mailbox="work"} 5`,
-		`balance_alert_email_last_scan_alerts{mailbox="work"} 1`,
-		`balance_alert_email_scan_total{mailbox="work"} 15`,
-		`balance_alert_email_alerts_total{mailbox="work"} 3`,
+		`quotapulse_email_last_scan_emails{mailbox="work"} 5`,
+		`quotapulse_email_last_scan_alerts{mailbox="work"} 1`,
+		`quotapulse_email_scan_total{mailbox="work"} 15`,
+		`quotapulse_email_alerts_total{mailbox="work"} 3`,
 	)
 	mustNotContain(t, text,
-		`balance_alert_email_mailbox_status{mailbox="broken"}`,
-		`balance_alert_email_last_scan_emails{mailbox="broken"}`,
+		`quotapulse_email_mailbox_status{mailbox="broken"}`,
+		`quotapulse_email_last_scan_emails{mailbox="broken"}`,
 	)
-	// 累计 Counter 不删：删了 increase() 会看到一次假重置。
-	mustContain(t, text, `balance_alert_email_scan_total{mailbox="broken"} 0`)
+	// Implementation note.
+	mustContain(t, text, `quotapulse_email_scan_total{mailbox="broken"} 0`)
 }
 
 func TestRecordJobRun(t *testing.T) {
@@ -457,30 +457,30 @@ func TestRecordJobRun(t *testing.T) {
 	c.RecordJobRun("alert_check", true, start, 1500*time.Millisecond)
 	c.RecordJobRun("alert_check", false, start.Add(time.Hour), 2*time.Second)
 
-	if got := gaugeValue(t, reg, "balance_alert_job_last_run_timestamp", "alert_check"); got != unixSeconds(start.Add(time.Hour)) {
+	if got := gaugeValue(t, reg, "quotapulse_job_last_run_timestamp", "alert_check"); got != unixSeconds(start.Add(time.Hour)) {
 		t.Errorf("last_run = %v，期望最后一次运行的时刻", got)
 	}
-	// 失败不刷新 last_success：告警规则靠 time() - last_success 判断任务多久没成功了。
-	if got := gaugeValue(t, reg, "balance_alert_job_last_success_timestamp", "alert_check"); got != unixSeconds(start) {
+	// Implementation note.
+	if got := gaugeValue(t, reg, "quotapulse_job_last_success_timestamp", "alert_check"); got != unixSeconds(start) {
 		t.Errorf("last_success = %v，期望停在上次成功的时刻", got)
 	}
-	if got := gaugeValue(t, reg, "balance_alert_job_last_status", "alert_check"); got != 0 {
+	if got := gaugeValue(t, reg, "quotapulse_job_last_status", "alert_check"); got != 0 {
 		t.Errorf("last_status = %v，期望 0", got)
 	}
-	if got := gaugeValue(t, reg, "balance_alert_job_last_duration_seconds", "alert_check"); got != 2 {
+	if got := gaugeValue(t, reg, "quotapulse_job_last_duration_seconds", "alert_check"); got != 2 {
 		t.Errorf("last_duration_seconds = %v，期望 2", got)
 	}
 
 	expected := `
-# HELP balance_alert_job_runs_total Job runs by result
-# TYPE balance_alert_job_runs_total counter
-balance_alert_job_runs_total{status="failed",task="alert_check"} 1
-balance_alert_job_runs_total{status="success",task="alert_check"} 1
+# HELP quotapulse_job_runs_total Job runs by result
+# TYPE quotapulse_job_runs_total counter
+quotapulse_job_runs_total{status="failed",task="alert_check"} 1
+quotapulse_job_runs_total{status="success",task="alert_check"} 1
 `
-	compareText(t, reg, expected, "balance_alert_job_runs_total")
+	compareText(t, reg, expected, "quotapulse_job_runs_total")
 
-	// 标签叫 task 不叫 job：抓取时和 Prometheus 自带的 job 冲突会被改名成 exported_job。
-	mustContain(t, dump(t, reg), `balance_alert_job_last_status{task="alert_check"}`)
+	// Implementation note.
+	mustContain(t, dump(t, reg), `quotapulse_job_last_status{task="alert_check"}`)
 	mustNotContain(t, dump(t, reg), `{job="alert_check"}`)
 }
 
@@ -488,7 +488,7 @@ func TestRecordJobRunWithZeroStartTime(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.RecordJobRun("email_scan", true, time.Time{}, time.Second)
 
-	if got := gaugeValue(t, reg, "balance_alert_job_last_run_timestamp", "email_scan"); got != unixSeconds(testNow) {
+	if got := gaugeValue(t, reg, "quotapulse_job_last_run_timestamp", "email_scan"); got != unixSeconds(testNow) {
 		t.Errorf("last_run = %v，期望退回当前时间 %v", got, unixSeconds(testNow))
 	}
 }
@@ -502,14 +502,14 @@ func TestNotificationsByKindAndStatus(t *testing.T) {
 	c.RecordNotification("mailbox_error", false)
 
 	expected := `
-# HELP balance_alert_notifications_total Webhook notifications by kind and result
-# TYPE balance_alert_notifications_total counter
-balance_alert_notifications_total{kind="balance",status="failed"} 1
-balance_alert_notifications_total{kind="balance",status="success"} 2
-balance_alert_notifications_total{kind="mailbox_error",status="failed"} 1
-balance_alert_notifications_total{kind="weekly_report",status="success"} 1
+# HELP quotapulse_notifications_total Webhook notifications by kind and result
+# TYPE quotapulse_notifications_total counter
+quotapulse_notifications_total{kind="balance",status="failed"} 1
+quotapulse_notifications_total{kind="balance",status="success"} 2
+quotapulse_notifications_total{kind="mailbox_error",status="failed"} 1
+quotapulse_notifications_total{kind="weekly_report",status="success"} 1
 `
-	compareText(t, reg, expected, "balance_alert_notifications_total")
+	compareText(t, reg, expected, "quotapulse_notifications_total")
 }
 
 func TestLastCheckTimestamp(t *testing.T) {
@@ -520,16 +520,16 @@ func TestLastCheckTimestamp(t *testing.T) {
 
 	ts := unixSeconds(testNow)
 	expected := fmt.Sprintf(`
-# HELP balance_alert_last_check_timestamp Timestamp of last check
-# TYPE balance_alert_last_check_timestamp gauge
-balance_alert_last_check_timestamp{check_type="balance"} %v
-balance_alert_last_check_timestamp{check_type="email"} %v
-balance_alert_last_check_timestamp{check_type="subscription"} %v
+# HELP quotapulse_last_check_timestamp Timestamp of last check
+# TYPE quotapulse_last_check_timestamp gauge
+quotapulse_last_check_timestamp{check_type="balance"} %v
+quotapulse_last_check_timestamp{check_type="email"} %v
+quotapulse_last_check_timestamp{check_type="subscription"} %v
 `, ts, ts, ts)
-	compareText(t, reg, expected, "balance_alert_last_check_timestamp")
+	compareText(t, reg, expected, "quotapulse_last_check_timestamp")
 }
 
-// 标签值缺失时退回 unknown / monthly，免得面板上出现 project="" 这种认不出来的序列。
+// Implementation note.
 func TestMissingLabelsFallBack(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{{Success: true, Credits: model.Ptr(1.0)}})
@@ -537,21 +537,21 @@ func TestMissingLabelsFallBack(t *testing.T) {
 	c.UpdateEmailScan(model.ScanResult{Mailboxes: []model.MailboxResult{{Success: true}}})
 
 	mustContain(t, dump(t, reg),
-		`balance_alert_balance{project="unknown",provider="unknown",type="unknown"} 1`,
-		`balance_alert_subscription_days{cycle_type="monthly",name="unknown"} 1`,
-		`balance_alert_email_mailbox_status{mailbox="unknown"} 1`,
+		`quotapulse_balance{project="unknown",provider="unknown",type="unknown"} 1`,
+		`quotapulse_subscription_days{cycle_type="monthly",name="unknown"} 1`,
+		`quotapulse_email_mailbox_status{mailbox="unknown"} 1`,
 	)
 }
 
-// 余额查不到时按 0 记，指针语义只在 API 响应里有意义。
+// Implementation note.
 func TestNilBalanceCountsAsZero(t *testing.T) {
 	c, reg := newTestCollector(t)
 	c.UpdateBalance([]model.CheckResult{{Project: "p1", Provider: "openai", Type: model.TypeBalance, Success: true}})
 
 	mustContain(t, dump(t, reg),
-		`balance_alert_balance{project="p1",provider="openai",type="balance"} 0`,
-		`balance_alert_threshold{project="p1",provider="openai",type="balance"} 0`,
-		`balance_alert_ratio{project="p1",provider="openai",type="balance"} 0`,
+		`quotapulse_balance{project="p1",provider="openai",type="balance"} 0`,
+		`quotapulse_threshold{project="p1",provider="openai",type="balance"} 0`,
+		`quotapulse_ratio{project="p1",provider="openai",type="balance"} 0`,
 	)
 }
 
@@ -565,10 +565,10 @@ func TestHandlerServesMetrics(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("状态码 %d", rec.Code)
 	}
-	mustContain(t, rec.Body.String(), "balance_alert_balance{", "balance_alert_notifications_total{")
+	mustContain(t, rec.Body.String(), "quotapulse_balance{", "quotapulse_notifications_total{")
 }
 
-// 调度线程和 HTTP 处理器会同时更新指标，序列台账是普通 map，靠这条用例（配 -race）盯住。
+// Implementation note.
 func TestConcurrentUpdates(t *testing.T) {
 	c, reg := newTestCollector(t)
 
@@ -586,9 +586,9 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 	wg.Wait()
 
-	// 每轮都是全量更新，最后活下来的只能是某一轮的那一条。
-	if got := seriesCount(t, reg, "balance_alert_balance"); got != 1 {
+	// Implementation note.
+	if got := seriesCount(t, reg, "quotapulse_balance"); got != 1 {
 		t.Errorf("余额剩下 %d 条序列，期望 1", got)
 	}
-	mustContain(t, dump(t, reg), `balance_alert_job_runs_total{status="success",task="alert_check"} 8`)
+	mustContain(t, dump(t, reg), `quotapulse_job_runs_total{status="success",task="alert_check"} 8`)
 }

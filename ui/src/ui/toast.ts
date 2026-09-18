@@ -1,4 +1,4 @@
-/** 右上角的短提示。颜色由左侧色条表达，所以文案开头的 emoji 一律去掉。 */
+/* Implementation note. */
 
 import { byId } from '../dom.js';
 

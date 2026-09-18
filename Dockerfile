@@ -7,7 +7,7 @@
 #   - the binary's -healthcheck command provides the container health check
 #
 # Multi-architecture builds: buildx selects the target platform.
-#   docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/balance-alert --push .
+#   docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/quotapulse --push .
 # Optional mirrors for restricted network environments:
 #   docker build --build-arg GOPROXY=https://goproxy.cn,direct \
 #                --build-arg NPM_REGISTRY=https://registry.npmmirror.com .
@@ -45,8 +45,8 @@ COPY . .
 COPY --from=ui /ui/dist ./ui/dist
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath \
-      -ldflags="-s -w -X github.com/itswl/balance-alert/internal/config.Version=${VERSION}" \
-      -o /out/balance-alert ./cmd/balance-alert
+      -ldflags="-s -w -X github.com/itswl/quotapulse/internal/config.Version=${VERSION}" \
+      -o /out/quotapulse ./cmd/quotapulse
 
 # Create writable runtime directories before copying them; scratch has no mkdir.
 RUN mkdir -p /out/data /out/logs
@@ -58,7 +58,7 @@ WORKDIR /app
 
 # Provider HTTPS requests need root certificates.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /out/balance-alert /app/balance-alert
+COPY --from=build /out/quotapulse /app/quotapulse
 COPY --from=build --chown=65532:65532 /out/data /app/data
 COPY --from=build --chown=65532:65532 /out/logs /app/logs
 
@@ -66,7 +66,7 @@ COPY --from=build --chown=65532:65532 /out/logs /app/logs
 USER 65532:65532
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD ["/app/balance-alert", "-healthcheck"]
+    CMD ["/app/quotapulse", "-healthcheck"]
 
 EXPOSE 8080 9100
-ENTRYPOINT ["/app/balance-alert"]
+ENTRYPOINT ["/app/quotapulse"]

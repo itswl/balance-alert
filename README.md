@@ -1,22 +1,22 @@
-# Balance Alert
+# QuotaPulse
 
 API balance and credit monitoring with subscription lifecycle management, alerts, history, and a read-only MCP interface.
 
-Balance Alert is a single Go binary that provides a web dashboard, HTTP API, scheduled checks, Webhook notifications, IMAP email scanning, Prometheus metrics, and optional persistent history. It monitors multiple providers, estimates runway from balance history, detects spending spikes, and tracks subscription renewals.
+QuotaPulse is a single Go binary that provides a web dashboard, HTTP API, scheduled checks, Webhook notifications, IMAP email scanning, Prometheus metrics, and optional persistent history. It monitors multiple providers, estimates runway from balance history, detects spending spikes, and tracks subscription renewals.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
 # Edit .env and set WEB_API_KEY, WEBHOOK_URL, and provider API keys.
-go build -o balance-alert ./cmd/balance-alert
-./balance-alert -show-config
-./balance-alert
+go build -o quotapulse ./cmd/quotapulse
+./quotapulse -show-config
+./quotapulse
 ```
 
 The dashboard and API are available at `http://localhost:8080`. Docker users can run `docker compose up -d` instead.
 
-By default, Balance Alert discovers any provider configured with `{PROVIDER}_API_KEY`. Set `{PROVIDER}_THRESHOLD` to enable low-balance alerts for that provider. Use database-backed dynamic configuration when you need to manage many accounts, subscriptions, or mailboxes from the dashboard.
+By default, QuotaPulse discovers any provider configured with `{PROVIDER}_API_KEY`. Set `{PROVIDER}_THRESHOLD` to enable low-balance alerts for that provider. Use database-backed dynamic configuration when you need to manage many accounts, subscriptions, or mailboxes from the dashboard.
 
 ## MCP
 
@@ -80,7 +80,7 @@ All jobs run inside the web process; the container does not require cron.
 
 ## Runway and history
 
-Balance history is stored as snapshots. A decrease between adjacent snapshots is spending; an increase is a top-up. With at least four points spanning six hours, Balance Alert estimates daily burn rate and runway, and can detect spending spikes. Results covering less than one day are marked low confidence and are not used for alerts.
+Balance history is stored as snapshots. A decrease between adjacent snapshots is spending; an increase is a top-up. With at least four points spanning six hours, QuotaPulse estimates daily burn rate and runway, and can detect spending spikes. Results covering less than one day are marked low confidence and are not used for alerts.
 
 The dashboard shows the estimated days remaining for each account. Weekly reports summarize spending, runway ranking, and subscription costs for the next 30 days. History requires `ENABLE_DATABASE=true`; when there is not enough history, the service falls back to threshold alerts.
 
@@ -90,7 +90,7 @@ The dashboard includes project, alert, subscription, and email views. Enable dyn
 
 The TypeScript frontend is bundled with esbuild and embedded into the binary, so the runtime does not need a separate static-file directory.
 
-The published image is `ghcr.io/itswl/balance-alert` and supports amd64 and arm64. The runtime image is based on `scratch` and contains only the static binary and CA certificates.
+The published image is `ghcr.io/itswl/quotapulse` and supports amd64 and arm64. The runtime image is based on `scratch` and contains only the static binary and CA certificates.
 
 ```bash
 docker compose up -d
@@ -103,7 +103,7 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Pin `BALANCE_ALERT_VERSION` in production instead of relying on `latest`. Kubernetes manifests are in `k8s/common-prod.yaml`; replace `YOUR_REGISTRY` and `YOUR_DOMAIN` before applying them.
+Pin `QUOTAPULSE_VERSION` in production instead of relying on `latest`. Kubernetes manifests are in `k8s/common-prod.yaml`; replace `YOUR_REGISTRY` and `YOUR_DOMAIN` before applying them.
 
 ## Monitoring
 
@@ -112,13 +112,13 @@ Set `ENABLE_PROMETHEUS=true` to expose balance, subscription, email, job, and no
 ## CLI
 
 ```bash
-./balance-alert
-./balance-alert -show-config
-./balance-alert -check -dry-run
-./balance-alert -check -project PROJECT_NAME
-./balance-alert -check-subscriptions
-./balance-alert -check-email -email-days 3
-./balance-alert -healthcheck
+./quotapulse
+./quotapulse -show-config
+./quotapulse -check -dry-run
+./quotapulse -check -project PROJECT_NAME
+./quotapulse -check-subscriptions
+./quotapulse -check-email -email-days 3
+./quotapulse -healthcheck
 ```
 
 ## Development
@@ -126,7 +126,7 @@ Set `ENABLE_PROMETHEUS=true` to expose balance, subscription, email, job, and no
 ```bash
 go test ./...
 go test -race ./...
-go build ./cmd/balance-alert
+go build ./cmd/quotapulse
 go vet ./...
 gofmt -l .
 npm --prefix ui run typecheck

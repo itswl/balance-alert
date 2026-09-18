@@ -25,25 +25,25 @@ func TestDeepSeekFetch(t *testing.T) {
 			want: 12.5,
 		},
 		{
-			// 欠费停服也是有效读数，余额照常返回给阈值判断，不然告警反而哑了
+			// Implementation note.
 			name: "欠费账户照样报 0",
 			body: `{"is_available":false,"balance_infos":[{"currency":"CNY","total_balance":"0.00"}]}`,
 			want: 0,
 		},
 		{
-			name:   "缺少 balance_infos",
+			name:   "Missing balance_infos",
 			body:   `{"is_available":true}`,
-			errMsg: "无法从响应中解析 balance_infos 字段",
+			errMsg: "Could not parse balance_infos field",
 		},
 		{
 			name:   "balance_infos 是空列表",
 			body:   `{"is_available":true,"balance_infos":[]}`,
-			errMsg: "无法从响应中解析 balance_infos 字段",
+			errMsg: "Could not parse balance_infos field",
 		},
 		{
-			name:   "缺少 total_balance",
+			name:   "Missing total_balance",
 			body:   `{"balance_infos":[{"currency":"CNY","granted_balance":"0.00"}]}`,
-			errMsg: "无法从响应中解析 total_balance 字段",
+			errMsg: "Could not parse total_balance field",
 		},
 		{
 			name:   "密钥无效",

@@ -1,4 +1,4 @@
-/* ==================== 项目卡片 ==================== */
+/* ==================== layout ==================== */
 .projects-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -201,7 +201,7 @@
     stroke-width: 1.8;
 }
 
-/* 列表模式 */
+/* layout */
 .projects-list {
     display: flex;
     flex-direction: column;
@@ -261,7 +261,7 @@
     border-top: none;
 }
 
-/* ==================== 列表卡片（订阅 / 邮箱 / 告警邮件） ==================== */
+/* ==================== layout（layout / layout / layout） ==================== */
 .subscriptions-list,
 .email-alerts-list {
     display: grid;
@@ -365,7 +365,7 @@
     opacity: 1;
 }
 
-/* 项目卡片的操作按钮同样悬停才出现，避免默认状态太吵 */
+/* layout，layout */
 .project-card .action-icon-btn {
     opacity: 0;
     transition: opacity var(--ease);
@@ -450,7 +450,7 @@
     color: var(--accent);
 }
 
-/* ==================== 状态标签 ==================== */
+/* ==================== layout ==================== */
 .status-badge {
     display: inline-flex;
     align-items: center;
@@ -483,7 +483,7 @@
     color: var(--danger);
 }
 
-/* 查不到余额的项目：整张卡片降调，状态点用危险色，一眼能从正常卡片里挑出来 */
+/* layout：layout，layout，layout */
 .project-card.failed {
     border-color: var(--danger-border, var(--border));
 }

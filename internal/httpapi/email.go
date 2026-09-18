@@ -4,13 +4,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// maxScanDays 立即扫描最多回看多少天。再多就该去翻邮箱本身了。
+// Implementation note.
 const maxScanDays = 30
 
-// maskedMailbox 是邮箱配置的对外形状，密码只表示"有没有设过"。
+// Implementation note.
 type maskedMailbox struct {
 	Name     string `json:"name"`
 	Host     string `json:"host"`
@@ -48,10 +48,10 @@ type mailboxRequest struct {
 	Enabled  *bool   `json:"enabled"`
 }
 
-// handleSaveMailbox 新增或更新邮箱。更新时密码留空表示不变，
-// 页面展示的是星号，原样提交不能把真密码盖掉。
+// Implementation note.
+// Implementation note.
 func (s *Server) handleSaveMailbox(w http.ResponseWriter, r *http.Request) {
-	if !s.requireDynamicConfig(w, "邮箱配置") {
+	if !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body mailboxRequest
@@ -60,7 +60,7 @@ func (s *Server) handleSaveMailbox(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Name = trimSpace(body.Name)
 	if body.Name == "" {
-		failValidation(w, []string{"name: 不能为空"})
+		failValidation(w, []string{"name: cannot be empty"})
 		return
 	}
 
@@ -78,7 +78,7 @@ func (s *Server) handleSaveMailbox(w http.ResponseWriter, r *http.Request) {
 	if body.Username != nil && *body.Username != "" {
 		target.Username = trimSpace(*body.Username)
 	}
-	// 星号是展示用的占位，不能当成真密码写回去
+	// Implementation note.
 	if body.Password != nil && trimSpace(*body.Password) != "" && trimSpace(*body.Password) != "***" {
 		target.Password = *body.Password
 	}
@@ -104,28 +104,28 @@ func (s *Server) handleSaveMailbox(w http.ResponseWriter, r *http.Request) {
 			missing = append(missing, "password")
 		}
 		if len(missing) > 0 {
-			fail(w, http.StatusBadRequest, "新增邮箱缺少必要参数: "+joinComma(missing))
+			fail(w, http.StatusBadRequest, "operation: "+joinComma(missing))
 			return
 		}
 	}
 	target.FromEnv = false
 
 	if err := s.Store.UpsertMailbox(r.Context(), target); err != nil {
-		s.log().Error("保存邮箱配置失败", "mailbox", body.Name, "error", err)
-		fail(w, storeWriteStatus(err), "保存失败")
+		s.log().Error("operation", "mailbox", body.Name, "error", err)
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 保存邮箱", "mailbox", body.Name, "new", isNew)
+	s.log().Info("[AUDIT] operation", "mailbox", body.Name, "new", isNew)
 
-	action := "更新"
+	action := "operation"
 	if isNew {
-		action = "添加"
+		action = "operation"
 	}
-	ok(w, map[string]any{"message": "邮箱 [" + body.Name + "] 已" + action})
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation" + action})
 }
 
 func (s *Server) handleDeleteMailbox(w http.ResponseWriter, r *http.Request) {
-	if !s.requireDynamicConfig(w, "邮箱配置") {
+	if !s.requireDynamicConfig(w, "operation") {
 		return
 	}
 	var body nameRequest
@@ -133,25 +133,25 @@ func (s *Server) handleDeleteMailbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		fail(w, http.StatusBadRequest, "缺少必要参数: name")
+		fail(w, http.StatusBadRequest, "operation: name")
 		return
 	}
 	cfg := s.Resolver.Load(r.Context())
 	existing := findMailbox(cfg.Mailboxes, body.Name)
 	if existing == nil {
-		fail(w, http.StatusNotFound, "未找到邮箱: "+body.Name)
+		fail(w, http.StatusNotFound, "operation: "+body.Name)
 		return
 	}
 	if existing.FromEnv {
-		fail(w, http.StatusBadRequest, "邮箱 ["+body.Name+"] 来自环境变量自动发现，请移除对应的 EMAIL_* 变量后重启")
+		fail(w, http.StatusBadRequest, "operation ["+body.Name+"] operationenvironment variableauto-discovered,operation EMAIL_* operationrestart")
 		return
 	}
 	if err := s.Store.DeleteMailbox(r.Context(), body.Name); err != nil {
-		fail(w, storeWriteStatus(err), "删除失败")
+		fail(w, storeWriteStatus(err), "operation")
 		return
 	}
-	s.log().Info("[AUDIT] 删除邮箱", "mailbox", body.Name)
-	ok(w, map[string]any{"message": "邮箱 [" + body.Name + "] 已删除"})
+	s.log().Info("[AUDIT] operation", "mailbox", body.Name)
+	ok(w, map[string]any{"message": "operation [" + body.Name + "] operation"})
 }
 
 func (s *Server) handleEmailScanState(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +162,7 @@ type scanRequest struct {
 	Days *int `json:"days"`
 }
 
-// handleEmailScan 立即扫描所有启用的邮箱，结果写进看板状态。
+// Implementation note.
 func (s *Server) handleEmailScan(w http.ResponseWriter, r *http.Request) {
 	days := 1
 	if r.ContentLength > 0 {
@@ -175,12 +175,12 @@ func (s *Server) handleEmailScan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if days < 1 || days > maxScanDays {
-		fail(w, http.StatusBadRequest, "days 必须是 1-"+itoa(maxScanDays)+" 之间的整数")
+		fail(w, http.StatusBadRequest, "days operation 1-"+itoa(maxScanDays)+" operation")
 		return
 	}
 
 	if busy := s.scanGuard.acquire(); busy != "" {
-		fail(w, http.StatusTooManyRequests, "扫描"+busy)
+		fail(w, http.StatusTooManyRequests, "operation"+busy)
 		return
 	}
 	defer s.scanGuard.release()
@@ -188,7 +188,7 @@ func (s *Server) handleEmailScan(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Resolver.Load(r.Context())
 	mailboxes := cfg.EnabledMailboxes()
 	if len(mailboxes) == 0 {
-		fail(w, http.StatusBadRequest, "未配置邮箱或所有邮箱均已停用")
+		fail(w, http.StatusBadRequest, "operation")
 		return
 	}
 
@@ -201,11 +201,11 @@ func (s *Server) handleEmailScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	summary := s.State.EmailScan().Summary
-	s.log().Info("[AUDIT] 邮箱扫描", "days", days, "dry_run", dryRun,
+	s.log().Info("[AUDIT] operation", "days", days, "dry_run", dryRun,
 		"mailboxes", len(result.Mailboxes), "alerts", len(result.Alerts))
 	ok(w, map[string]any{
-		"message": "扫描完成：" + itoa(summary.TotalEmails) + " 封邮件，" +
-			itoa(summary.TotalAlerts) + " 封告警",
+		"message": "operation:" + itoa(summary.TotalEmails) + " operation," +
+			itoa(summary.TotalAlerts) + " operation",
 		"summary":                summary,
 		"mailboxes":              result.Mailboxes,
 		"dry_run":                dryRun,

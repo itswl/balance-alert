@@ -1,4 +1,4 @@
-/** Balance趋势弹窗：统计卡片 + 折线图，需 ENABLE_HISTORY_API。 */
+/* Implementation note. */
 
 import { getTrend } from '../api/endpoints.js';
 import type { TrendData, TrendResponse } from '../api/types.js';
@@ -29,7 +29,7 @@ export async function showProjectTrend(projectName: string, provider: string): P
   try {
     const { response, data } = await getTrend(provider, projectName, TREND_DAYS);
 
-    // 数据库没开或这个Project还没历史，后端返回 404；这里不当异常，给一段说明
+    // Implementation note.
     if (!response.ok || !data || data.status !== 'success') {
       destroyChart();
       if (statsContainer) {
@@ -57,7 +57,7 @@ export async function showProjectTrend(projectName: string, provider: string): P
     renderTrendChart(trendData);
   } catch (error) {
     destroyChart();
-    console.error('加载趋势数据失败:', error);
+    console.error('Failed to load trend data:', error);
     if (statsContainer) {
       const message = error instanceof Error ? error.message : String(error);
       statsContainer.innerHTML = `
@@ -71,7 +71,7 @@ export async function showProjectTrend(projectName: string, provider: string): P
   }
 }
 
-/** 数据点不足两个时后端不给 change，此时按「稳定」显示 */
+/* Implementation note. */
 export function trendDirection(change: number | undefined): 'up' | 'down' | 'stable' {
   if (change !== undefined && change > 0) return 'up';
   if (change !== undefined && change < 0) return 'down';
@@ -131,7 +131,7 @@ function renderTrendChart(trendData: TrendData): void {
     ],
   };
 
-  // 同一个 canvas 反复开关弹窗，复用实例避免监听器越积越多
+  // Implementation note.
   if (chart) chart.update(options);
   else chart = new LineChart(canvas, options);
 }

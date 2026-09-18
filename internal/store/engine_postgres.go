@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"time"
 
-	gen "github.com/itswl/balance-alert/internal/store/sqlc/postgres"
+	gen "github.com/itswl/quotapulse/internal/store/sqlc/postgres"
 )
 
-// postgresQuerier 把 postgres 生成包接到 querier 上。
-// 三个引擎的适配文件是逐行对应的，改一个记得对着改另外两个。
+// Implementation note.
+// Implementation note.
 type postgresQuerier struct{ q *gen.Queries }
 
 func newPostgresQuerier(db *sql.DB) querier { return postgresQuerier{q: gen.New(db)} }

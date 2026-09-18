@@ -1,6 +1,6 @@
--- PostgreSQL 建表。自增主键用 BIGSERIAL，浮点用 DOUBLE PRECISION，时间用 TIMESTAMP（无时区，存 UTC）。
--- timestamp 既是列名又是类型名，所有出现处一律加双引号，免得解析器把它当类型。
--- 现有生产库的自增主键是 SERIAL（int4），IF NOT EXISTS 不会把它改成 int8；int4 读进 int64 没问题。
+-- PostgreSQL Localized message BIGSERIAL�Localized message DOUBLE PRECISION�Localized message TIMESTAMP�Localized message�Localized message UTC�Localized message
+-- timestamp Localized message�Localized message�Localized message
+-- Localized message SERIAL�Localized messageint4�Localized message�Localized messageIF NOT EXISTS Localized message int8�Localized messageint4 Localized message int64 Localized message
 
 CREATE TABLE IF NOT EXISTS balance_history (
     id BIGSERIAL NOT NULL,

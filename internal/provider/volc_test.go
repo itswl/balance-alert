@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// 签名必须与火山引擎文档规定的 HMAC-SHA256 算法一致，这里用固定密钥与固定时刻把结果钉死，
-// 签名改坏了立刻会红——线上签错的表现只有一个 403，不看这几条测试很难定位。
+// Implementation note.
+// Implementation note.
 const (
 	volcTestAK = "AKLTtest-access-key"
 	volcTestSK = "test-secret-key"
@@ -41,24 +41,24 @@ func TestVolcSignature(t *testing.T) {
 	}
 	for name, value := range want {
 		if got[name] != value {
-			t.Errorf("%s\n = %q\n期望 %q", name, got[name], value)
+			t.Errorf("%s\n = %q\nexpected %q", name, got[name], value)
 		}
 	}
 }
 
 func TestVolcSignatureCoversBody(t *testing.T) {
-	// 目前只发 GET 空体，但摘要必须跟着 body 变，将来换 POST 才不会签错
+	// Implementation note.
 	got := volcProviderAt(volcBaseURL).buildHeaders(volcTestTime, `{"Limit":1}`)
 	if want := "55522f708dcfebccb7bd3e8d0001a53ecaf2beca9ca801f1e9161e24215faa99"; got["X-Content-Sha256"] != want {
-		t.Errorf("X-Content-Sha256 = %q，期望 %q", got["X-Content-Sha256"], want)
+		t.Errorf("X-Content-Sha256 = %q，expected %q", got["X-Content-Sha256"], want)
 	}
 	if want := "Signature=d9e714eb64900095dd9fd482ed4a29b0199fc08171ccfdd806943a2137a3c5b7"; !strings.HasSuffix(got["Authorization"], want) {
-		t.Errorf("Authorization = %q，期望以 %q 结尾", got["Authorization"], want)
+		t.Errorf("Authorization = %q，expected以 %q 结尾", got["Authorization"], want)
 	}
 }
 
 func TestVolcSignatureUsesUTC(t *testing.T) {
-	// 时刻相同、时区不同，签出来必须一样：X-Date 一旦带上本地时区就会被判过期
+	// Implementation note.
 	shanghai := time.FixedZone("CST", 8*3600)
 	got := volcProviderAt(volcBaseURL).buildHeaders(volcTestTime.In(shanghai), "")
 	if got["X-Date"] != "20240517T083045Z" {
@@ -67,10 +67,10 @@ func TestVolcSignatureUsesUTC(t *testing.T) {
 }
 
 func TestVolcNormQuery(t *testing.T) {
-	// 签名用的查询串和真实发出去的必须是同一串，键要排序
+	// Implementation note.
 	got := volcNormQuery(map[string]string{"Version": volcVersion, "Action": volcAction})
 	if want := "Action=QueryBalanceAcct&Version=2022-01-01"; got != want {
-		t.Fatalf("查询串 = %q，期望 %q", got, want)
+		t.Fatalf("查询串 = %q，expected %q", got, want)
 	}
 }
 
@@ -94,36 +94,36 @@ func TestVolcFetch(t *testing.T) {
 			want: 88.5,
 		},
 		{
-			// 火山把业务错误塞在 ResponseMetadata.Error 里，HTTP 仍然是 200
-			name:   "业务错误",
+			// Implementation note.
+			name:   "business error",
 			body:   `{"ResponseMetadata":{"Error":{"Code":"AuthFailure","Message":"invalid ak"}}}`,
-			errMsg: `API 返回错误: {"Code":"AuthFailure","Message":"invalid ak"}`,
+			errMsg: `API returned an error: {"Code":"AuthFailure","Message":"invalid ak"}`,
 		},
 		{
-			name:   "缺少 AvailableBalance",
+			name:   "Missing AvailableBalance",
 			body:   `{"ResponseMetadata":{"RequestId":"x"},"Result":{"CashBalance":"1.00"}}`,
-			errMsg: "无法从响应中解析 AvailableBalance 字段",
+			errMsg: "Could not parse AvailableBalance field",
 		},
 		{
-			name:   "空响应体",
+			name:   "空response体",
 			body:   "",
-			errMsg: "API 返回空响应",
+			errMsg: "API returned an empty response",
 		},
 		{
 			name:   "空对象",
 			body:   `{}`,
-			errMsg: "API 返回空响应",
+			errMsg: "API returned an empty response",
 		},
 		{
 			name:   "不是 JSON",
 			body:   `<html>502 Bad Gateway</html>`,
-			errMsg: "响应内容不是有效的JSON格式：<html>502 Bad Gateway</html>",
+			errMsg: "Response is not valid JSON:<html>502 Bad Gateway</html>",
 		},
 		{
 			name:   "HTTP 失败",
 			status: 403,
 			body:   `{"ResponseMetadata":{"Error":{"Code":"SignatureDoesNotMatch"}}}`,
-			errMsg: "HTTP请求失败，状态码：403",
+			errMsg: "HTTP request failed, status code: 403",
 		},
 	}
 
@@ -133,10 +133,10 @@ func TestVolcFetch(t *testing.T) {
 			got, err := volcProviderAt(srv.URL).Fetch(context.Background())
 			if tc.errMsg != "" {
 				if err == nil {
-					t.Fatalf("期望失败，却拿到余额 %v", got)
+					t.Fatalf("expected失败，却拿到余额 %v", got)
 				}
 				if !strings.Contains(err.Error(), tc.errMsg) {
-					t.Fatalf("错误消息 = %q，期望包含 %q", err.Error(), tc.errMsg)
+					t.Fatalf("error message = %q，expected包含 %q", err.Error(), tc.errMsg)
 				}
 				return
 			}
@@ -157,9 +157,9 @@ func TestVolcRequestShape(t *testing.T) {
 	if rec.query.Get("Action") != volcAction || rec.query.Get("Version") != volcVersion {
 		t.Errorf("查询参数 = %v", rec.query)
 	}
-	// Host 参与签名，发出去的 Host 头必须是签名时用的那个，不是连接的目标地址
+	// Implementation note.
 	if rec.host != volcHost {
-		t.Errorf("Host = %q，期望 %q", rec.host, volcHost)
+		t.Errorf("Host = %q，expected %q", rec.host, volcHost)
 	}
 	if got := rec.header.Get("X-Date"); got != "20240517T083045Z" {
 		t.Errorf("X-Date = %q", got)
@@ -174,8 +174,8 @@ func TestVolcRequestShape(t *testing.T) {
 
 func TestVolcKeyFormat(t *testing.T) {
 	if _, err := New("volc", "AKLTxxx", nil); err == nil ||
-		!strings.Contains(err.Error(), "火山云 API Key 格式错误，应为 'AK:SK' 格式") {
-		t.Fatalf("错误 = %v", err)
+		!strings.Contains(err.Error(), "Volcengine: invalid API key format; expected 'AK:SK'") {
+		t.Fatalf("error = %v", err)
 	}
 	if _, err := New("volc", "AKLTxxx:sk", nil); err != nil {
 		t.Fatalf("合法密钥被拒: %v", err)

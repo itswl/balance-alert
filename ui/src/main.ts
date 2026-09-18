@@ -1,8 +1,8 @@
 /**
- * 应用入口：绑定事件、拉功能开关、加载数据、按 hash 进入对应视图。
+ * Implementation note.
  *
- * 原生 JS 版把绑定散在六个文件各自的 DOMContentLoaded 里，谁先谁后取决于
- * <script> 的顺序。打成一个包之后统一在这里按顺序装配，出问题好定位。
+ * Implementation note.
+ * Implementation note.
  */
 
 import './styles/index.css';
@@ -28,8 +28,8 @@ import { initTheme, switchView, toggleTheme } from './views.js';
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * 卡片是 innerHTML 整片重绘的，逐个绑事件会在重绘时全部失效，
- * 所以统一用事件委托：按 data-* 找到目标，交给对应的 manager。
+ * Implementation note.
+ * Implementation note.
  */
 function bindCardActions(): void {
   document.addEventListener('click', (event) => {
@@ -112,7 +112,7 @@ async function init(): Promise<void> {
   await loadFeatures();
   await loadData();
 
-  // 地址栏带 #alerts / #subscriptions / #email 时直接进对应视图
+  // Implementation note.
   const initialView = window.location.hash.slice(1);
   if (isViewName(initialView) && initialView !== 'all') {
     switchView(initialView);

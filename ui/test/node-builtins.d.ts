@@ -1,8 +1,8 @@
 /**
- * node:test 与 node:assert 的最小声明。
+ * Implementation note.
  *
- * 依赖只准装 typescript 和 esbuild，所以不引 @types/node —— 测试里只用到
- * describe / it 和四个断言，手写这十几行比多一个依赖划算。用到新 API 时在这里补。
+ * Implementation note.
+ * Implementation note.
  */
 
 declare module 'node:test' {

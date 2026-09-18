@@ -1,4 +1,4 @@
-/* ==================== 响应式 ==================== */
+/* ==================== layout ==================== */
 @media (max-width: 1024px) {
     .projects-list .project-card {
         grid-template-columns: 1fr;
@@ -23,7 +23,7 @@
         grid-template-columns: repeat(2, 1fr);
     }
 
-    /* 换行后竖分隔线会错位，改用横线分隔 */
+    /* layout，layout */
     .stat-card {
         border-right: none;
         border-bottom: 1px solid var(--border);

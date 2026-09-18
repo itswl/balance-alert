@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// 没开数据库时上层不做任何判断，直接调 Store。
-// 这组用例钉住那套降级行为：写入静默丢弃、查询返回空、冷却一律放行，
-// 只有「要往数据库里存动态配置」才报 ErrDisabled（HTTP 层翻成 503）。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func TestNullStoreDegrades(t *testing.T) {
 	s := Null()
 
@@ -56,7 +56,7 @@ func TestNullStoreQueriesReturnEmpty(t *testing.T) {
 		t.Errorf("EmailAlerts = %v, %v", emails, err)
 	}
 
-	// 趋势与统计返回 nil，上层据此回 404 或「数据库未启用」。
+	// Implementation note.
 	trend, err := s.BalanceTrend(ctx, "pid", 30)
 	if err != nil || trend != nil {
 		t.Errorf("BalanceTrend = %v, %v，期望 nil, nil", trend, err)
@@ -71,7 +71,7 @@ func TestNullStoreWritesAreDiscarded(t *testing.T) {
 	s := Null()
 	ctx := t.Context()
 
-	// 历史留痕是可选能力，没数据库就不留痕，但主流程不能因此失败。
+	// Implementation note.
 	if err := s.SaveBalance(ctx, BalanceRecord{ProjectID: "pid", Balance: 1}); err != nil {
 		t.Errorf("SaveBalance 不该报错: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestNullStoreNeverCoolsDown(t *testing.T) {
 	s := Null()
 	ctx := t.Context()
 
-	// 没有历史就没有冷却依据，一律放行——告警照发，这是产品要求。
+	// Implementation note.
 	for _, within := range []time.Duration{0, time.Minute, 24 * time.Hour} {
 		got, err := s.HasRecentAlert(ctx, "pid", "low_balance", within)
 		if err != nil {
@@ -110,7 +110,7 @@ func TestNullStoreRejectsDynamicConfigWrites(t *testing.T) {
 	s := Null()
 	ctx := t.Context()
 
-	// 这几个不能静默丢：用户在页面上按了保存，得如实告诉他没开数据库。
+	// Implementation note.
 	cases := []struct {
 		name string
 		call func() error

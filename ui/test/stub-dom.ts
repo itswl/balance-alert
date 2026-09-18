@@ -1,9 +1,9 @@
 /**
- * 够用就行的桩 DOM。
+ * Implementation note.
  *
- * 不引 jsdom：看板只用到 getElementById / createElement / innerHTML 这几样，
- * 为了跑几个渲染函数装一个几 MB 的依赖不划算。这个桩只保证被测代码不炸，
- * 断言全部落在它产出的 HTML 字符串上。
+ * Implementation note.
+ * Implementation note.
+ * Implementation note.
  */
 
 export interface StubElement {
@@ -69,7 +69,7 @@ export function createStubElement(tagName = 'div'): StubElement {
       el.children.push(...children);
     },
     remove() {
-      /* 桩里不需要真从父节点摘掉 */
+      /* Implementation note. */
     },
     addEventListener() {},
     removeEventListener() {},
@@ -81,7 +81,7 @@ export function createStubElement(tagName = 'div'): StubElement {
 
 const registry = new Map<string, StubElement>();
 
-/** 预先登记页面上会被查到的 id；没登记的 id 一律返回 null，正好覆盖「元素缺失」这条分支 */
+/* Implementation note. */
 export function stubElement(id: string): StubElement {
   const existing = registry.get(id);
   if (existing) return existing;

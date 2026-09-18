@@ -1,4 +1,4 @@
-module github.com/itswl/balance-alert
+module github.com/itswl/quotapulse
 
 go 1.26.0
 

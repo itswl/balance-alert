@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/timeutil"
+	"github.com/itswl/quotapulse/internal/timeutil"
 )
 
 func TestTaskEnabled(t *testing.T) {
@@ -29,20 +29,20 @@ func TestTaskEnabled(t *testing.T) {
 
 func TestScheduleText(t *testing.T) {
 	interval := Task{Interval: 3600 * time.Second}
-	if got := interval.ScheduleText(); got != "每 3600 秒" {
+	if got := interval.ScheduleText(); got != "Every 3600 seconds" {
 		t.Errorf("间隔任务描述: 实际 %q", got)
 	}
 	daily := Task{DailyTimes: []timeutil.ClockTime{{Hour: 9}, {Hour: 15}}}
-	if got := daily.ScheduleText(); got != "每天 09:00 / 15:00" {
+	if got := daily.ScheduleText(); got != "Daily 09:00 / 15:00" {
 		t.Errorf("每日任务描述: 实际 %q", got)
 	}
 	weekly := Task{DailyTimes: []timeutil.ClockTime{{Hour: 9}}, Weekdays: map[int]bool{1: true}}
-	if got := weekly.ScheduleText(); got != "每周一 09:00" {
+	if got := weekly.ScheduleText(); got != "Weekly Mon 09:00" {
 		t.Errorf("每周任务描述: 实际 %q", got)
 	}
 }
 
-// TestRunAtStart 看板刷新要在启动时立刻跑一次，否则页面开头几分钟是空的。
+// Implementation note.
 func TestRunAtStart(t *testing.T) {
 	now := time.Now()
 	atStart := Task{Interval: time.Hour, RunAtStart: true}
@@ -75,7 +75,7 @@ func TestRunPendingOnlyRunsDueTasks(t *testing.T) {
 	}
 }
 
-// TestFailureDoesNotStopOtherTasks 一个任务出错不能影响别的任务。
+// Implementation note.
 func TestFailureDoesNotStopOtherTasks(t *testing.T) {
 	var secondRan bool
 	first := &Task{Name: "炸的", Interval: time.Hour, RunAtStart: true,
@@ -101,7 +101,7 @@ func TestFailureDoesNotStopOtherTasks(t *testing.T) {
 	}
 }
 
-// TestNextRunAdvances 跑完一次要推进到下一次，否则调度循环会空转。
+// Implementation note.
 func TestNextRunAdvances(t *testing.T) {
 	task := &Task{Name: "t", Interval: time.Hour, RunAtStart: true,
 		Run: func(context.Context) (any, error) { return nil, nil }}
@@ -116,13 +116,13 @@ func TestNextRunAdvances(t *testing.T) {
 
 func TestSleepForIsBounded(t *testing.T) {
 	now := time.Now()
-	// 没有任何启用任务时按上限等
+	// Implementation note.
 	s := New([]*Task{{Name: "off"}}, nil, nil)
 	if got := s.sleepFor(now); got != time.Minute {
 		t.Errorf("没有启用任务时应等上限一分钟，实际 %v", got)
 	}
 
-	// 已经过期的任务不该让等待变成负数
+	// Implementation note.
 	overdue := &Task{Name: "overdue", Interval: time.Hour, RunAtStart: true}
 	s = New([]*Task{overdue}, nil, nil)
 	if got := s.sleepFor(now.Add(time.Hour)); got < 100*time.Millisecond {
@@ -141,7 +141,7 @@ func TestLookup(t *testing.T) {
 	}
 }
 
-// TestStartStop 调度循环能起能停，不泄漏 goroutine。
+// Implementation note.
 func TestStartStop(t *testing.T) {
 	done := make(chan struct{}, 1)
 	task := &Task{Name: "t", Interval: time.Hour, RunAtStart: true,

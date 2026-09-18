@@ -1,43 +1,43 @@
 /**
- * HTTP 契约的类型定义。
+ * Implementation note.
  *
- * 字段逐个对照 docs/API.md 与 internal/model/model.go —— 后端把「没查到」序列化成 null
- * 而不是 0，所以这里也一律用 `| null` 而不是可选属性：漏判 null 会让失败的Project
- * 在看板上显示成「Balance 0，StatusHealthy」。
+ * Implementation note.
+ * Implementation note.
+ * Implementation note.
  */
 
-// ==================== 枚举 ====================
+// Implementation note.
 
-/** Balance类型，对应 model.TypeBalance / TypeCredits / TypeQuota */
+/* Implementation note. */
 export type BalanceType = 'balance' | 'credits' | 'quota';
 
-/** 跑道置信度，对应 model.Confidence*；none 时其余估算字段为空，low 不用于Alert */
+/* Implementation note. */
 export type Confidence = 'none' | 'low' | 'medium' | 'high';
 
-/** Subscription周期，对应 model.Cycle* */
+/* Implementation note. */
 export type CycleType = 'weekly' | 'monthly' | 'yearly';
 
-// ==================== 通用信封 ====================
+// Implementation note.
 
-/** 出错时的响应；参数校验失败还会带 errors */
+/* Implementation note. */
 export interface ErrorResponse {
   status: 'error';
   message: string;
   errors?: string[];
 }
 
-/** 写操作成功时的响应 */
+/* Implementation note. */
 export interface MutationResponse {
   status: 'success';
   message?: string;
 }
 
-/** 解析失败或非 JSON 响应时 data 为 null，调用方必须能处理 */
+/* Implementation note. */
 export type ApiPayload<T> = T | ErrorResponse | null;
 
 // ==================== /api/features ====================
 
-/** 可选能力开关；后端新增开关时这里补字段，Unknown字段被忽略不会报错 */
+/* Implementation note. */
 export interface Features {
   subscriptions: boolean;
   dynamic_config: boolean;
@@ -51,13 +51,13 @@ export interface FeaturesResponse {
 
 // ==================== /api/credits ====================
 
-/** 跑道分析里按本地日期归集的消耗，对应 model.DailySpend */
+/* Implementation note. */
 export interface DailySpend {
   date: string; // YYYY-MM-DD
   consumed: number;
 }
 
-/** 一个账户的消耗画像，对应 model.Runway */
+/* Implementation note. */
 export interface Runway {
   project_id: string;
   project_name: string;
@@ -80,8 +80,8 @@ export interface Runway {
 }
 
 /**
- * 一次Balance检查的结果，对应 model.CheckResult。
- * runway 带 omitempty：没开数据库或攒够历史之前整个字段不出现。
+ * Implementation note.
+ * Implementation note.
  */
 export interface CheckResult {
   project: string;
@@ -98,7 +98,7 @@ export interface CheckResult {
   runway?: Runway | null;
 }
 
-/** 看板顶部计数，对应 model.BalanceSummary */
+/* Implementation note. */
 export interface BalanceSummary {
   total: number;
   success: number;
@@ -106,9 +106,9 @@ export interface BalanceSummary {
   need_alarm: number;
 }
 
-/** 进程刚起来还没检查过时 projects 为空、summary 为 {}，所以 summary 写成 Partial */
+/* Implementation note. */
 export interface CreditsResponse {
-  last_update: string | null; // ISO，Z 结尾
+  last_update: string | null; // ISO timestamp ending in Z.
   projects: CheckResult[];
   summary: Partial<BalanceSummary>;
 }
@@ -125,7 +125,7 @@ export interface RefreshResponse {
 
 // ==================== /api/subscriptions ====================
 
-/** 一条Subscription的检查结果，对应 model.SubscriptionResult */
+/* Implementation note. */
 export interface SubscriptionResult {
   name: string;
   owner_project: string | null;
@@ -148,7 +148,7 @@ export interface SubscriptionsResponse {
 
 // ==================== /api/config/subscriptions ====================
 
-/** Subscription配置（含 alert_days_before 等运行Status里没有的字段），对应 model.Subscription */
+/* Implementation note. */
 export interface SubscriptionConfig {
   name: string;
   owner_project: string | null;
@@ -165,7 +165,7 @@ export interface SubscriptionsConfigResponse {
   subscriptions: SubscriptionConfig[];
 }
 
-/** POST /api/config/subscription 的载荷：name 定位，new_name 改名，其余按需传 */
+/* Implementation note. */
 export interface SubscriptionPayload {
   name: string;
   new_name?: string;
@@ -193,7 +193,7 @@ export interface ProvidersResponse {
 
 // ==================== /api/config/projects ====================
 
-/** Project配置，对应 model.Project；api_key 已脱敏，from_env 的Project不可删 */
+/* Implementation note. */
 export interface ProjectConfig {
   name: string;
   provider: string;
@@ -210,7 +210,7 @@ export interface ProjectsConfigResponse {
   projects: ProjectConfig[];
 }
 
-/** POST /api/config/project 的载荷：新增需 provider + api_key，更新时密钥Leave empty不改 */
+/* Implementation note. */
 export interface ProjectPayload {
   name: string;
   provider: string;
@@ -223,7 +223,7 @@ export interface ProjectPayload {
 
 // ==================== /api/config/emails ====================
 
-/** Mailbox配置，对应 model.Mailbox；password 已脱敏成 '***' 或 '' */
+/* Implementation note. */
 export interface MailboxConfig {
   name: string;
   host: string;
@@ -240,7 +240,7 @@ export interface EmailsConfigResponse {
   emails: MailboxConfig[];
 }
 
-/** POST /api/config/email 的载荷：新增需 host / username / password，更新时密码Leave empty不改 */
+/* Implementation note. */
 export interface MailboxPayload {
   name: string;
   host: string;
@@ -253,7 +253,7 @@ export interface MailboxPayload {
 
 // ==================== /api/email/scan ====================
 
-/** 一个Mailbox本次扫描的连接与统计情况，对应 model.MailboxResult */
+/* Implementation note. */
 export interface MailboxResult {
   name: string;
   host: string;
@@ -265,7 +265,7 @@ export interface MailboxResult {
   error: string | null;
 }
 
-/** 一封命中关键词的邮件，对应 model.EmailAlert */
+/* Implementation note. */
 export interface EmailAlert {
   mailbox: string;
   subject: string;
@@ -276,8 +276,8 @@ export interface EmailAlert {
   amount: number | null;
   alert_sent: boolean;
   /**
-   * 冷却期内重复命中、这次没再发通知时才出现。
-   * 看板据此显示「已通知过」徽章，好让人区分「已经通知过」和「没匹配上」。
+   * Implementation note.
+   * Implementation note.
    */
   duplicate?: boolean;
 }
@@ -291,8 +291,8 @@ export interface EmailScanSummary {
 }
 
 /**
- * 扫描结果存在进程内存里，重启后清空：此时 last_update 为 null、
- * days / dry_run 也是 null，页面据此区分「没扫过」和「扫过但没命中」。
+ * Implementation note.
+ * Implementation note.
  */
 export interface EmailScanState {
   last_update: string | null;
@@ -311,7 +311,7 @@ export interface HistoryListResponse<T> {
   data: T[];
 }
 
-/** 数据库里的一条Balance快照 */
+/* Implementation note. */
 export interface BalanceHistoryRecord {
   id: number;
   project_id: string;
@@ -324,7 +324,7 @@ export interface BalanceHistoryRecord {
   timestamp: string;
 }
 
-/** 历史Alert邮件；入库列名是 matched_keywords，与实时扫描的 keywords 不同名 */
+/* Implementation note. */
 export interface EmailAlertRecord {
   id: number;
   mailbox: string;
@@ -338,14 +338,14 @@ export interface EmailAlertRecord {
   timestamp: string;
 }
 
-/** 趋势弹窗里的一个数据点 */
+/* Implementation note. */
 export interface TrendPoint {
   timestamp: string;
   balance: number;
   need_alarm: boolean;
 }
 
-/** GET /api/history/trend/<project_id>；不足两个点时没有 change / change_percent */
+/* Implementation note. */
 export interface TrendData {
   project_id: string;
   project_name: string;

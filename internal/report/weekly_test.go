@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
 func ptr[T any](v T) *T { return &v }
 
-// buildFixture 是基准数据对应的那份输入，改了它就得同步改 testdata/baseline_case.json。
+// Implementation note.
 func buildFixture() Summary {
 	results := []model.CheckResult{
 		{Project: "deepseek", Provider: "deepseek", Success: true, Credits: ptr(100.0), Threshold: ptr(50.0)},
@@ -39,8 +39,8 @@ func buildFixture() Summary {
 	return Build(results, subs, mailboxes, 3, runways, now)
 }
 
-// TestRenderMatchesBaseline 把整张周报卡片逐字钉死：基准数据是渲染后的完整文本，
-// 排版、字段顺序、数字格式动一个字都会在这里炸出来。用户的飞书群里看惯了这个格式。
+// Implementation note.
+// Implementation note.
 func TestRenderMatchesBaseline(t *testing.T) {
 	raw, err := os.ReadFile("testdata/baseline_case.json")
 	if err != nil {
@@ -69,7 +69,7 @@ func TestRenderMatchesBaseline(t *testing.T) {
 	}
 }
 
-// TestUpcomingExcludesRenewedAndDistant 已续过的和一个月以外的不该算进待续费。
+// Implementation note.
 func TestUpcomingExcludesRenewedAndDistant(t *testing.T) {
 	summary := buildFixture()
 	if len(summary.UpcomingSubscriptions) != 2 {
@@ -80,7 +80,7 @@ func TestUpcomingExcludesRenewedAndDistant(t *testing.T) {
 	}
 }
 
-// TestTopNIsCapped 排行榜各取前三，账户再多也不会刷屏。
+// Implementation note.
 func TestTopNIsCapped(t *testing.T) {
 	summary := buildFixture()
 	if len(summary.TopSpend) != TopN {
@@ -89,7 +89,7 @@ func TestTopNIsCapped(t *testing.T) {
 	if summary.TopSpend[0].Project != "volc" {
 		t.Errorf("消耗最多的应是 volc，实际 %s", summary.TopSpend[0].Project)
 	}
-	// aliyun 没有跑道天数，不该出现在"最先见底"里
+	// Implementation note.
 	for _, row := range summary.ShortestRunway {
 		if row.Project == "aliyun" {
 			t.Error("没有跑道估算的账户不该上见底榜")
@@ -97,7 +97,7 @@ func TestTopNIsCapped(t *testing.T) {
 	}
 }
 
-// TestEmptySectionsAreOmitted 没内容的小节整段不出现，卡片不能一堆空标题。
+// Implementation note.
 func TestEmptySectionsAreOmitted(t *testing.T) {
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.Local)
 	summary := Build(
@@ -110,8 +110,8 @@ func TestEmptySectionsAreOmitted(t *testing.T) {
 			t.Errorf("没有内容时不该出现「%s」小节：\n%s", unwanted, rendered)
 		}
 	}
-	if !contains(rendered, "全部正常") {
-		t.Errorf("没有告警时应说全部正常：\n%s", rendered)
+	if !contains(rendered, "All healthy") {
+		t.Errorf("no-alert output should say all healthy:\n%s", rendered)
 	}
 	if summary.TotalConsumed != nil {
 		t.Error("没有历史时不该给出本周消耗")

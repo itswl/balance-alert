@@ -6,16 +6,16 @@ func TestStateKind(t *testing.T) {
 	for _, tc := range []struct {
 		uri, want string
 	}{
-		{"balance-alert://state/balance", "balance"},
-		{"balance-alert://state/subscriptions", "subscriptions"},
-		{"balance-alert://state/email", "email"},
+		{"quotapulse://state/balance", "balance"},
+		{"quotapulse://state/subscriptions", "subscriptions"},
+		{"quotapulse://state/email", "email"},
 	} {
 		got, err := stateKind(tc.uri)
 		if err != nil || got != tc.want {
 			t.Errorf("stateKind(%q) = %q, %v; want %q", tc.uri, got, err, tc.want)
 		}
 	}
-	for _, uri := range []string{"https://example.test/state/balance", "balance-alert://other/balance", "balance-alert://state/"} {
+	for _, uri := range []string{"https://example.test/state/balance", "quotapulse://other/balance", "quotapulse://state/"} {
 		if _, err := stateKind(uri); err == nil {
 			t.Errorf("stateKind(%q) accepted an invalid URI", uri)
 		}

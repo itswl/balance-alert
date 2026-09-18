@@ -8,7 +8,7 @@ import (
 func TestGLMFetch(t *testing.T) {
 	runSpecCases(t, glmSpec, []specCase{
 		{
-			// 线上真实结构：TIME_LIMIT 有绝对量，TOKENS_LIMIT 只有百分比，取剩余比例最低者
+			// Implementation note.
 			name: "多窗口取最紧的那个",
 			body: `{"code":200,"msg":"操作成功","success":true,"data":{"level":"pro","limits":[
 				{"type":"TIME_LIMIT","unit":5,"number":1,"usage":1000,"currentValue":13,
@@ -31,7 +31,7 @@ func TestGLMFetch(t *testing.T) {
 			want: 0,
 		},
 		{
-			// usage 为 0 时除不了，退回接口给的已用百分比
+			// Implementation note.
 			name: "usage 为 0 时用百分比反推",
 			body: `{"code":200,"success":true,"data":{"limits":[
 				{"type":"CREDIT_LIMIT","usage":0,"remaining":0,"percentage":25}]}}`,
@@ -45,7 +45,7 @@ func TestGLMFetch(t *testing.T) {
 			want: 0,
 		},
 		{
-			name: "没有 code 字段视为成功",
+			name: "没有 code field视为成功",
 			body: `{"success":true,"data":{"limits":[{"usage":4,"remaining":1}]}}`,
 			want: 25,
 		},
@@ -57,27 +57,27 @@ func TestGLMFetch(t *testing.T) {
 		{
 			name:   "业务失败",
 			body:   `{"code":401,"msg":"令牌无效","success":false,"data":null}`,
-			errMsg: "API 返回错误: 令牌无效",
+			errMsg: "API returned an error: 令牌无效",
 		},
 		{
 			name:   "success 为真但 code 不是 200",
 			body:   `{"code":500,"msg":"服务异常","success":true}`,
-			errMsg: "API 返回错误: 服务异常",
+			errMsg: "API returned an error: 服务异常",
 		},
 		{
-			name:   "缺少 data.limits",
+			name:   "Missing data.limits",
 			body:   `{"code":200,"success":true,"data":{"level":"pro"}}`,
-			errMsg: "无法从响应中解析 data.limits 字段",
+			errMsg: "Could not parse data.limits field",
 		},
 		{
 			name:   "limits 里没有能算的窗口",
 			body:   `{"code":200,"success":true,"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"number":5}]}}`,
-			errMsg: "data.limits 里没有可解析的配额窗口",
+			errMsg: "data.limits contains no parseable quota window",
 		},
 		{
 			name:   "limits 是空列表",
 			body:   `{"code":200,"success":true,"data":{"limits":[]}}`,
-			errMsg: "data.limits 里没有可解析的配额窗口",
+			errMsg: "data.limits contains no parseable quota window",
 		},
 	})
 }
@@ -93,8 +93,8 @@ func TestGLMSendsBearerToken(t *testing.T) {
 }
 
 func TestGLMRemainingPercentIgnoresStringNumbers(t *testing.T) {
-	// 配额字段必须是真正的数字，字符串 "50" 不算；
-	// 这里若放宽成 Num 会把字符串也算进去，得出一个看着正常的错余额
+	// Implementation note.
+	// Implementation note.
 	if _, ok := glmRemainingPercent(map[string]any{"usage": "100", "remaining": "50"}); ok {
 		t.Error("字符串的 usage/remaining 不该被当成数字")
 	}
@@ -104,7 +104,7 @@ func TestGLMRemainingPercentIgnoresStringNumbers(t *testing.T) {
 }
 
 func TestRound2HalfToEven(t *testing.T) {
-	// round2 的契约：正中间时进偶数，其余按二进制里存的真实值定
+	// Implementation note.
 	cases := []struct{ in, want float64 }{
 		{0.125, 0.12}, // 正中间，进偶数
 		{0.135, 0.14}, // 二进制里略大于 0.135
@@ -116,7 +116,7 @@ func TestRound2HalfToEven(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := round2(tc.in); got != tc.want {
-			t.Errorf("round2(%v) = %v，期望 %v", tc.in, got, tc.want)
+			t.Errorf("round2(%v) = %v，expected %v", tc.in, got, tc.want)
 		}
 	}
 }

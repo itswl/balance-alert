@@ -1,4 +1,4 @@
-/** 格式化、跑道文案、Status判定的冒烟测试。这几个函数决定了看板上每个数字怎么读。 */
+/* Implementation note. */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -17,7 +17,7 @@ import {
   typeLabel,
 } from '../src/format.js';
 
-/** 造一份跑道数据，只覆盖当前用例关心的字段 */
+/* Implementation note. */
 function runway(overrides: Partial<Runway>): Runway {
   return {
     project_id: 'id',

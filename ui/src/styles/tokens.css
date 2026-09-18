@@ -1,5 +1,5 @@
-/* ==================== 设计变量 ====================
-   克制的单强调色体系：中性灰做底，语义色只用在状态上，数字统一等宽。 */
+/* ==================== layout ====================
+   layout：layout，layout，layout。 */
 :root {
     --accent: #3056d3;
     --accent-hover: #2647b8;
@@ -64,7 +64,7 @@
     --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
 }
 
-/* 兼容旧变量名：模板里少量内联样式还在用 */
+/* layout：layout */
 :root, [data-theme="dark"] {
     --primary: var(--accent);
     --primary-dark: var(--accent-hover);

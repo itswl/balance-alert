@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// baselineCase 是一组日期推算的期望值：给定周期、续费日、当天和上次续费时间，
-// 下次续费应当是哪天、还差几天、本周期算不算已经续过。
+// Implementation note.
+// Implementation note.
 type baselineCase struct {
 	Cycle          string  `json:"cycle"`
 	RenewalDay     int     `json:"renewal_day"`
@@ -19,8 +19,8 @@ type baselineCase struct {
 	AlreadyRenewed bool    `json:"already_renewed"`
 }
 
-// TestMatchesBaseline 是这个包最重要的测试，钉住的是日期推算的行为契约：
-// 385 组日期边界的期望值，闰年、月末、跨年、已续费判断都在里面，改坏任何一处都会在这里炸出来。
+// Implementation note.
+// Implementation note.
 func TestMatchesBaseline(t *testing.T) {
 	raw, err := os.ReadFile("testdata/baseline_cases.json")
 	if err != nil {
@@ -110,14 +110,14 @@ func TestCoerceRenewalDay(t *testing.T) {
 	}
 }
 
-// TestMonthEndClamping 单独盯住月末回退，这是最容易改坏的一处。
+// Implementation note.
 func TestMonthEndClamping(t *testing.T) {
-	// 1 月 31 日订阅，站在 2 月 1 日看，下次应该落在 2 月末而不是 3 月 3 日
+	// Implementation note.
 	_, next := NextRenewal("monthly", 31, mustDate(t, "2026-02-01"), nil)
 	if got := next.Format("2006-01-02"); got != "2026-02-28" {
 		t.Errorf("31 号的月付在 2 月应回退到 2026-02-28，实际 %s", got)
 	}
-	// 闰年 2 月 29 日的年付，在平年应落到 2 月 28 日
+	// Implementation note.
 	last := mustDate(t, "2024-02-29")
 	_, next = NextRenewal("yearly", 229, mustDate(t, "2026-01-01"), &last)
 	if got := next.Format("2006-01-02"); got != "2026-02-28" {
@@ -125,7 +125,7 @@ func TestMonthEndClamping(t *testing.T) {
 	}
 }
 
-// TestRenewalDayIsNotOffByOne 续费当天必须算 0 天而不是 -1 天，否则当天收不到提醒。
+// Implementation note.
 func TestRenewalDayIsNotOffByOne(t *testing.T) {
 	today := time.Date(2026, 3, 15, 14, 30, 0, 0, time.Local) // 故意带上时分秒
 	days, next := NextRenewal("monthly", 15, today, nil)

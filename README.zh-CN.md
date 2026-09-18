@@ -1,4 +1,4 @@
-# Balance Alert
+# QuotaPulse
 
 <!-- Chinese reference documentation. -->
 
@@ -10,9 +10,9 @@
 
 ```bash
 cp .env.example .env            # 填 WEB_API_KEY、WEBHOOK_URL 和各平台的 *_API_KEY
-go build -o balance-alert ./cmd/balance-alert
-./balance-alert -show-config    # 自检：每个密钥从哪来、缺什么、时刻怎么理解
-./balance-alert                 # http://localhost:8080
+go build -o quotapulse ./cmd/quotapulse
+./quotapulse -show-config    # 自检：每个密钥从哪来、缺什么、时刻怎么理解
+./quotapulse                 # http://localhost:8080
 ```
 
 或者直接跑容器：`docker compose up -d`。
@@ -101,7 +101,7 @@ go build -o balance-alert ./cmd/balance-alert
 | `ENABLE_WEB_ALARM` | `false` | 看板刷新和页面操作是否也发真实告警 |
 | `ALERT_COOLDOWN_SECONDS` / `SUBSCRIPTION_ALERT_COOLDOWN_SECONDS` | `86400` | 同一告警的冷却时长，需数据库 |
 | `MAX_CONCURRENT_CHECKS` / `RESPONSE_CACHE_TTL` | `20` / `300` | 并发检查数（1-50）、余额结果缓存秒数 |
-| `ENABLE_DATABASE` / `DATABASE_URL` | `false` / `sqlite:///./data/balance_alert.db` | 历史记录与动态配置的前提；启动自动建表，支持 PostgreSQL、MySQL |
+| `ENABLE_DATABASE` / `DATABASE_URL` | `false` / `sqlite:///./data/quotapulse.db` | 历史记录与动态配置的前提；启动自动建表，支持 PostgreSQL、MySQL |
 | `ENABLE_DYNAMIC_CONFIG` | `false` | 业务清单改从数据库读 |
 | `ENABLE_HISTORY_API` | `false` | 历史数据接口、趋势图、历史告警邮件 |
 | `ENABLE_SUBSCRIPTIONS` | `false` | 订阅提醒 |
@@ -117,13 +117,13 @@ go build -o balance-alert ./cmd/balance-alert
 ## 命令行
 
 ```bash
-./balance-alert                        # 起 Web 服务与定时任务
-./balance-alert -show-config           # 配置自检，有问题时退出码非零
-./balance-alert -check -dry-run        # 跑一次余额检查，不发告警
-./balance-alert -check -project 火山-主账号
-./balance-alert -check-subscriptions
-./balance-alert -check-email -email-days 3
-./balance-alert -healthcheck           # 探测本机 /live，容器健康检查用
+./quotapulse                        # 起 Web 服务与定时任务
+./quotapulse -show-config           # 配置自检，有问题时退出码非零
+./quotapulse -check -dry-run        # 跑一次余额检查，不发告警
+./quotapulse -check -project 火山-主账号
+./quotapulse -check-subscriptions
+./quotapulse -check-email -email-days 3
+./quotapulse -healthcheck           # 探测本机 /live，容器健康检查用
 ```
 
 ## 定时任务
@@ -158,14 +158,14 @@ go build -o balance-alert ./cmd/balance-alert
 
 ## 部署
 
-**Docker**：镜像发布在 `ghcr.io/itswl/balance-alert`，amd64 与 arm64 都有。运行镜像基于 `scratch`，里面只有一个静态二进制和 CA 证书，不到 30 MB。
+**Docker**：镜像发布在 `ghcr.io/itswl/quotapulse`，amd64 与 arm64 都有。运行镜像基于 `scratch`，里面只有一个静态二进制和 CA 证书，不到 30 MB。
 
 ```bash
 docker compose up -d          # 拉已发布的镜像直接跑，部署机不需要装 Go 和 Node
 docker compose pull && docker compose up -d   # 升级
 ```
 
-版本默认跟 `latest`。生产上建议在 `.env` 里钉死：`BALANCE_ALERT_VERSION=0.1.0`，否则 `docker compose pull` 可能在你不知情的时候换掉运行中的版本。
+版本默认跟 `latest`。生产上建议在 `.env` 里钉死：`QUOTAPULSE_VERSION=0.1.0`，否则 `docker compose pull` 可能在你不知情的时候换掉运行中的版本。
 
 ```bash
 # 带 Prometheus + Grafana
@@ -176,7 +176,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 # 单独构建（国内换源）
 docker build --build-arg GOPROXY=https://goproxy.cn,direct \
-             --build-arg NPM_REGISTRY=https://registry.npmmirror.com -t balance-alert .
+             --build-arg NPM_REGISTRY=https://registry.npmmirror.com -t quotapulse .
 ```
 
 镜像由流水线在打 tag 时构建：`git tag v1.2.3 && git push origin v1.2.3`，产出 `1.2.3` / `1.2` / `1` / `latest` 四个标签。
@@ -184,9 +184,9 @@ docker build --build-arg GOPROXY=https://goproxy.cn,direct \
 **Kubernetes**：`k8s/common-prod.yaml` 含 Deployment、Service、Ingress，apply 前替换 `YOUR_REGISTRY` 与 `YOUR_DOMAIN`。
 
 ```bash
-kubectl create secret generic balance-alert-secret --from-env-file=.env -n common-prod --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic quotapulse-secret --from-env-file=.env -n common-prod --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f k8s/common-prod.yaml
-kubectl -n common-prod rollout status deploy/balance-alert
+kubectl -n common-prod rollout status deploy/quotapulse
 ```
 
 探针约定：`/live` 给 startup 与 liveness，只证明进程活着；`/health` 给 readiness，没数据、数据过期或任务失败时 503。镜像里没有 shell，优雅下线靠 `SHUTDOWN_DELAY_SECONDS` 而不是 `preStop`。改了 Secret 要 `kubectl rollout restart`。
@@ -202,7 +202,7 @@ kubectl -n common-prod rollout status deploy/balance-alert
 - **startup probe 打到 `/health` 反复重启**：启动探针应指向 `/live`。
 - **数据库里的密钥没加密**：确认进程有 `CONFIG_ENCRYPTION_KEY`；旧明文会在下一次读取时回写为密文。
 - **看板打开是一句「前端产物未构建」**：先 `npm --prefix ui run build` 再编译二进制。
-- **不确定配置到底生效了什么**：`./balance-alert -show-config`。
+- **不确定配置到底生效了什么**：`./quotapulse -show-config`。
 
 ## 开发
 
@@ -220,7 +220,7 @@ npm --prefix ui run build        # 重新打包前端，产物提交进仓库
 ## 项目结构
 
 ```text
-cmd/balance-alert/      入口：命令行开关、日志、信号处理
+cmd/quotapulse/      入口：命令行开关、日志、信号处理
 internal/
   model/         领域类型，同时是 API 响应结构
   config/        环境变量 + 自动发现 + 数据库清单合并

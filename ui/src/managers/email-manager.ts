@@ -1,8 +1,8 @@
 /**
- * Mailbox scanning页：扫描概览、Mailbox账号、本次Alert邮件、历史Alert邮件，外加Mailbox配置的增删改。
+ * Implementation note.
  *
- * 扫描结果存在后端进程内存里，重启就没了，所以「尚Not scanned」和「扫了但没命中」
- * 要用不同文案区分 —— 都显示成 0 会让人以为扫描没生效。
+ * Implementation note.
+ * Implementation note.
  */
 
 import { mutate } from '../api/client.js';
@@ -32,7 +32,7 @@ interface AlertCardOptions {
   history?: boolean;
 }
 
-/** 实时扫描结果和数据库历史记录长得几乎一样，只有关键词字段名和 timestamp 不同 */
+/* Implementation note. */
 type AnyAlert = (EmailAlert | EmailAlertRecord) & { keywords?: string[]; matched_keywords?: string[]; timestamp?: string };
 
 export const EmailManager = {
@@ -73,13 +73,13 @@ export const EmailManager = {
       const result = await getEmailHistory(30, 100);
       return result.data || [];
     } catch (error) {
-      // 数据库Disabled等情况下历史接口返回 503，页面照常显示其它内容
+      // Implementation note.
       console.warn('Email alert history unavailable:', error);
       return [];
     }
   },
 
-  // ---------- 渲染 ----------
+  // Implementation note.
 
   renderAll(): void {
     this.renderSummary();
@@ -197,7 +197,7 @@ export const EmailManager = {
         : history.map((record) => renderAlertCard(record, { history: true })).join('');
   },
 
-  // ---------- 扫描 ----------
+  // Implementation note.
 
   async runScan(): Promise<void> {
     const btn = byId<HTMLButtonElement>('email-scan-btn');
@@ -231,7 +231,7 @@ export const EmailManager = {
   },
 };
 
-// ---------- 卡片 ----------
+// Implementation note.
 
 export function renderMailboxCard(mailbox: MailboxConfig, stat: MailboxResult | undefined): string {
   const name = mailbox.name || mailbox.username || 'Unnamed';
@@ -293,14 +293,14 @@ export function renderAlertCard(alert: AnyAlert, options: AlertCardOptions = {})
   if ('duplicate' in alert && alert.duplicate) {
     badge = '<span class="status-badge muted">Already notified; skipped</span>';
   } else if (alert.alert_sent) {
-    badge = '<span class="status-badge success">已发送通知</span>';
+    badge = '<span class="status-badge success">Notification sent</span>';
   } else if (options.dryRun) {
     badge = '<span class="status-badge info">Dry run</span>';
   } else {
     badge = '<span class="status-badge danger">Notification not sent</span>';
   }
 
-  // 实时扫描给 keywords，数据库历史给 matched_keywords
+  // Implementation note.
   const keywords = alert.keywords ?? alert.matched_keywords ?? [];
   const keywordTags = (Array.isArray(keywords) ? keywords : [keywords])
     .map((kw) => `<span class="keyword-tag">${escapeHTML(kw)}</span>`)
@@ -330,7 +330,7 @@ export function renderAlertCard(alert: AnyAlert, options: AlertCardOptions = {})
         `;
 }
 
-// ---------- Mailbox配置增删改（需 ENABLE_DYNAMIC_CONFIG） ----------
+// Implementation note.
 
 export function openEmailModal(mailbox: MailboxConfig | null = null): void {
   byId<HTMLFormElement>('email-form')?.reset();
@@ -346,7 +346,7 @@ export function openEmailModal(mailbox: MailboxConfig | null = null): void {
     if (title) title.textContent = 'Edit mailbox';
     setInputValue('email-edit-mode', 'true');
     nameInput.value = mailbox.name || '';
-    nameInput.readOnly = true; // 名称是唯一键，改名请删掉重建
+    nameInput.readOnly = true; // The name is the stable key; delete and recreate it to rename.
     setInputValue('email-host', mailbox.host || '');
     setInputValue('email-port', mailbox.port || DEFAULT_PORT);
     setInputValue('email-username', mailbox.username || '');

@@ -1,4 +1,4 @@
-// Package mcpserver exposes the read-only balance-alert state through MCP.
+// Package mcpserver exposes the read-only quotapulse state through MCP.
 //
 // It is deliberately attached to the existing authenticated HTTP service. The
 // MCP server therefore observes the same in-memory state as the dashboard and
@@ -14,13 +14,13 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/state"
-	"github.com/itswl/balance-alert/internal/store"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/state"
+	"github.com/itswl/quotapulse/internal/store"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const stateResourceTemplate = "balance-alert://state/{kind}"
+const stateResourceTemplate = "quotapulse://state/{kind}"
 
 type emptyInput struct{}
 
@@ -43,9 +43,9 @@ type trendInput struct {
 func NewHandler(settings *config.Settings, runtime *state.Manager, history store.Store, log *slog.Logger) http.Handler {
 	serverFactory := func(_ *http.Request) *sdkmcp.Server {
 		server := sdkmcp.NewServer(
-			&sdkmcp.Implementation{Name: "balance-alert", Version: settings.AppVersion},
+			&sdkmcp.Implementation{Name: "quotapulse", Version: settings.AppVersion},
 			&sdkmcp.ServerOptions{
-				Instructions: "Read balance-alert status, subscriptions, email scan results, jobs, health, and alert history. This server is read-only.",
+				Instructions: "Read quotapulse status, subscriptions, email scan results, jobs, health, and alert history. This server is read-only.",
 				Logger:       log,
 			},
 		)
@@ -146,9 +146,9 @@ func addJSONTool[T any](server *sdkmcp.Server, name, description string, read fu
 
 func addStateResources(server *sdkmcp.Server, runtime *state.Manager) {
 	server.AddResourceTemplate(&sdkmcp.ResourceTemplate{
-		Name:        "balance-alert-state",
+		Name:        "quotapulse-state",
 		URITemplate: stateResourceTemplate,
-		Description: "Read-only JSON resources for the current balance-alert runtime state.",
+		Description: "Read-only JSON resources for the current quotapulse runtime state.",
 		MIMEType:    "application/json",
 	}, func(_ context.Context, req *sdkmcp.ReadResourceRequest) (*sdkmcp.ReadResourceResult, error) {
 		kind, err := stateKind(req.Params.URI)
@@ -180,7 +180,7 @@ func addStateResources(server *sdkmcp.Server, runtime *state.Manager) {
 
 func stateKind(raw string) (string, error) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "balance-alert" || u.Host != "state" {
+	if err != nil || u.Scheme != "quotapulse" || u.Host != "state" {
 		return "", fmt.Errorf("invalid state resource URI")
 	}
 	kind := strings.Trim(strings.TrimPrefix(u.Path, "/"), " ")

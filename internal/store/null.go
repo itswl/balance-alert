@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// Null 返回一个什么都不存的 Store，用于没开数据库的核心版。
+// Implementation note.
 //
-// 写入静默丢弃，查询返回空，冷却判断一律放行。于是上层不必到处判断数据库开没开：
-// 没有数据库就是"不冷却、不留痕、没有历史"，告警本身照发。
+// Implementation note.
+// Implementation note.
 func Null() Store { return nullStore{} }
 
 type nullStore struct{}

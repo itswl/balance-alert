@@ -1,8 +1,8 @@
-// 构建脚本：esbuild 打包 + index.html 注入构建标识。
+// Implementation note.
 //
-// 产物固定叫 app.js / app.css，路径写死在 index.html 里，Go 那边直接
-// `//go:embed all:dist` 再把 dist/static 挂到 /static 即可，不需要读清单文件。
-// 缓存失效靠 ?v=<内容哈希> 的查询串，文件名保持稳定。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
@@ -28,7 +28,7 @@ const shared = {
   absWorkingDir: root,
 };
 
-/** 把 __BUILD_ID__ 换成产物内容的哈希；产物没变时哈希也不变，浏览器缓存继续有效 */
+/* Implementation note. */
 async function emitHtml() {
   const [js, css] = await Promise.all([
     readFile(join(staticDir, 'app.js')),
@@ -43,7 +43,7 @@ async function emitHtml() {
 async function reportSizes(buildId) {
   const files = ['index.html', 'static/app.js', 'static/app.css'];
   const { gzipSync, brotliCompressSync } = await import('node:zlib');
-  console.log(`\n构建标识 ${buildId}`);
+  console.log(`\nBuild ID ${buildId}`);
   for (const file of files) {
     const buf = await readFile(join(outdir, file));
     const gz = gzipSync(buf, { level: 9 }).length;
@@ -91,7 +91,7 @@ async function watchApp() {
           b.onEnd(async (result) => {
             if (result.errors.length === 0) {
               const id = await emitHtml();
-              console.log(`index.html 已更新（${id}）`);
+              console.log(`index.html updated (${id})`);
             }
           });
         },
@@ -99,10 +99,10 @@ async function watchApp() {
     ],
   });
   await ctx.watch();
-  console.log('watching…');
+  console.log('Watching for changes');
 }
 
-/** 测试：把 test/*.test.ts 各自打成一个 ESM 文件，交给 node --test 跑 */
+/* Implementation note. */
 async function buildTests() {
   await rm(testOutdir, { recursive: true, force: true });
   await mkdir(testOutdir, { recursive: true });
@@ -110,7 +110,7 @@ async function buildTests() {
   const entries = (await readdir(resolve(root, 'test')))
     .filter((f) => f.endsWith('.test.ts'))
     .map((f) => resolve(root, 'test', f));
-  if (entries.length === 0) throw new Error('test/ 下没有 *.test.ts');
+  if (entries.length === 0) throw new Error('No test/*.test.ts files found');
 
   await build({
     ...shared,
@@ -121,12 +121,12 @@ async function buildTests() {
     platform: 'node',
     minify: false,
     sourcemap: 'inline',
-    // node:test 由运行时提供，不打进包里
+    // Implementation note.
     external: ['node:*'],
   });
 
   const built = await readdir(testOutdir);
-  console.log(`已构建 ${built.length} 个测试文件`);
+  console.log(`Built ${built.length} test files`);
 }
 
 if (testOnly) {
@@ -135,12 +135,12 @@ if (testOnly) {
   await watchApp();
 } else {
   await buildApp();
-  // 让 Go 那边一眼看出 embed 要包哪些文件
+  // Implementation note.
   const listing = await readdir(outdir, { recursive: true });
   const files = [];
   for (const entry of listing) {
     const full = join(outdir, entry);
     if ((await stat(full)).isFile()) files.push(entry);
   }
-  console.log(`\ndist/ 共 ${files.length} 个文件：${files.sort().join(', ')}`);
+  console.log(`\ndist/ contains ${files.length} files: ${files.sort().join(', ')}`);
 }

@@ -91,13 +91,13 @@ func TestParseWeeklySchedule(t *testing.T) {
 		t.Errorf(`ParseWeeklySchedule("Mon 09:00") = %v %v %v`, weekdays, times, err)
 	}
 
-	// 省略星期表示每天
+	// Implementation note.
 	weekdays, times, err = ParseWeeklySchedule("09:00")
 	if err != nil || len(weekdays) != 0 || len(times) != 1 {
 		t.Errorf(`ParseWeeklySchedule("09:00") 应为每天 09:00，得到 %v %v %v`, weekdays, times, err)
 	}
 
-	// 星期和时刻都能写多个
+	// Implementation note.
 	weekdays, times, err = ParseWeeklySchedule("Mon,Thu 09:00,18:00")
 	if err != nil || len(weekdays) != 2 || len(times) != 2 {
 		t.Errorf(`ParseWeeklySchedule("Mon,Thu 09:00,18:00") 得到 %v %v %v`, weekdays, times, err)
@@ -109,7 +109,7 @@ func TestParseWeeklySchedule(t *testing.T) {
 }
 
 func TestNextOccurrence(t *testing.T) {
-	// 周三 14:00
+	// Implementation note.
 	now := time.Date(2026, 9, 16, 14, 0, 0, 0, time.Local)
 
 	tests := []struct {
@@ -148,12 +148,12 @@ func TestDescribe(t *testing.T) {
 		weekdays map[int]bool
 		want     string
 	}{
-		{nil, nil, "已关闭"},
-		{[]ClockTime{{9, 0}}, nil, "每天 09:00"},
-		{[]ClockTime{{9, 0}, {15, 0}}, nil, "每天 09:00 / 15:00"},
-		{[]ClockTime{{9, 0}}, map[int]bool{1: true}, "每周一 09:00"},
-		{[]ClockTime{{9, 0}}, map[int]bool{1: true, 4: true}, "每周一、四 09:00"},
-		{[]ClockTime{{9, 0}}, map[int]bool{7: true}, "每周日 09:00"},
+		{nil, nil, "Disabled"},
+		{[]ClockTime{{9, 0}}, nil, "Daily 09:00"},
+		{[]ClockTime{{9, 0}, {15, 0}}, nil, "Daily 09:00 / 15:00"},
+		{[]ClockTime{{9, 0}}, map[int]bool{1: true}, "Weekly Mon 09:00"},
+		{[]ClockTime{{9, 0}}, map[int]bool{1: true, 4: true}, "Weekly Mon, Thu 09:00"},
+		{[]ClockTime{{9, 0}}, map[int]bool{7: true}, "Weekly Sun 09:00"},
 	}
 	for _, tt := range tests {
 		if got := Describe(tt.times, tt.weekdays); got != tt.want {
@@ -163,7 +163,7 @@ func TestDescribe(t *testing.T) {
 }
 
 func TestISOWeekday(t *testing.T) {
-	// 2026-09-14 是周一
+	// Implementation note.
 	for offset, want := range []int{1, 2, 3, 4, 5, 6, 7} {
 		day := time.Date(2026, 9, 14+offset, 12, 0, 0, 0, time.Local)
 		if got := ISOWeekday(day); got != want {

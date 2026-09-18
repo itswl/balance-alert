@@ -8,16 +8,16 @@ logs/
 *.db
 *.db-journal
 
-# 前端依赖与本地产物，镜像里会重新构建
+# Implementation note.
 ui/node_modules/
 ui/dist-test/
 
-# 文档与部署清单不进镜像
+# Implementation note.
 docs/
 grafana/
 k8s/
 *.md
 LICENSE
 
-# 测试数据
+# Implementation note.
 **/testdata/

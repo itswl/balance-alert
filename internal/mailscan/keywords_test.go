@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// 默认词表是产品行为的一部分：漏一个词就少一类告警，多一个词就多一批误报。
-// 数量对不上说明有人顺手改了表，改之前先想清楚会多出还是少掉哪一类告警。
+// Implementation note.
+// Implementation note.
 func TestDefaultAlertKeywordsIsUnchanged(t *testing.T) {
 	if got, want := len(DefaultAlertKeywords), 40; got != want {
 		t.Fatalf("默认关键词数量 = %d, 期望 %d", got, want)
@@ -52,7 +52,7 @@ func TestMatchKeywords(t *testing.T) {
 	}
 }
 
-// 一条"或"正则从左到右取第一个命中的分支，长词整体命中，不会再被它的子串重复统计一次。
+// Implementation note.
 func TestMatchKeywordsTakesLongestPhrase(t *testing.T) {
 	m := newMatcher(DefaultAlertKeywords)
 
@@ -77,7 +77,7 @@ func TestMatchKeywordsCustomList(t *testing.T) {
 	}
 }
 
-// 空词会让正则在任何位置命中空串，等于整张表作废——必须在编译词表时就丢掉。
+// Implementation note.
 func TestMatchKeywordsIgnoresEmptyWords(t *testing.T) {
 	m := newMatcher([]string{"", "欠费"})
 	if got, want := m.match("已欠费", ""), []string{"欠费"}; !slices.Equal(got, want) {

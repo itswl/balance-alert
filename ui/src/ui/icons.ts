@@ -1,8 +1,8 @@
 /**
- * 卡片里动态拼出来的图标。
+ * Implementation note.
  *
- * 页面骨架里的图标写死在 index.html，这里只放 JS 渲染时要用的那几个 ——
- * 同一段 path 原来在四个文件里各抄了一遍，改描边粗细得改四处。
+ * Implementation note.
+ * Implementation note.
  */
 
 const svg = (body: string, extra = ''): string =>

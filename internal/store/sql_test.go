@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// 六张表按依赖无关的顺序清空，用例之间不互相污染。
+// Implementation note.
 var allTables = []string{
 	"balance_history",
 	"alert_history",
@@ -24,20 +24,20 @@ var allTables = []string{
 
 type backend struct {
 	name string
-	// dsn 每次调用都要给出一个全新的空库（sqlite 用临时文件，另两种共用服务器上的同一个库）。
+	// Implementation note.
 	dsn func(t *testing.T) string
 }
 
-// testBackends 列出这次能真跑的引擎。
+// Implementation note.
 //
-// sqlite 用临时文件库，永远跑；postgres 与 mysql 需要真实服务器，
-// 设了 STORE_TEST_POSTGRES_URL / STORE_TEST_MYSQL_URL 才跑，
-// 没设就跳过——不能让 go test ./... 依赖本机装没装数据库。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func testBackends() []backend {
 	backends := []backend{{
 		name: "sqlite",
 		dsn: func(t *testing.T) string {
-			// t.TempDir() 给的是绝对路径，连接串里绝对路径是四条斜杠。
+			// Implementation note.
 			return "sqlite:///" + filepath.Join(t.TempDir(), "store_test.db")
 		},
 	}}
@@ -50,8 +50,8 @@ func testBackends() []backend {
 	return backends
 }
 
-// fixture 是一个用例专属的空库。可以用不同的 Options 反复打开同一个库，
-// 于是能在解密之前看到真正落盘的字节。
+// Implementation note.
+// Implementation note.
 type fixture struct {
 	t   *testing.T
 	url string
@@ -81,7 +81,7 @@ func (f *fixture) open(opts Options) *sqlStore {
 	return s.(*sqlStore)
 }
 
-// eachBackend 把同一组断言跑在每个可用引擎上。
+// Implementation note.
 func eachBackend(t *testing.T, name string, run func(t *testing.T, f *fixture)) {
 	t.Helper()
 	for _, b := range testBackends() {
@@ -91,7 +91,7 @@ func eachBackend(t *testing.T, name string, run func(t *testing.T, f *fixture)) 
 	}
 }
 
-// ---------- 动态配置 ----------
+// Implementation note.
 
 func TestProjectConfigCRUD(t *testing.T) {
 	eachBackend(t, "project", func(t *testing.T, f *fixture) {
@@ -128,7 +128,7 @@ func TestProjectConfigCRUD(t *testing.T) {
 			t.Fatalf("期望 1 条项目，得到 %d 条", len(got))
 		}
 		if got[0] != project {
-			// OwnerProject 是指针，比较的是地址，所以单独看值
+			// Implementation note.
 			if got[0].Name != project.Name || got[0].Provider != project.Provider ||
 				got[0].APIKey != project.APIKey || got[0].Threshold != project.Threshold ||
 				got[0].Type != project.Type || got[0].Enabled != project.Enabled {
@@ -139,7 +139,7 @@ func TestProjectConfigCRUD(t *testing.T) {
 			t.Errorf("owner_project = %v，期望 %q", got[0].OwnerProject, owner)
 		}
 
-		// Upsert 是全量覆盖，同名再写一次只应当更新，不应当多出一行。
+		// Implementation note.
 		project.Threshold = 99
 		project.Enabled = false
 		project.OwnerProject = nil
@@ -170,7 +170,7 @@ func TestProjectConfigCRUD(t *testing.T) {
 		if len(got) != 0 {
 			t.Fatalf("删除后应当没有项目，却有 %d 条", len(got))
 		}
-		// 删不存在的行不算错误，删除保持幂等。
+		// Implementation note.
 		if err := s.DeleteProject(ctx, "根本不存在"); err != nil {
 			t.Errorf("删除不存在的项目不该报错: %v", err)
 		}
@@ -279,7 +279,7 @@ func TestMailboxConfigCRUD(t *testing.T) {
 	})
 }
 
-// ---------- 加密 ----------
+// Implementation note.
 
 func TestSecretsAreEncryptedAtRest(t *testing.T) {
 	eachBackend(t, "encrypt-at-rest", func(t *testing.T, f *fixture) {
@@ -299,7 +299,7 @@ func TestSecretsAreEncryptedAtRest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// 带密钥读回来应当是明文。
+		// Implementation note.
 		projects, err := s.ListProjects(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -315,7 +315,7 @@ func TestSecretsAreEncryptedAtRest(t *testing.T) {
 			t.Fatalf("带密钥读回的 password = %q，期望 %q", boxes[0].Password, password)
 		}
 
-		// 不带密钥打开同一个库，看到的应当是密文——说明落盘的确实加密了。
+		// Implementation note.
 		plain := f.open(Options{})
 		stored, err := plain.ListProjects(ctx)
 		if err != nil {
@@ -340,7 +340,7 @@ func TestAutoEncryptOnRead(t *testing.T) {
 		const apiKey = "legacy-plaintext-key"
 		const password = "legacy-plaintext-password"
 
-		// 先用没配密钥的实例写进去，模拟升级前留下的明文。
+		// Implementation note.
 		legacy := f.open(Options{})
 		if err := legacy.UpsertProject(ctx, model.Project{
 			Name: "p1", Provider: "openrouter", APIKey: apiKey, Enabled: true,
@@ -353,7 +353,7 @@ func TestAutoEncryptOnRead(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// 配上密钥后第一次读取就把明文加密回写。
+		// Implementation note.
 		s := f.open(Options{EncryptionKey: sampleFernetKey, AutoEncryptOnRead: true})
 		projects, err := s.ListProjects(ctx)
 		if err != nil {
@@ -429,10 +429,10 @@ func TestNoKeyStoresPlaintext(t *testing.T) {
 	})
 }
 
-// ---------- 余额历史 ----------
+// Implementation note.
 
-// seedBalance 直接走生成代码写一条带指定时刻的记录。
-// SaveBalance 只会写 time.Now()，测时间窗口必须能自己指定时刻。
+// Implementation note.
+// Implementation note.
 func seedBalance(t *testing.T, s *sqlStore, at time.Time, projectID, name, provider string, balance float64, threshold *float64) {
 	t.Helper()
 	if err := s.q.insertBalance(t.Context(), insertBalanceParams{
@@ -487,12 +487,12 @@ func TestSaveAndQueryBalance(t *testing.T) {
 		if row.ID == 0 {
 			t.Error("自增主键没有回来")
 		}
-		// 时间戳是 Z 结尾的 ISO 串，前端直接 new Date() 解析。
+		// Implementation note.
 		if _, err := time.Parse(time.RFC3339Nano, row.Timestamp); err != nil {
 			t.Errorf("timestamp %q 不是合法 RFC3339: %v", row.Timestamp, err)
 		}
 
-		// 阈值可空，序列化成 null 而不是 0。
+		// Implementation note.
 		if err := s.SaveBalance(ctx, BalanceRecord{
 			ProjectID: "pid-2", ProjectName: "无阈值", Provider: "glm", Balance: 1,
 		}); err != nil {
@@ -505,7 +505,7 @@ func TestSaveAndQueryBalance(t *testing.T) {
 		if rows[0].Threshold != nil {
 			t.Errorf("没传阈值时应当是 nil，得到 %v", *rows[0].Threshold)
 		}
-		// balance_type 留空时补成建表默认值 credits。
+		// Implementation note.
 		if rows[0].BalanceType != model.TypeCredits {
 			t.Errorf("balance_type = %q，期望补成 %q", rows[0].BalanceType, model.TypeCredits)
 		}
@@ -530,7 +530,7 @@ func TestBalanceHistoryFilters(t *testing.T) {
 		if len(all) != 3 {
 			t.Fatalf("7 天窗口内应当有 3 条，得到 %d 条", len(all))
 		}
-		// 默认按时间倒序，最新的在最前面。
+		// Implementation note.
 		if all[0].Balance != 100 || all[2].Balance != 80 {
 			t.Errorf("没有按时间倒序: %v %v %v", all[0].Balance, all[1].Balance, all[2].Balance)
 		}
@@ -596,7 +596,7 @@ func TestBalanceSeries(t *testing.T) {
 		if len(series) != 3 {
 			t.Fatalf("期望 3 个快照，得到 %d 个", len(series))
 		}
-		// 跑道分析要按时间升序，最早的在最前面。
+		// Implementation note.
 		if series[0].Balance != 50 || series[1].Balance != 90 || series[2].Balance != 100 {
 			t.Errorf("没有按时间升序: %v", []float64{series[0].Balance, series[1].Balance, series[2].Balance})
 		}
@@ -618,7 +618,7 @@ func TestBalanceSeries(t *testing.T) {
 		if series[1].Threshold != nil {
 			t.Errorf("没有阈值的点应当是 nil，得到 %v", *series[1].Threshold)
 		}
-		// 时间戳是 UTC 的 Unix 秒。
+		// Implementation note.
 		if delta := now.Unix() - last.Timestamp; delta < 3000 || delta > 4200 {
 			t.Errorf("时间戳看起来不是 UTC Unix 秒，距今 %d 秒", delta)
 		}
@@ -631,7 +631,7 @@ func TestBalanceTrend(t *testing.T) {
 		ctx := t.Context()
 		now := time.Now().UTC()
 
-		// 没有任何数据时返回 nil, nil，由上层翻成 404。
+		// Implementation note.
 		trend, err := s.BalanceTrend(ctx, "pid-missing", 30)
 		if err != nil {
 			t.Fatal(err)
@@ -674,7 +674,7 @@ func TestBalanceTrend(t *testing.T) {
 		if len(trend.History) != 3 {
 			t.Fatalf("history 应当有 3 个点，得到 %d 个", len(trend.History))
 		}
-		// history 按时间升序
+		// Implementation note.
 		if trend.History[0].Balance != 100 || trend.History[2].Balance != 60 {
 			t.Errorf("history 没有按时间升序: %+v", trend.History)
 		}
@@ -707,18 +707,18 @@ func TestBalanceTrendSinglePointHasNoChange(t *testing.T) {
 		if trend.DataPoints != 1 {
 			t.Fatalf("data_points = %d，期望 1", trend.DataPoints)
 		}
-		// 只有一个点算不出变化量，字段整个省掉而不是记 0。
+		// Implementation note.
 		if trend.Change != nil || trend.ChangePercent != nil {
 			t.Errorf("单点趋势不该有 change/change_percent: %v %v", trend.Change, trend.ChangePercent)
 		}
-		// 没设阈值时按 0 返回，是接口的既有约定。
+		// Implementation note.
 		if trend.Threshold != 0 {
 			t.Errorf("threshold = %v，期望 0", trend.Threshold)
 		}
 	})
 }
 
-// 起点余额是 0 时不能拿它当除数，否则 change_percent 会变成 Inf 或 NaN，JSON 直接序列化失败。
+// Implementation note.
 func TestBalanceTrendZeroStartDoesNotDivide(t *testing.T) {
 	eachBackend(t, "trend-zero-start", func(t *testing.T, f *fixture) {
 		s := f.open(Options{})
@@ -744,7 +744,7 @@ func TestBalanceTrendZeroStartDoesNotDivide(t *testing.T) {
 	})
 }
 
-// ---------- 告警历史 ----------
+// Implementation note.
 
 func seedAlert(t *testing.T, s *sqlStore, at time.Time, projectID, name, alertType, status string) {
 	t.Helper()
@@ -788,7 +788,7 @@ func TestSaveAndQueryAlerts(t *testing.T) {
 		if row.ProjectID != "pid-1" || row.ProjectName != "生产账户" || row.AlertType != "low_balance" {
 			t.Errorf("告警字段不对: %+v", row)
 		}
-		// Status 留空时按 sent 处理，这是 Store 契约写明的。
+		// Implementation note.
 		if row.Status != "sent" {
 			t.Errorf("status = %q，期望补成 sent", row.Status)
 		}
@@ -881,7 +881,7 @@ func TestHasRecentAlert(t *testing.T) {
 	})
 }
 
-// 冷却只认 status='sent'：一次发送失败不该把后续告警全压掉。
+// Implementation note.
 func TestHasRecentAlertOnlyCountsSent(t *testing.T) {
 	eachBackend(t, "cooldown-status", func(t *testing.T, f *fixture) {
 		s := f.open(Options{})
@@ -928,7 +928,7 @@ func TestAlertStats(t *testing.T) {
 		if empty.TotalAlerts != 0 || len(empty.ByType) != 0 || len(empty.TopProjects) != 0 {
 			t.Errorf("空库统计应当全为空: %+v", empty)
 		}
-		// 序列化成 {} 和 []，不能是 null。
+		// Implementation note.
 		if empty.ByType == nil || empty.TopProjects == nil {
 			t.Error("by_type 与 top_projects 不该是 nil")
 		}
@@ -946,7 +946,7 @@ func TestAlertStats(t *testing.T) {
 		if stats.Days != 30 {
 			t.Errorf("days = %d，期望 30", stats.Days)
 		}
-		// 统计不看 status，发送失败的也计进总数，这是接口的既有口径。
+		// Implementation note.
 		if stats.TotalAlerts != 4 {
 			t.Errorf("total_alerts = %d，期望 4", stats.TotalAlerts)
 		}
@@ -956,7 +956,7 @@ func TestAlertStats(t *testing.T) {
 		if len(stats.TopProjects) != 2 {
 			t.Fatalf("top_projects 应当有 2 项，得到 %d 项", len(stats.TopProjects))
 		}
-		// 按计数倒序
+		// Implementation note.
 		if stats.TopProjects[0].Project != "A" || stats.TopProjects[0].Count != 3 {
 			t.Errorf("top_projects[0] = %+v，期望 A/3", stats.TopProjects[0])
 		}
@@ -972,7 +972,7 @@ func TestAlertStatsTopProjectsCapped(t *testing.T) {
 		ctx := t.Context()
 		now := time.Now().UTC()
 
-		// 12 个项目，告警数递减，只应当留下最多的 10 个。
+		// Implementation note.
 		for i := range 12 {
 			name := string(rune('A' + i))
 			for range i + 1 {
@@ -998,7 +998,7 @@ func TestAlertStatsTopProjectsCapped(t *testing.T) {
 	})
 }
 
-// ---------- 邮件告警历史 ----------
+// Implementation note.
 
 func TestSaveAndQueryEmailAlerts(t *testing.T) {
 	eachBackend(t, "email", func(t *testing.T, f *fixture) {
@@ -1040,13 +1040,13 @@ func TestSaveAndQueryEmailAlerts(t *testing.T) {
 		if !row.AlertSent {
 			t.Error("alert_sent 应当是 true")
 		}
-		// 关键词存成 JSON 数组文本，中文与 & 都不转义，与库里既有行的写法一致。
+		// Implementation note.
 		const wantKeywords = `["账单","扣费","R&D"]`
 		if row.MatchedKeywords == nil || *row.MatchedKeywords != wantKeywords {
 			t.Errorf("matched_keywords = %v，期望 %s", row.MatchedKeywords, wantKeywords)
 		}
 
-		// 没有关键词时存空数组而不是 null。
+		// Implementation note.
 		if err := s.SaveEmailAlert(ctx, EmailAlertRecord{
 			Mailbox: "m2", Sender: "s", Subject: "无关键词", Date: "d",
 		}); err != nil {
@@ -1105,7 +1105,7 @@ func TestHasRecentEmailAlert(t *testing.T) {
 			})
 		}
 
-		// 没发出去的那封不算已处理，下次扫描还要再试一次。
+		// Implementation note.
 		if err := s.SaveEmailAlert(ctx, EmailAlertRecord{
 			Mailbox: "m2", Sender: sender, Subject: subject, Date: date, AlertSent: false,
 		}); err != nil {
@@ -1172,10 +1172,10 @@ func TestEmailAlertsFilters(t *testing.T) {
 	})
 }
 
-// ---------- 其它 ----------
+// Implementation note.
 
 func TestOpenCreatesSQLiteDirectory(t *testing.T) {
-	// SQLite 库文件常放在 ./data 下，首次启动目录还不存在，Open 要自己建出来。
+	// Implementation note.
 	dir := filepath.Join(t.TempDir(), "nested", "data")
 	s, err := Open(t.Context(), Options{DatabaseURL: "sqlite:///" + filepath.Join(dir, "app.db")})
 	if err != nil {
@@ -1191,7 +1191,7 @@ func TestOpenCreatesSQLiteDirectory(t *testing.T) {
 	}
 }
 
-// 建表要能重复执行：进程每次启动都会跑一遍。
+// Implementation note.
 func TestCreateTablesIsIdempotent(t *testing.T) {
 	eachBackend(t, "create-tables", func(t *testing.T, f *fixture) {
 		s := f.open(Options{})
@@ -1199,7 +1199,7 @@ func TestCreateTablesIsIdempotent(t *testing.T) {
 		if err := s.UpsertProject(ctx, model.Project{Name: "p1", Provider: "openrouter", Enabled: true}); err != nil {
 			t.Fatal(err)
 		}
-		// 再打开一次会再跑一遍建表，数据不能被清掉。
+		// Implementation note.
 		again := f.open(Options{})
 		got, err := again.ListProjects(ctx)
 		if err != nil {
@@ -1217,15 +1217,15 @@ func TestOpenRejectsBadURL(t *testing.T) {
 	}
 }
 
-// ---------- 与既有数据的兼容 ----------
+// Implementation note.
 
-// legacyTimeLayout 是重写前的实现在 SQLite 上写时间列用的格式，生产库里的历史行都长这样。
-// SQLite 没有真正的时间类型，这一列是文本，timestamp >= ? 走的是字符串比较，
-// 所以新写入的格式必须能和历史行互相比较，否则升级后历史查询会整段错位。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 const legacyTimeLayout = "2006-01-02 15:04:05.000000"
 
-// 旧行是重写前写的，新行是现在写的，两种格式必须能在同一个时间窗口里正确比较与排序。
-// legacy_test.go 验的是「读得出来」，这里验的是「读写混在一起还对」。
+// Implementation note.
+// Implementation note.
 func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "legacy.db")
@@ -1234,7 +1234,7 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 建表语句抄自现有生产库的 sqlite_master，一个字母都没改。
+	// Implementation note.
 	if _, err := legacy.ExecContext(ctx, `CREATE TABLE balance_history (
 	id INTEGER NOT NULL, 
 	project_id VARCHAR(200) NOT NULL, 
@@ -1285,7 +1285,7 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 		t.Errorf("读回的时刻偏了 %v：%v vs %v", diff, got, written)
 	}
 
-	// 新写的行要和旧行在同一个时间窗口里被查出来。
+	// Implementation note.
 	if err := s.SaveBalance(ctx, BalanceRecord{
 		ProjectID: "f4c50bfa74c0cf0c11cfb68aed887252", ProjectName: "glm", Provider: "glm", Balance: 97.2,
 	}); err != nil {
@@ -1298,15 +1298,15 @@ func TestLegacyAndNewTimestampsCompareCorrectly(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("新旧两条都该在 7 天窗口里，得到 %d 条", len(rows))
 	}
-	// 倒序，新写的在前面
+	// Implementation note.
 	if rows[0].Balance != 97.2 {
 		t.Errorf("新旧行没有按时间正确排序: %+v", rows)
 	}
 }
 
-// 写进 SQLite 的时间必须仍是历史行那种 ISO 文本。
-// 驱动默认会写成 time.Time.String()（"... +0000 UTC"），和历史行的写法对不上，
-// 也让文本比较变得不可预期，所以 DSN 里钉了 _time_format=sqlite。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 func TestSQLiteTimestampStaysLegacyReadable(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "format.db")
@@ -1332,7 +1332,7 @@ func TestSQLiteTimestampStaysLegacyReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 历史行的 DATETIME 文本形如 2026-09-14 03:09:37.277711，从头匹配这个形状才算格式没跑偏。
+	// Implementation note.
 	matched, err := regexp.MatchString(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?`, stored)
 	if err != nil {
 		t.Fatal(err)

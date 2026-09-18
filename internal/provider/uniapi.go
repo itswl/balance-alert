@@ -2,7 +2,7 @@ package provider
 
 import "errors"
 
-// UniAPI 的余额是美元预付款，unit=usd 是接口要求的显式单位。
+// Implementation note.
 var uniapiSpec = Spec{
 	Key:         "uniapi",
 	Name:        "UniAPI",
@@ -11,14 +11,14 @@ var uniapiSpec = Spec{
 	Params:      map[string]string{"unit": "usd"},
 	Check: func(data map[string]any) error {
 		if !truthy(data["success"]) {
-			return errors.New("API 返回 success=false")
+			return errors.New("API returned success=false")
 		}
 		return nil
 	},
 	Extract: func(data map[string]any) (float64, error) {
 		balance, ok := Num(Dig(data, "data", "balance"))
 		if !ok {
-			return 0, errors.New("无法从响应中解析 balance 字段")
+			return 0, errors.New("Could not parse balance field")
 		}
 		return balance, nil
 	},

@@ -28,7 +28,7 @@ func TestWxRankFetch(t *testing.T) {
 			want: 1234,
 		},
 		{
-			// 后备字段按真值挑：score 是 0 就继续看 credits
+			// Implementation note.
 			name: "后备：score 为 0 时看 credits",
 			body: `{"code":0,"msg":"查询成功","data":{"score":0,"credits":66}}`,
 			want: 66,
@@ -39,36 +39,36 @@ func TestWxRankFetch(t *testing.T) {
 			want: 42,
 		},
 		{
-			name:   "业务错误码",
+			name:   "business error码",
 			body:   `{"code":-1,"msg":"密钥无效"}`,
-			errMsg: "API 返回错误: 密钥无效",
+			errMsg: "API returned an error: 密钥无效",
 		},
 		{
-			name:   "缺少 code 也算失败",
-			body:   `{"msg":"缺少 code"}`,
-			errMsg: "API 返回错误: 缺少 code",
+			name:   "Missing code 也算失败",
+			body:   `{"msg":"Missing code"}`,
+			errMsg: "API returned an error: Missing code",
 		},
 		{
-			name:   "缺少 code 且缺少 msg",
+			name:   "Missing code 且Missing msg",
 			body:   `{}`,
-			errMsg: "API 返回错误: 未知错误",
+			errMsg: "API returned an error: Unknown error",
 		},
 		{
-			// msg 不是字符串时也要给出正常的中文提示，不能把类型断言失败漏给用户
+			// Implementation note.
 			name:   "msg 不是字符串",
 			body:   `{"code":0,"msg":12345}`,
-			errMsg: "无法从响应中解析余额",
+			errMsg: "Could not parse balance",
 		},
 		{
-			name:   "解析不出余额",
+			name:   "Could not parse balance",
 			body:   `{"code":0,"msg":"无数据"}`,
-			errMsg: "无法从响应中解析余额: 无数据",
+			errMsg: "Could not parse balance: 无数据",
 		},
 	})
 }
 
 func TestWxRankPutsKeyInQuery(t *testing.T) {
-	// 这家是查询参数鉴权，不是 Bearer
+	// Implementation note.
 	srv, rec := serveJSON(t, 200, `{"code":0,"msg":"剩余1余额"}`)
 	if _, err := specProviderAt(wxrankSpec, srv.URL, "wx-secret").Fetch(context.Background()); err != nil {
 		t.Fatal(err)

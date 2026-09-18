@@ -2,9 +2,9 @@ package store
 
 import "testing"
 
-// 固定样本：一把密钥、一个口令、一段明文，以及用它们加出来的两条密文。
-// 样本写死在这里，密钥推导或密文格式被改坏时这里会先失败，
-// 而不是等到线上读不出既有配置才发现。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 const (
 	sampleFernetKey  = "a9Abfm3N7fV2A1xsrdfE68FhvoOVlKhJJrw7iUIuNXw="
 	samplePassphrase = "hunter2"
@@ -63,8 +63,8 @@ func TestEncryptRoundTrip(t *testing.T) {
 	}
 }
 
-// 43 字符不带补位符的串必须走口令分支：base64 解码缺了补位符会失败，于是它被当口令而不是密钥。
-// 这条判定直接决定推导出的密钥，改了就解不开既有密文。
+// Implementation note.
+// Implementation note.
 func TestKeyNormalization(t *testing.T) {
 	padded := newCipher(sampleFernetKey)
 	unpadded := newCipher("a9Abfm3N7fV2A1xsrdfE68FhvoOVlKhJJrw7iUIuNXw")
@@ -72,7 +72,7 @@ func TestKeyNormalization(t *testing.T) {
 		t.Error("去掉补位符后应当推出另一个密钥，却解开了同一条密文")
 	}
 
-	// 掺进字母表之外的字符会被忽略，因此和原密钥等价。
+	// Implementation note.
 	lenient := newCipher("a9Abfm3N7fV2A1xsrd!fE68FhvoOVlKhJJrw7iUIuNXw=")
 	if got := lenient.decrypt(padded.encrypt("x")); got != "x" {
 		t.Errorf("忽略非字母表字符后应当是同一个密钥，却得到 %q", got)
@@ -91,7 +91,7 @@ func TestEncryptWithoutKeyIsPassThrough(t *testing.T) {
 	if got := c.decrypt(secret); got != secret {
 		t.Errorf("解密得到 %q, 期望原样返回 %q", got, secret)
 	}
-	// 没有密钥时读到密文只能原样交出去，总比整个配置列表拉不出来好。
+	// Implementation note.
 	if got := c.decrypt(sampleTokenFromKey); got != sampleTokenFromKey {
 		t.Errorf("没有密钥时解密应当原样返回，却得到 %q", got)
 	}
@@ -114,7 +114,7 @@ func TestDecryptGarbageReturnsInput(t *testing.T) {
 	if got := c.decrypt(broken); got != broken {
 		t.Errorf("解不开时应当原样返回，却得到 %q", got)
 	}
-	// 换一把密钥也解不开，同样原样返回而不是报错。
+	// Implementation note.
 	other := newCipher("完全不同的口令")
 	token := c.encrypt("secret")
 	if got := other.decrypt(token); got != token {

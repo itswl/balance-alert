@@ -153,7 +153,7 @@
                     ${o}
                 </div>
             </div>
-        `}function at(e,t={}){let n;"duplicate"in e&&e.duplicate?n='<span class="status-badge muted">Already notified; skipped</span>':e.alert_sent?n='<span class="status-badge success">已发送通知</span>':t.dryRun?n='<span class="status-badge info">Dry run</span>':n='<span class="status-badge danger">Notification not sent</span>';let r=e.keywords??e.matched_keywords??[],s=(Array.isArray(r)?r:[r]).map(d=>`<span class="keyword-tag">${u(d)}</span>`).join(""),a=e.amount!==null&&e.amount!==void 0,o=e.service_name&&e.service_name!=="Unknown service"?e.service_name:"";return`
+        `}function at(e,t={}){let n;"duplicate"in e&&e.duplicate?n='<span class="status-badge muted">Already notified; skipped</span>':e.alert_sent?n='<span class="status-badge success">Notification sent</span>':t.dryRun?n='<span class="status-badge info">Dry run</span>':n='<span class="status-badge danger">Notification not sent</span>';let r=e.keywords??e.matched_keywords??[],s=(Array.isArray(r)?r:[r]).map(d=>`<span class="keyword-tag">${u(d)}</span>`).join(""),a=e.amount!==null&&e.amount!==void 0,o=e.service_name&&e.service_name!=="Unknown service"?e.service_name:"";return`
             <div class="email-alert-card ${t.history?"history":""}">
                 <div class="email-alert-main">
                     <div class="email-alert-subject">${u(e.subject||"(No subject)")}</div>
@@ -190,7 +190,7 @@ This action cannot be undone.`)&&await T(S.deleteSubscription,{name:e},{success:
                         Set ENABLE_DATABASE=true in Settings and restart the service
                     </p>
                 </div>
-            `}return}let o=a.data;r&&(r.innerHTML=cn(o)),dn(o)}catch(s){if(Re(),console.error("加载趋势数据失败:",s),r){let a=s instanceof Error?s.message:String(s);r.innerHTML=`
+            `}return}let o=a.data;r&&(r.innerHTML=cn(o)),dn(o)}catch(s){if(Re(),console.error("Failed to load trend data:",s),r){let a=s instanceof Error?s.message:String(s);r.innerHTML=`
             <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--danger);">
                 <p>Load failed：${u(a)}</p>
             </div>

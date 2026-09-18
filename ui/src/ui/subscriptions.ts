@@ -1,4 +1,4 @@
-/** Subscription提醒区：一行一条，右侧是剩余 days数。 */
+/* Implementation note. */
 
 import { requireById } from '../dom.js';
 import { cycleLabel, escapeAttr, escapeHTML, formatCurrency, renewalUrgency } from '../format.js';
@@ -13,7 +13,7 @@ export function renderSubscriptionCard(sub: SubscriptionResult): string {
   const subName = sub.name || 'Unknown subscription';
   const subNameAttr = escapeAttr(subName);
 
-  // Renewed的给「Cancel标记」，没续费的给「Mark renewed」，两者互斥
+  // Implementation note.
   const renewalAction = sub.already_renewed
     ? `
                         <button class="action-icon-btn js-clear-renewed" data-name="${subNameAttr}" title="Clear renewal mark">

@@ -1,8 +1,8 @@
 /**
- * HTTP 客户端：API Key 管理、401 自动重试、写操作的统一提示。
+ * Implementation note.
  *
- * 所有 /api/* 都要带 X-API-Key。Key 存在 localStorage 里，首次打开或后端换了 key
- * 时弹窗要一次 —— 弹窗共用同一个 Promise，避免并发请求弹出五个框。
+ * Implementation note.
+ * Implementation note.
  */
 
 import { byId } from '../dom.js';
@@ -18,7 +18,7 @@ export interface FetchResult<T> {
 
 const STORAGE_KEY = 'apiKey';
 
-/** 同一时刻只允许有一个 API Key 弹窗 */
+/* Implementation note. */
 let pendingPrompt: Promise<string | null> | null = null;
 
 export function getApiKey(): string {
@@ -35,7 +35,7 @@ function authHeaders(): Record<string, string> {
   return key ? { 'X-API-Key': key } : {};
 }
 
-/** 从任意响应体里挖出一条能给人看的错误信息 */
+/* Implementation note. */
 function errorMessage(data: unknown, fallback: string): string {
   if (data && typeof data === 'object') {
     const payload = data as Partial<ErrorResponse> & { error?: string };
@@ -47,8 +47,8 @@ function errorMessage(data: unknown, fallback: string): string {
 }
 
 /**
- * 弹窗问 API Key。没有Cancel按钮是刻意的：没有 key 时页面上什么都拿不到，
- * 留一个「Cancel」只会让用户面对一个空看板。
+ * Implementation note.
+ * Implementation note.
  */
 export function promptForApiKey(message = ''): Promise<string | null> {
   if (pendingPrompt) return pendingPrompt;
@@ -59,7 +59,7 @@ export function promptForApiKey(message = ''): Promise<string | null> {
     const input = byId<HTMLInputElement>('auth-api-key');
     const error = byId('auth-error');
 
-    // 模板被裁剪过时退回浏览器原生输入框，至少还能用
+    // Implementation note.
     if (!modal || !form || !input) {
       const value = window.prompt(message || 'Enter API key', getApiKey());
       if (value !== null) setApiKey(value);
@@ -94,7 +94,7 @@ export function promptForApiKey(message = ''): Promise<string | null> {
     form.addEventListener('submit', onSubmit);
   });
 
-  // None论成功失败都要把共享 Promise 清掉，否则后续请求会一直等这个已结束的弹窗
+  // Implementation note.
   return pendingPrompt.finally(() => {
     pendingPrompt = null;
   });
@@ -107,8 +107,8 @@ async function ensureApiKey(): Promise<string | null> {
 }
 
 /**
- * 发一次请求并尽力把响应体解析成 JSON。
- * 解析不出来时 data 是 null —— 代理返回 HTML 错误页时就是这种情况，调用方必须容忍。
+ * Implementation note.
+ * Implementation note.
  */
 export async function fetchJson<T>(
   endpoint: string,
@@ -143,7 +143,7 @@ export async function fetchJson<T>(
   return { response, data };
 }
 
-/** 读操作：失败就抛，由调用方决定怎么提示 */
+/* Implementation note. */
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const { response, data } = await fetchJson<T>(endpoint, options);
   if (!response.ok) {
@@ -161,8 +161,8 @@ export interface MutateOptions {
 }
 
 /**
- * 写操作：POST JSON，成功 / 失败各弹一次提示，失败返回 null。
- * 统一在这里弹提示，各个 manager 里就不会出现「有的提示有的不提示」。
+ * Implementation note.
+ * Implementation note.
  */
 export async function mutate(
   endpoint: string,

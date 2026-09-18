@@ -1,6 +1,6 @@
-// Package app 把各模块装配成一个可运行的服务。
+// Package app provides the package implementation.
 //
-// 装配逻辑单独成包而不是堆在 main 里，是为了能在测试里整体拉起来跑。
+// Implementation note.
 package app
 
 import (
@@ -11,24 +11,24 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/config"
-	"github.com/itswl/balance-alert/internal/httpapi"
-	"github.com/itswl/balance-alert/internal/mailscan"
-	"github.com/itswl/balance-alert/internal/mcpserver"
-	"github.com/itswl/balance-alert/internal/metrics"
-	"github.com/itswl/balance-alert/internal/model"
-	"github.com/itswl/balance-alert/internal/monitor"
-	"github.com/itswl/balance-alert/internal/notify"
-	"github.com/itswl/balance-alert/internal/provider"
-	"github.com/itswl/balance-alert/internal/report"
-	"github.com/itswl/balance-alert/internal/runway"
-	"github.com/itswl/balance-alert/internal/scheduler"
-	"github.com/itswl/balance-alert/internal/state"
-	"github.com/itswl/balance-alert/internal/store"
-	"github.com/itswl/balance-alert/internal/subscription"
+	"github.com/itswl/quotapulse/internal/config"
+	"github.com/itswl/quotapulse/internal/httpapi"
+	"github.com/itswl/quotapulse/internal/mailscan"
+	"github.com/itswl/quotapulse/internal/mcpserver"
+	"github.com/itswl/quotapulse/internal/metrics"
+	"github.com/itswl/quotapulse/internal/model"
+	"github.com/itswl/quotapulse/internal/monitor"
+	"github.com/itswl/quotapulse/internal/notify"
+	"github.com/itswl/quotapulse/internal/provider"
+	"github.com/itswl/quotapulse/internal/report"
+	"github.com/itswl/quotapulse/internal/runway"
+	"github.com/itswl/quotapulse/internal/scheduler"
+	"github.com/itswl/quotapulse/internal/state"
+	"github.com/itswl/quotapulse/internal/store"
+	"github.com/itswl/quotapulse/internal/subscription"
 )
 
-// App 持有装配好的全部组件。
+// Implementation note.
 type App struct {
 	Settings *config.Settings
 	Log      *slog.Logger
@@ -45,7 +45,7 @@ type App struct {
 	scheduler *scheduler.Scheduler
 }
 
-// New 按配置装配服务。assets 是打包好的前端产物，可为 nil。
+// Implementation note.
 func New(settings *config.Settings, log *slog.Logger, assets fs.FS) (*App, error) {
 	st, err := openStore(settings, log)
 	if err != nil {
@@ -55,10 +55,10 @@ func New(settings *config.Settings, log *slog.Logger, assets fs.FS) (*App, error
 	httpClient := &http.Client{Timeout: time.Duration(settings.RequestTimeout) * time.Second}
 	notifier, err := notify.New(settings.WebhookURL, settings.WebhookType, settings.WebhookSource, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("Webhook 配置有误: %w", err)
+		return nil, fmt.Errorf("Invalid Webhook configuration: %w", err)
 	}
 	if notifier == nil {
-		log.Warn("未设置 WEBHOOK_URL，余额不足时无法发出告警")
+		log.Warn("WEBHOOK_URL is not set,Low balanceoperation")
 	}
 
 	app := &App{
@@ -113,7 +113,7 @@ func New(settings *config.Settings, log *slog.Logger, assets fs.FS) (*App, error
 	return app, nil
 }
 
-// keywords 组合出最终的告警关键词表：override 整体替换默认，extras 在其上追加。
+// Implementation note.
 func keywords(settings *config.Settings) []string {
 	base := settings.AlertKeywordOverride()
 	if len(base) == 0 {
@@ -122,7 +122,7 @@ func keywords(settings *config.Settings) []string {
 	return append(append([]string(nil), base...), settings.AlertKeywordExtras()...)
 }
 
-// openStore 开数据库；没开启用时返回 Null 实现，上层不必判断。
+// Implementation note.
 func openStore(settings *config.Settings, log *slog.Logger) (store.Store, error) {
 	if !settings.EnableDatabase {
 		return store.Null(), nil
@@ -133,35 +133,35 @@ func openStore(settings *config.Settings, log *slog.Logger) (store.Store, error)
 		AutoEncryptOnRead: settings.AutoEncryptOnRead,
 	})
 	if err != nil {
-		// 数据库挂了不该让余额告警停摆，除非用户明确要求严格模式
+		// Implementation note.
 		if settings.StrictDatabaseErrors {
-			return nil, fmt.Errorf("数据库初始化失败: %w", err)
+			return nil, fmt.Errorf("Database initialization failed: %w", err)
 		}
-		log.Warn("数据库初始化失败，将跳过历史数据与动态配置", "error", err)
+		log.Warn("Database initialization failed,operation", "error", err)
 		return store.Null(), nil
 	}
-	log.Info("数据库已初始化")
+	log.Info("Database initialized")
 	return st, nil
 }
 
-// Close 释放资源。
+// Implementation note.
 func (a *App) Close() error { return a.Store.Close() }
 
-// ---------- 定时任务 ----------
+// Implementation note.
 
-// BuildTasks 定义四个定时任务，与旧版一一对应。
+// Implementation note.
 func (a *App) BuildTasks() []*scheduler.Task {
 	settings := a.Settings
 
-	webAlarmNote := "只查不发告警"
+	webAlarmNote := "Check only; no alerts"
 	if settings.EnableWebAlarm {
-		webAlarmNote = "会发送真实告警"
+		webAlarmNote = "Send real alerts"
 	}
 
 	return []*scheduler.Task{
 		{
 			Name:        "dashboard_refresh",
-			Description: fmt.Sprintf("刷新看板的余额与订阅状态（%s）", webAlarmNote),
+			Description: fmt.Sprintf("operation(%s)", webAlarmNote),
 			Interval:    time.Duration(settings.RefreshInterval()) * time.Second,
 			RunAtStart:  true,
 			Run: func(ctx context.Context) (any, error) {
@@ -170,7 +170,7 @@ func (a *App) BuildTasks() []*scheduler.Task {
 		},
 		{
 			Name:        "alert_check",
-			Description: "余额与订阅告警检查，发送真实通知",
+			Description: "operation,operation",
 			DailyTimes:  settings.AlertTimes,
 			Run: func(ctx context.Context) (any, error) {
 				return a.refreshAll(ctx, false)
@@ -178,7 +178,7 @@ func (a *App) BuildTasks() []*scheduler.Task {
 		},
 		{
 			Name:        "email_scan",
-			Description: fmt.Sprintf("扫描邮箱最近 %d 天的欠费 / 续费邮件，发送真实通知", settings.EmailScanDays),
+			Description: fmt.Sprintf("operation %d operation / operation,operation", settings.EmailScanDays),
 			DailyTimes:  settings.EmailScanTimes,
 			Run: func(ctx context.Context) (any, error) {
 				return a.ScanMailboxes(ctx, settings.EmailScanDays, false)
@@ -186,7 +186,7 @@ func (a *App) BuildTasks() []*scheduler.Task {
 		},
 		{
 			Name:        "weekly_report",
-			Description: "推送一周的消耗、跑道与待续费汇总",
+			Description: "operation, operation",
 			DailyTimes:  settings.WeeklyReportTimes,
 			Weekdays:    settings.WeeklyReportWeekdays,
 			Run:         a.SendWeeklyReport,
@@ -194,7 +194,7 @@ func (a *App) BuildTasks() []*scheduler.Task {
 	}
 }
 
-// refreshAll 查一遍余额与订阅，并把结果写进看板状态与指标。
+// Implementation note.
 func (a *App) refreshAll(ctx context.Context, dryRun bool) (any, error) {
 	outcome, err := a.Monitor.Run(ctx, "", dryRun)
 	if err != nil {
@@ -221,7 +221,7 @@ func (a *App) refreshAll(ctx context.Context, dryRun bool) (any, error) {
 	return detail, nil
 }
 
-// refreshSubscriptions 订阅是可选能力，没开时直接给空结果。
+// Implementation note.
 func (a *App) refreshSubscriptions(ctx context.Context, dryRun bool) []model.SubscriptionResult {
 	if !a.Settings.EnableSubscriptions {
 		return nil
@@ -233,12 +233,12 @@ func (a *App) refreshSubscriptions(ctx context.Context, dryRun bool) []model.Sub
 	return results
 }
 
-// ScanMailboxes 扫描所有启用的邮箱。
+// Implementation note.
 func (a *App) ScanMailboxes(ctx context.Context, days int, dryRun bool) (any, error) {
 	cfg := a.Resolver.Load(ctx)
 	mailboxes := cfg.EnabledMailboxes()
 	if len(mailboxes) == 0 {
-		return map[string]any{"mailboxes": 0, "skipped": "未配置邮箱"}, nil
+		return map[string]any{"mailboxes": 0, "skipped": "operation"}, nil
 	}
 
 	result := a.Scanner.Scan(ctx, mailboxes, days, dryRun)
@@ -253,7 +253,7 @@ func (a *App) ScanMailboxes(ctx context.Context, days int, dryRun bool) (any, er
 	}, nil
 }
 
-// SendWeeklyReport 汇总本周数据并推一张卡片。
+// Implementation note.
 func (a *App) SendWeeklyReport(ctx context.Context) (any, error) {
 	balance := a.State.Balance()
 	subs := a.State.Subscriptions()
@@ -261,7 +261,7 @@ func (a *App) SendWeeklyReport(ctx context.Context) (any, error) {
 
 	series, err := a.Store.BalanceSeries(ctx, report.WindowDays)
 	if err != nil {
-		a.Log.Warn("读取余额历史失败，周报只报余额部分", "error", err)
+		a.Log.Warn("operation,operation", "error", err)
 	}
 	runways := runway.ComputeAll(series, report.WindowDays, time.Now())
 
@@ -270,13 +270,13 @@ func (a *App) SendWeeklyReport(ctx context.Context) (any, error) {
 
 	sent := false
 	if a.Notifier == nil {
-		a.Log.Error("未配置 webhook 地址，周报未发送")
+		a.Log.Error("Webhook URL is not configured,operation")
 	} else {
-		msg := notify.Custom("余额周报", []string{report.Render(summary)}, "weekly_report")
+		msg := notify.Custom("operation", []string{report.Render(summary)}, "weekly_report")
 		sendErr := a.Notifier.Send(ctx, msg)
 		a.Metrics.RecordNotification(msg.Kind, sendErr == nil)
 		if sendErr != nil {
-			a.Log.Error("周报发送失败", "error", sendErr)
+			a.Log.Error("operation", "error", sendErr)
 		} else {
 			sent = true
 		}
@@ -288,33 +288,33 @@ func (a *App) SendWeeklyReport(ctx context.Context) (any, error) {
 	}, nil
 }
 
-// StartScheduler 登记任务并起调度循环。
+// Implementation note.
 func (a *App) StartScheduler(ctx context.Context) {
 	tasks := a.BuildTasks()
 	a.scheduler = scheduler.New(tasks, a.onJobResult, a.Log)
 
 	for _, task := range tasks {
 		a.State.RegisterJob(task.Name, task.Description, task.ScheduleText(), task.Enabled(), task.NextRun())
-		a.Log.Info("定时任务", "name", task.Name, "schedule", task.ScheduleText(), "description", task.Description)
+		a.Log.Info("operation", "name", task.Name, "schedule", task.ScheduleText(), "description", task.Description)
 	}
 	a.scheduler.Start(ctx)
 }
 
-// onJobResult 把每次运行的结果同时交给看板状态和指标。
+// Implementation note.
 func (a *App) onJobResult(result scheduler.Result) {
 	a.State.RecordJobRun(result.Name, result.Success, result.StartedAt,
 		result.Duration, result.Err, result.Detail, result.NextRun)
 	a.Metrics.RecordJobRun(result.Name, result.Success, result.StartedAt, result.Duration)
 }
 
-// StopScheduler 停掉调度循环。
+// Implementation note.
 func (a *App) StopScheduler() {
 	if a.scheduler != nil {
 		a.scheduler.Stop(5 * time.Second)
 	}
 }
 
-// ServeMetrics 在独立端口暴露 /metrics。
+// Implementation note.
 func (a *App) ServeMetrics(ctx context.Context) {
 	if !a.Settings.EnablePrometheus {
 		return
@@ -331,9 +331,9 @@ func (a *App) ServeMetrics(ctx context.Context) {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 	go func() {
-		a.Log.Info("Prometheus 指标已启动", "addr", addr+"/metrics")
+		a.Log.Info("Prometheus operation", "addr", addr+"/metrics")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			a.Log.Error("指标服务异常退出", "error", err)
+			a.Log.Error("operation", "error", err)
 		}
 	}()
 }

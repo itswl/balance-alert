@@ -1,8 +1,8 @@
-// Package report 生成周报：把一周的余额、消耗、跑道、订阅、邮箱汇成一张卡片。
+// Package report provides the package implementation.
 //
-// 平时只有出事才会收到通知，周报让"一切正常"也变成可感知的东西：这周烧了多少、
-// 哪个账户最先见底、接下来一个月要准备多少订阅费。数据全部取自看板状态与余额历史，
-// 不额外查上游接口。
+// Implementation note.
+// Implementation note.
+// Implementation note.
 package report
 
 import (
@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
 const (
-	// WindowDays 周报统计的时间跨度。
+	// Implementation note.
 	WindowDays = 7
-	// TopN 各排行榜取前几名。
+	// Implementation note.
 	TopN = 3
-	// UpcomingDays 订阅支出预估的时间范围。
+	// Implementation note.
 	UpcomingDays = 30
 )
 
-// SpendRow 是消耗排行榜的一行。
+// Implementation note.
 type SpendRow struct {
 	Project       string   `json:"project"`
 	Consumed      float64  `json:"consumed"`
@@ -34,40 +34,40 @@ type SpendRow struct {
 	Balance       *float64 `json:"balance"`
 }
 
-// AlertingRow 是余额告警清单的一行。
+// Implementation note.
 type AlertingRow struct {
 	Project   string   `json:"project"`
 	Balance   *float64 `json:"balance"`
 	Threshold *float64 `json:"threshold"`
 }
 
-// FailedRow 是检查失败清单的一行。
+// Implementation note.
 type FailedRow struct {
 	Project string `json:"project"`
 	Error   string `json:"error"`
 }
 
-// Accounts 是账户总体情况。
+// Implementation note.
 type Accounts struct {
 	Total    int `json:"total"`
 	Alerting int `json:"alerting"`
 	Failed   int `json:"failed"`
 }
 
-// Period 是统计区间。
+// Implementation note.
 type Period struct {
 	Start string `json:"start"`
 	End   string `json:"end"`
 }
 
-// MailboxStats 是邮箱扫描的概况。
+// Implementation note.
 type MailboxStats struct {
 	Total  int `json:"total"`
 	Failed int `json:"failed"`
 	Alerts int `json:"alerts"`
 }
 
-// Summary 是一周的汇总数据，render 之前的中间结构。
+// Implementation note.
 type Summary struct {
 	Period                Period                     `json:"period"`
 	Accounts              Accounts                   `json:"accounts"`
@@ -81,7 +81,7 @@ type Summary struct {
 	Mailboxes             MailboxStats               `json:"mailboxes"`
 }
 
-// Build 汇总一周数据。runways 为空表示没有历史，那就只报余额部分。
+// Implementation note.
 func Build(results []model.CheckResult, subs []model.SubscriptionResult,
 	mailboxes []model.MailboxResult, totalAlerts int, runways map[string]model.Runway, now time.Time) Summary {
 
@@ -130,7 +130,7 @@ func Build(results []model.CheckResult, subs []model.SubscriptionResult,
 	return summary
 }
 
-// spendRows 把消耗画像整理成排行榜用的行；没有历史的账户不出现在榜上。
+// Implementation note.
 func spendRows(results []model.CheckResult, runways map[string]model.Runway) []SpendRow {
 	var rows []SpendRow
 	for _, r := range results {
@@ -150,7 +150,7 @@ func spendRows(results []model.CheckResult, runways map[string]model.Runway) []S
 	return rows
 }
 
-// upcomingSubscriptions 是未来一个月内要续费、且本周期还没续过的订阅，按紧迫程度排序。
+// Implementation note.
 func upcomingSubscriptions(subs []model.SubscriptionResult) []model.SubscriptionResult {
 	var due []model.SubscriptionResult
 	for _, s := range subs {
@@ -228,37 +228,37 @@ func mailboxStats(mailboxes []model.MailboxResult, totalAlerts int) MailboxStats
 	return stats
 }
 
-// Render 渲染成 Markdown 正文；各平台的消息包装由 notify 负责。
+// Implementation note.
 func Render(s Summary) string {
 	lines := headline(s)
-	lines = append(lines, section("最先见底", runwayLines(s.ShortestRunway))...)
-	lines = append(lines, section("消耗最多", spendLines(s.TopSpend))...)
+	lines = append(lines, section("Shortest runway", runwayLines(s.ShortestRunway))...)
+	lines = append(lines, section("Highest spending", spendLines(s.TopSpend))...)
 	lines = append(lines, section(
-		fmt.Sprintf("未来 %d 天订阅支出: %s", UpcomingDays, fmtNum(&s.UpcomingAmount)),
+		fmt.Sprintf("Next %d days of subscription spending: %s", UpcomingDays, fmtNum(&s.UpcomingAmount)),
 		subscriptionLines(s.UpcomingSubscriptions))...)
-	lines = append(lines, section("需要处理", problemLines(s))...)
+	lines = append(lines, section("Needs attention", problemLines(s))...)
 	return strings.Join(lines, "\n")
 }
 
 func headline(s Summary) []string {
-	state := "，全部正常"
+	state := ",All healthy"
 	if s.Accounts.Alerting > 0 {
-		state = fmt.Sprintf("，%d 个余额告警", s.Accounts.Alerting)
+		state = fmt.Sprintf(", %d balance alerts", s.Accounts.Alerting)
 	}
 	if s.Accounts.Failed > 0 {
-		state += fmt.Sprintf("，%d 个检查失败", s.Accounts.Failed)
+		state += fmt.Sprintf(", %d failed checks", s.Accounts.Failed)
 	}
 	lines := []string{
-		fmt.Sprintf("**统计区间**: %s ~ %s", s.Period.Start, s.Period.End),
-		fmt.Sprintf("**账户**: 共 %d 个%s", s.Accounts.Total, state),
+		fmt.Sprintf("**Reporting period**: %s ~ %s", s.Period.Start, s.Period.End),
+		fmt.Sprintf("**Accounts**: %d%s", s.Accounts.Total, state),
 	}
 	if s.TotalConsumed != nil {
-		lines = append(lines, "**本周消耗**: "+fmtNum(s.TotalConsumed))
+		lines = append(lines, "**This week's spending**: "+fmtNum(s.TotalConsumed))
 	}
 	return lines
 }
 
-// section 没有内容的小节整段不出现，卡片才不会一堆空标题。
+// Implementation note.
 func section(title string, rows []string) []string {
 	if len(rows) == 0 {
 		return nil
@@ -269,11 +269,11 @@ func section(title string, rows []string) []string {
 func runwayLines(rows []SpendRow) []string {
 	var out []string
 	for _, row := range rows {
-		line := fmt.Sprintf("- %s: 还剩 %.1f 天", row.Project, *row.RunwayDays)
+		line := fmt.Sprintf("- %s: %.1f days remaining", row.Project, *row.RunwayDays)
 		if row.DepletionDate != nil {
-			line += fmt.Sprintf("（预计 %s 耗尽）", *row.DepletionDate)
+			line += fmt.Sprintf(" (estimated depletion: %s)", *row.DepletionDate)
 		}
-		out = append(out, line+"，余额 "+fmtNum(row.Balance))
+		out = append(out, line+", balance "+fmtNum(row.Balance))
 	}
 	return out
 }
@@ -281,7 +281,7 @@ func runwayLines(rows []SpendRow) []string {
 func spendLines(rows []SpendRow) []string {
 	var out []string
 	for _, row := range rows {
-		out = append(out, fmt.Sprintf("- %s: %s，日均 %s",
+		out = append(out, fmt.Sprintf("- %s: %s, daily average %s",
 			row.Project, fmtNum(&row.Consumed), fmtNum(row.BurnPerDay)))
 	}
 	return out
@@ -291,7 +291,7 @@ func subscriptionLines(subs []model.SubscriptionResult) []string {
 	var out []string
 	for _, sub := range subs {
 		amount := sub.Amount
-		out = append(out, fmt.Sprintf("- %s: %d 天后续费，%s", sub.Name, sub.DaysUntilRenewal, fmtNum(&amount)))
+		out = append(out, fmt.Sprintf("- %s: renewal in %d days, %s", sub.Name, sub.DaysUntilRenewal, fmtNum(&amount)))
 	}
 	return out
 }
@@ -299,19 +299,19 @@ func subscriptionLines(subs []model.SubscriptionResult) []string {
 func problemLines(s Summary) []string {
 	var out []string
 	for _, item := range s.AlertingProjects {
-		out = append(out, fmt.Sprintf("- %s: 余额 %s 低于阈值 %s",
+		out = append(out, fmt.Sprintf("- %s: balance %s below threshold %s",
 			item.Project, fmtNum(item.Balance), fmtNum(item.Threshold)))
 	}
 	for _, item := range s.FailedProjects {
-		out = append(out, fmt.Sprintf("- %s: 检查失败，%s", item.Project, item.Error))
+		out = append(out, fmt.Sprintf("- %s: Check failed, %s", item.Project, item.Error))
 	}
 	if s.Mailboxes.Failed > 0 {
-		out = append(out, fmt.Sprintf("- 邮箱: %d 个连接失败", s.Mailboxes.Failed))
+		out = append(out, fmt.Sprintf("- Mailboxes: %d connection failures", s.Mailboxes.Failed))
 	}
 	return out
 }
 
-// fmtNum 格式化卡片里的数字：空值显示成横杠，其余带千位分隔保留两位小数。
+// Implementation note.
 func fmtNum(value *float64) string {
 	if value == nil {
 		return "-"
@@ -340,8 +340,8 @@ func thousands(value float64, decimals int) string {
 	return sign + grouped.String() + "." + frac
 }
 
-// round2 用银行家舍入（四舍六入五成双），与 runway 的取整口径一致：
-// 周报里的汇总数字要和看板、历史记录对得上，两边用不同的舍入方式就会差那么一分钱。
+// Implementation note.
+// Implementation note.
 func round2(value float64) float64 {
 	return math.RoundToEven(value*100) / 100
 }

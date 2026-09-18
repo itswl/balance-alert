@@ -1,38 +1,38 @@
 # Go
-/balance-alert
+/quotapulse
 *.test
 *.out
 
-# 前端依赖与测试产物；ui/dist 要提交，二进制靠它嵌入
+# Implementation note.
 ui/node_modules/
 ui/dist-test/
 
-# 环境变量（含密钥）
+# Implementation note.
 .env
 .env.local
 .env.*.local
 *.env.backup*
 
-# 数据与日志
+# Implementation note.
 data/
 logs/
 *.db
 *.sqlite
 *.sqlite3
 
-# 但测试夹具要进仓库：testdata 下那个库用来验证能不能直接接上既有生产数据。
-# 被上面的 *.db 挡掉的话，这条测试在本地是绿的、在 CI 里根本没有数据可读。
-# 里面全是造的假数据（AK:SK / sk-old / pw），没有真实密钥。
+# Implementation note.
+# Implementation note.
+# Implementation note.
 !**/testdata/*.db
 
-# 旧版遗留的配置文件，已经不再读取，留一条防止历史文件被误提交
+# Implementation note.
 config.json
 
 # Kubernetes secrets
 k8s/secret.yaml
 k8s/*-secret.yaml
 
-# 编辑器与系统
+# Implementation note.
 .vscode/
 .idea/
 *.swp

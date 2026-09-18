@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itswl/balance-alert/internal/model"
+	"github.com/itswl/quotapulse/internal/model"
 )
 
-// 基准数据里的小时偏移都是相对这个时刻算的，改了它整份 testdata/baseline_cases.json 就对不上了。
+// Implementation note.
 var baselineNow = time.Date(2026, 9, 16, 20, 0, 0, 0, time.Local)
 
 type baselineCase struct {
@@ -33,8 +33,8 @@ type baselineCase struct {
 	Daily []model.DailySpend `json:"daily"`
 }
 
-// TestMatchesBaseline 钉住这个包的行为契约：12 个真实形状的余额序列，逐字段比对期望值。
-// 消耗、充值、置信度、跑道、突增倍数全都在里面，算法改坏任何一处都会在这里炸出来。
+// Implementation note.
+// Implementation note.
 func TestMatchesBaseline(t *testing.T) {
 	raw, err := os.ReadFile("testdata/baseline_cases.json")
 	if err != nil {
@@ -94,7 +94,7 @@ func buildPoints(raw [][]float64) []model.BalancePoint {
 	return points
 }
 
-// TestConfidenceBoundaries 置信度的三个分界线，它决定一份估算能不能用来告警。
+// Implementation note.
 func TestConfidenceBoundaries(t *testing.T) {
 	tests := []struct {
 		points    int
@@ -117,7 +117,7 @@ func TestConfidenceBoundaries(t *testing.T) {
 	}
 }
 
-// TestToppedUpNotCountedAsConsumption 充值让余额上跳，绝不能算成"消耗了负数"。
+// Implementation note.
 func TestToppedUpNotCountedAsConsumption(t *testing.T) {
 	points := buildPoints([][]float64{{-48, 100}, {-36, 60}, {-24, 500}, {-12, 460}, {0, 420}})
 	got := Compute(points, 7, baselineNow)
@@ -130,7 +130,7 @@ func TestToppedUpNotCountedAsConsumption(t *testing.T) {
 	}
 }
 
-// TestZeroBurnHasNoRunway 完全没消耗时不该算出一个跑道天数。
+// Implementation note.
 func TestZeroBurnHasNoRunway(t *testing.T) {
 	points := buildPoints([][]float64{{-72, 200}, {-48, 200}, {-24, 200}, {0, 200}})
 	got := Compute(points, 7, baselineNow)
