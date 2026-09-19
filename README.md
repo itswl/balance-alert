@@ -4,7 +4,7 @@ API balance and credit monitoring with subscription lifecycle management, alerts
 
 QuotaPulse is a single Go binary that provides a web dashboard, HTTP API, scheduled checks, Webhook notifications, IMAP email scanning, Prometheus metrics, and optional persistent history. It monitors multiple providers, estimates runway from balance history, detects spending spikes, and tracks subscription renewals.
 
-For Chinese documentation, see [README.zh-CN.md](README.zh-CN.md).
+中文文档请参阅 [README.zh-CN.md](README.zh-CN.md)。
 
 ## Quick start
 
